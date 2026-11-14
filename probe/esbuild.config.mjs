@@ -30,12 +30,15 @@ export async function buildProbe(outDir = distDir) {
     outfile: join(outDir, "main.js"),
     bundle: true,
     format: "cjs",
+    // The browser platform is what keeps Node out: esbuild turns Node's built-in
+    // modules into empty ones, which is how libsodium's require("crypto") fallback
+    // (inside a try, used only if the page has no window.crypto) ends up harmless.
+    // The check after the build, and the bundle test, enforce it.
     platform: "browser",
     target: "es2020",
     // The ES module build of libsodium reads import.meta.url inside a try block;
     // there is no module URL in a plugin file, so give it an empty one.
     define: { "import.meta.url": '""' },
-    alias: { crypto: join(here, "src/shims/no-node-crypto.ts") },
     external: ALLOWED_EXTERNAL_REQUIRES,
     minify: false,
     legalComments: "inline",

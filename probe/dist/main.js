@@ -4,12 +4,11 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __esm = (fn, res, err) => function __init() {
-  if (err) throw err[0];
+var __commonJS = (cb, mod) => function __require() {
   try {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   } catch (e) {
-    throw err = [e], e;
+    throw mod = 0, e;
   }
 };
 var __export = (target, all) => {
@@ -27,12 +26,9 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-// src/shims/no-node-crypto.ts
-var no_node_crypto_exports = {};
-var init_no_node_crypto = __esm({
-  "src/shims/no-node-crypto.ts"() {
-    "use strict";
-    throw new Error("Node's crypto module is not available in this plugin");
+// (disabled):crypto
+var require_crypto = __commonJS({
+  "(disabled):crypto"() {
   }
 });
 
@@ -161,7 +157,7 @@ async function A(A3 = {}) {
       C3(), g2.getRandomValue = C3;
     } catch (A5) {
       try {
-        var B3 = (init_no_node_crypto(), __toCommonJS(no_node_crypto_exports)), Q3 = function() {
+        var B3 = require_crypto(), Q3 = function() {
           var A6 = B3.randomBytes(4);
           return (A6[0] << 24 | A6[1] << 16 | A6[2] << 8 | A6[3]) >>> 0;
         };
