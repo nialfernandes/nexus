@@ -81,6 +81,23 @@ describe("a note on one device, and the same note on another", () => {
     expect(saves[0].body.blob).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
   });
 
+  it("makes every save begin the way the server requires: the format's version, the key number named in the save, and at least the smallest length", async () => {
+    const a = await syncedDevice(world, {}, { token: await world.tokenFor(world.user, "device A header") });
+    for (const [path, text] of [["Ideas/tiny.md", "x"], ["Ideas/empty.md", ""], ["Ideas/long.md", "line\n".repeat(5000)]] as const) {
+      a.vault.type(path, text);
+      await a.engine.push(path);
+    }
+    const saves = a.log.to("POST save");
+    expect(saves).toHaveLength(3);
+    for (const save of saves) {
+      expect(save.status, "the server took it").toBe(200);
+      const bytes = Buffer.from(save.body.blob, "base64");
+      expect(bytes[0], "the format's version").toBe(1);
+      expect(bytes.readUInt32BE(1), "the key number the blob names is the one the save names").toBe(save.body.kid);
+      expect(bytes.length, "no shorter than the smallest note blob").toBeGreaterThanOrEqual(301);
+    }
+  });
+
   it("asks for a note by its id, never by its path", async () => {
     const a = await syncedDevice(world, {}, { token: await world.tokenFor(world.user, "device A asks") });
     a.vault.type(PATH, "one\ntwo\n");
@@ -128,9 +145,17 @@ describe("the search for a path or a text", () => {
     expect(foundIn(encodeURIComponent(PATH), needles)).toContain(encodeURIComponent(PATH));
     expect(needles.length, "a good many things are looked for").toBeGreaterThan(30);
 
-    // The server takes any base64 as a blob, so a writer that did not encrypt would put the record in it as it is.
+    // The server turns away a blob that does not begin as an encrypted note does, so a writer that did not encrypt at all is refused...
     const plain = Buffer.from(JSON.stringify({ path: PATH, text: TEXT }), "utf8").toString("base64");
-    bodyOf(await world.agents.save("control-note", plain, { base: 0, kid: world.keys.kid }));
+    const refused = await world.agents.save("control-plain", plain, { base: 0, kid: world.keys.kid });
+    expect(refused.status).toBe(400);
+    expect(refused.body.reason).toBe("not-an-encrypted-blob");
+    // ...but it reads nothing past the header, so a writer that gave the right header to a plain record gets through, and the search finds it.
+    const header = Buffer.concat([Buffer.from([1, 0, 0, 0, world.keys.kid]), Buffer.alloc(24, 7)]);
+    const record = Buffer.from(JSON.stringify({ path: PATH, text: TEXT }), "utf8");
+    // One filler byte after the 29-byte header puts the record on a 3-byte boundary, so its base64 is the base64 the search looks for.
+    const disguised = Buffer.concat([header, Buffer.from([0]), record, Buffer.alloc(301, 0)]).toString("base64");
+    bodyOf(await world.agents.save("control-note", disguised, { base: 0, kid: world.keys.kid }));
     expect(foundIn(everythingStored(), needles), "and what is held is searched").not.toEqual([]);
   });
 });

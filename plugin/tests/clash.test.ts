@@ -2,7 +2,8 @@
 // vault's text in a sibling note named `<name> (clash <device> <date>).md`, writes Nexus's text into the note, stores
 // Nexus's version for it and shows a notice that names both. The person merges by hand and deletes the copy. Nexus cannot read a note,
 // so it is the device that finds the clash: it reads the note after Nexus refuses its save, and merges. Two notes made at one
-// path on two devices clash the same way (the one with the smaller id keeps the path). Against the in-memory Nexus (see world.ts).
+// path on two devices are settled so that nothing is lost and everything is sent: the one with the smaller id keeps the path, and the other
+// is moved to a duplicate path as an ordinary note. Against the in-memory Nexus (see world.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { bodyOf, emptyNexus, forbidFetch, known, makeDevice, nexusNotes, openBlob, openWorld, sentNote, type Device, type World } from "./world";
@@ -150,7 +151,7 @@ describe("two notes made at one path on two devices", () => {
   const LARGE = "z".repeat(22);
   const idMade = (id: string) => ({ id, version: 0, hash: "", savedPath: "" });
 
-  it("keep the smaller id's note at the path, and the loser's device keeps its own text in a copy and deletes its own note", async () => {
+  it("keep the smaller id's note at the path, and the loser's device moves its own note to a duplicate path, as an ordinary note that is sent", async () => {
     await world.elsewhere.create("Ideas/b.md", "from nexus\n", SMALL);
     const device = await makeDevice(world, { files: { "Ideas/b.md": "made here\n" }, cursor: "0", notes: { "Ideas/b.md": idMade(LARGE) } });
     await device.engine.push("Ideas/b.md");
@@ -158,22 +159,54 @@ describe("two notes made at one path on two devices", () => {
 
     await device.engine.sync();
 
-    const copies = copiesOf(device, "Ideas/b");
-    expect(copies).toHaveLength(1);
-    expect(device.vault.textOf(copies[0]), "the copy holds the text made here").toBe("made here\n");
-    expect(device.vault.textOf("Ideas/b.md"), "the note holds the other note's text").toBe("from nexus\n");
+    const moved = "Ideas/b (duplicate Test iPhone 2026-11-14).md";
+    expect(device.vault.texts(), "the other note is at the path, and this device's text is in a note beside it").toEqual({
+      "Ideas/b.md": "from nexus\n",
+      [moved]: "made here\n",
+    });
+    expect(copiesOf(device, "Ideas/b"), "and it is not a local-only clash copy").toEqual([]);
     expect(device.data().notes["Ideas/b.md"]).toMatchObject({ id: SMALL, version: 1 });
+    expect(device.data().notes[moved], "this device's own note, with its own id, one version on").toMatchObject({ id: LARGE, version: 2, savedPath: moved });
     expect(device.notices).toHaveLength(1);
-    expect(device.log.to("POST delete").map((c) => c.body), "this device's own note is deleted from Nexus").toEqual([{ id: LARGE, base: 1 }]);
-    expect(Object.keys(await nexusNotes(world)), "one note is left").toEqual([SMALL]);
+    expect(device.notices[0]).toContain("b (duplicate");
+    expect(device.log.to("POST delete"), "nothing is deleted from Nexus: nothing is lost").toEqual([]);
+    expect(await nexusNotes(world), "the text made here is in Nexus under its own id, at the new path").toEqual({
+      [SMALL]: { path: "Ideas/b.md", text: "from nexus\n", version: 1 },
+      [LARGE]: { path: moved, text: "made here\n", version: 2 },
+    });
 
-    // A second sync finds everything where the first left it: the deleted note's own versions in the feed bring nothing back.
+    // So it syncs: a device that has nothing gets both notes, and a second sync of the first changes nothing.
+    const third = await makeDevice(world, { files: {}, token: await world.tokenFor(world.user, "third device") });
+    await third.engine.sync();
+    expect(third.vault.texts()).toEqual({ "Ideas/b.md": "from nexus\n", [moved]: "made here\n" });
+    expect(third.notices).toEqual([]);
     const before = { texts: device.vault.texts(), notices: [...device.notices], notes: structuredClone(device.data().notes) };
     await device.engine.sync();
     expect(device.vault.texts()).toEqual(before.texts);
     expect(device.notices).toEqual(before.notices);
     expect(device.data().notes).toEqual(before.notes);
-    expect(device.log.to("POST save"), "and nothing more was sent").toHaveLength(1);
+    expect(device.log.to("POST save"), "two saves in all: the note, and its move").toHaveLength(2);
+  });
+
+  it("is settled the same way on both devices: the device that holds the smaller id keeps its note, and gets the other note once it has been moved", async () => {
+    const winner = await makeDevice(world, { files: { "Ideas/b.md": "from the winner\n" }, cursor: "0", notes: { "Ideas/b.md": idMade(SMALL) }, name: "Winner", token: await world.tokenFor(world.user, "winner") });
+    const loser = await makeDevice(world, { files: { "Ideas/b.md": "from the loser\n" }, cursor: "0", notes: { "Ideas/b.md": idMade(LARGE) }, name: "Loser", token: await world.tokenFor(world.user, "loser") });
+    await winner.engine.push("Ideas/b.md");
+    await loser.engine.push("Ideas/b.md");
+
+    await winner.engine.sync(); // sees the other note at its path, and leaves it for its own device to move
+    expect(winner.vault.texts()).toEqual({ "Ideas/b.md": "from the winner\n" });
+    await loser.engine.sync(); // moves its own note, and takes the winner's note into the path
+    await winner.engine.sync(); // now the moved note is there to come down
+
+    const moved = "Ideas/b (duplicate Loser 2026-11-14).md";
+    expect(loser.vault.texts()).toEqual({ "Ideas/b.md": "from the winner\n", [moved]: "from the loser\n" });
+    expect(winner.vault.texts()).toEqual({ "Ideas/b.md": "from the winner\n", [moved]: "from the loser\n" });
+    expect(winner.notices, "the device that kept its path has nothing to say").toEqual([]);
+    expect(Object.fromEntries(Object.values(await nexusNotes(world)).map((n) => [n.path, n.text]))).toEqual({
+      "Ideas/b.md": "from the winner\n",
+      [moved]: "from the loser\n",
+    });
   });
 
   it("leave the path to this device's note when its id is the smaller, and the other note is left for its own device to remove", async () => {

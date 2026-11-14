@@ -66,3 +66,16 @@ export function clashCopyName(notePath: string, device: string, when: Date, take
   for (let count = 2; taken(name); count++) name = `${stem} (clash ${label} ${count}).md`;
   return name;
 }
+
+/**
+ * The path a note is moved to when another note, made on another device, keeps its path: `Ideas/a (duplicate My iPhone 2026-11-14).md`, in
+ * the note's own folder. Unlike a clash copy this is an ordinary note, so it is sent and every device gets it. A count is added when the
+ * name is taken.
+ */
+export function duplicateNoteName(notePath: string, device: string, when: Date, taken: (path: string) => boolean): string {
+  const stem = notePath.replace(/\.md$/i, "");
+  const label = `${fileSafe(device) || "device"} ${dayStamp(when)}`;
+  let name = `${stem} (duplicate ${label}).md`;
+  for (let count = 2; taken(name); count++) name = `${stem} (duplicate ${label} ${count}).md`;
+  return name;
+}

@@ -48,7 +48,7 @@
 import { NexusCryptoError } from "@nexus/crypto";
 import { mergeText } from "@nexus/merge";
 import { Unreadable, openNote, sealNote, type NoteContent } from "./blobs";
-import { clashCopyName, fingerprint, isNote, isSafeNotePath, nameOf } from "./notes";
+import { clashCopyName, duplicateNoteName, fingerprint, isNote, isSafeNotePath, nameOf } from "./notes";
 import { createSearchIndex } from "./search";
 import { NOT_SET_UP, isSetUp, newNoteId } from "./state";
 import type { KnownNote, SyncDeps, SyncEngine } from "./types";
@@ -611,9 +611,11 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
    * A note Nexus holds that this device has no entry for: written here, matched if the same text is already here, kept both if not.
    *
    * Two notes with one path (two devices made a note there before either saw the other's) are two ids in Nexus. The one with the
-   * smaller id keeps the path, on every device alike. The device that holds the other one is the one that acts: its text goes
-   * into a copy beside the note, which is never sent, and it deletes its own note from Nexus. A device that holds the winner leaves
-   * the other note alone, because the device it came from does the same. Nothing is lost on either.
+   * smaller id keeps the path, on every device alike. The device that holds the other one is the one that acts, and it loses nothing
+   * and sends everything: when the two texts are the same it drops its own note (the other holds the text); when they differ it moves
+   * its own note to a duplicate path (see duplicateNoteName), as an ordinary note that is sent, so the text is in Nexus and on every
+   * device, and puts the other note at the path. A device that holds the winner leaves the other note alone until its own device has
+   * moved it.
    */
   async function adoptNew(disk: Disk, id: string, version: number, remote: NoteContent, final: boolean): Promise<void> {
     const target = remote.path;
@@ -623,16 +625,28 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       if (!final) throw new Waiting();
       if (id > holder.id) return; // this device's note keeps the path
       const here = disk.has(target) ? await disk.read(target) : undefined;
-      (data.pendingDeletes ??= []).push({ id: holder.id, version: holder.version });
-      untrack(target); // this device's own note no longer stands here, so nothing in this sync can be matched against it
       if (here === undefined || here === remote.text) {
+        (data.pendingDeletes ??= []).push({ id: holder.id, version: holder.version });
+        untrack(target);
         if (here === undefined) await disk.write(target, remote.text);
         track(target, id, version, remote.text);
-      } else {
-        await keepBoth(disk, target, here, { id, version, ...remote });
+        await save();
+        await flushDeletes();
+        return;
       }
+      // Different texts: this device's note moves to a duplicate path, and the other note takes the path.
+      const moved = duplicateNoteName(target, deps.device, deps.now(), (taken) => disk.has(taken));
+      await disk.rename(target, moved);
+      delete notes()[target];
+      notes()[moved] = holder; // the same note and the same id: Nexus is told the new path in a new version, which is what a rename is
+      byId.set(holder.id, moved);
+      await disk.write(target, remote.text);
+      track(target, id, version, remote.text);
       await save();
-      await flushDeletes();
+      deps.notify(
+        `Two notes were made at ${nameOf(target)}. Nexus's note is there, and yours is now ${nameOf(moved)}. Both are kept and synced; merge them by hand if you like.`,
+      );
+      await pushNote(moved);
       return;
     }
     if (!disk.has(target)) {

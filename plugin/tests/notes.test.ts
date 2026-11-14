@@ -2,7 +2,30 @@
 // These are plain functions, so they are called directly.
 
 import { describe, expect, it } from "vitest";
-import { clashCopyName, dayStamp, fingerprint, isClashCopy, isNote, isSafeNotePath, nameOf } from "../src/notes";
+import { clashCopyName, dayStamp, duplicateNoteName, fingerprint, isClashCopy, isNote, isSafeNotePath, nameOf } from "../src/notes";
+
+describe("duplicateNoteName", () => {
+  const WHEN = new Date(2026, 10, 14, 12);
+
+  it("is the note's own name with the device and the day, in its own folder, and a count when the name is taken", () => {
+    expect(duplicateNoteName("Ideas/a.md", "Mac", WHEN, () => false)).toBe("Ideas/a (duplicate Mac 2026-11-14).md");
+    expect(duplicateNoteName("top.md", "Mac", WHEN, () => false)).toBe("top (duplicate Mac 2026-11-14).md");
+    const taken = new Set(["Ideas/a (duplicate Mac 2026-11-14).md", "Ideas/a (duplicate Mac 2026-11-14 2).md"]);
+    expect(duplicateNoteName("Ideas/a.md", "Mac", WHEN, (path) => taken.has(path))).toBe("Ideas/a (duplicate Mac 2026-11-14 3).md");
+  });
+
+  it("is an ordinary note that is synced, never a clash copy, which stays on the device it was made on", () => {
+    const name = duplicateNoteName("Ideas/a.md", "Mac", WHEN, () => false);
+    expect(isNote(name)).toBe(true);
+    expect(isSafeNotePath(name)).toBe(true);
+    expect(isClashCopy(name)).toBe(false);
+    expect(isNote(clashCopyName("Ideas/a.md", "Mac", WHEN, () => false))).toBe(false);
+  });
+
+  it("is a legal file name even when the device's name is not one", () => {
+    expect(nameOf(duplicateNoteName("Ideas/a.md", 'Mac/Studio: "2" <a|b>? #1 [x] ^y', WHEN, () => false))).not.toMatch(/[\\/:*?"<>|#^[\]]/);
+  });
+});
 
 describe("isSafeNotePath", () => {
   it("takes a path of plain names that is a note", () => {

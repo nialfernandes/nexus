@@ -56,8 +56,21 @@ describe('the Nexus plugin README on what a reader must know first', () => {
 
   it('says that merging and search are done on the device, because Nexus cannot read a note', () => {
     expect(WORDS).toMatch(/merges the two edits line by line on your device/i);
-    expect(WORDS).toMatch(/Search is done on your device/i);
+    expect(WORDS).toMatch(/The engine can search the vault on your device/i);
     expect(WORDS).toMatch(/Nexus cannot read a note, merge two edits or search/i);
+  });
+
+  it('says that a second note made at one path is moved to a duplicate path and synced, never kept only on the device', () => {
+    expect(WORDS).toMatch(/smaller id keeps the path/i);
+    expect(WORDS).toMatch(/`<name> \(duplicate <device> <date>\)\.md`, an ordinary note that is synced/i);
+    expect(WORDS).toMatch(/both texts are in Nexus and on every device/i);
+  });
+
+  it('says where the vault id comes from and that storing it is later work, and that search has no screen because Obsidian searches its own files', () => {
+    expect(WORDS).toMatch(/vault id comes through the same port\. It is not secret/i);
+    expect(WORDS).toMatch(/beside the wraps on your server/i);
+    expect(WORDS).toMatch(/does none of that storing yet/i);
+    expect(WORDS).toMatch(/inside Obsidian its own search already reads your files/i);
   });
 
   it('says to run npm run check, which builds the packages the plugin depends on', () => {

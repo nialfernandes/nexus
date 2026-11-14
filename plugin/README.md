@@ -60,11 +60,15 @@ default user.
   text goes into the note, and a notice names both. Merge by hand, then delete the
   copy. Edits that do not touch the same lines are merged without a clash. If two
   devices each make a different note at one path, the note with the smaller id keeps
-  the path, and the device that holds the other keeps its text in a copy the same way.
-- **Search is done on your device.** The plugin keeps a small in-memory index of the
-  words in your notes (never written to disk, rebuilt when the plugin starts), because
-  Nexus cannot search notes it cannot read. It works with no key unlocked and no
-  network. This version has no search screen: the engine answers `search(query)`.
+  the path, and the device that holds the other moves it to
+  `<name> (duplicate <device> <date>).md`, an ordinary note that is synced like any
+  other, so both texts are in Nexus and on every device. If the two texts are the same,
+  the second note is dropped.
+- **The engine can search the vault on your device.** The plugin keeps a small in-memory index of the
+  words in your notes (never written to disk, rebuilt when the plugin starts), because Nexus cannot search
+  notes it cannot read. It works with no key unlocked and no network. This version has no search screen,
+  on purpose: inside Obsidian its own search already reads your files, so the index is for a way in that has
+  no files to read, such as the web page that is planned. The engine answers `search(query)`.
 - **A status line** in the settings tab and, on desktop, the status bar: the time of
   the last sync, or what went wrong in plain words (not set up, signed out, locked,
   offline, a note Nexus would not take, a note that did not open).
@@ -109,9 +113,10 @@ The sync engine never makes or stores a key. It asks the unlock port
 has to encrypt or open a note. The setup screens will fill that port in a later piece
 of work; until then the plugin is given a port that never holds a key, so it sends
 nothing and reads nothing. The key is held in memory only while unlocked, and nothing
-in this plugin writes it to disk. Which vault id the screens use is theirs to decide;
-every device of a vault has to use the same one, because each note's encryption is
-bound to it.
+in this plugin writes it to disk. The vault id comes through the same port. It is not secret: the setup
+screens will make it once, when the vault is made, keep it in this plugin's data file and beside the wraps on your
+server, and hand it to a new device when you approve it. Every device of a vault has to use the same one,
+because each note's encryption is bound to it. This plugin does none of that storing yet.
 
 ## Install through BRAT
 

@@ -184,17 +184,32 @@ describe("a blob that does not belong where it is", () => {
     expect(b.engine.status()).toContain(id);
   });
 
-  it("is refused when it is cut short, however short", async () => {
+  it("is refused when it begins as a note blob does but the rest is not an encrypted note (the server reads only the header)", async () => {
     const a = await syncedDevice(world, { [PATH]: "mine\n" });
-    const b = await syncedDevice(world, {}, { token: await world.tokenFor(world.user, "device B short") });
+    const b = await syncedDevice(world, {}, { token: await world.tokenFor(world.user, "device B header only") });
     await b.engine.sync();
     const { id } = a.data().notes[PATH];
-    await saveRaw(id, Buffer.from("AQAAAAE=", "base64").toString("base64"));
+    const header = Buffer.concat([Buffer.from([1, 0, 0, 0, world.keys.kid]), Buffer.alloc(24, 9)]);
+    await saveRaw(id, Buffer.concat([header, Buffer.alloc(300, 5)]).toString("base64"));
 
     await b.engine.sync();
 
     expect(b.vault.textOf(PATH)).toBe("mine\n");
     expect(b.engine.status()).toContain(id);
+  });
+
+  it("cannot be a blob cut short or plain text: the server turns those away before any device could be handed one", async () => {
+    const a = await syncedDevice(world, { [PATH]: "mine\n" });
+    const { id } = a.data().notes[PATH];
+    const head = bodyOf(await world.agents.note(id)).version as number;
+    for (const [what, blob, reason] of [
+      ["cut short", Buffer.from([1, 0, 0, 0, world.keys.kid, 1, 2, 3]).toString("base64"), "blob-too-short"],
+      ["plain text", Buffer.from('{"path":"a.md","text":"hi"}').toString("base64"), "not-an-encrypted-blob"],
+    ] as const) {
+      const answer = await world.agents.save(id, blob, { base: head, kid: world.keys.kid });
+      expect(answer.status, what).toBe(400);
+      expect(answer.body.reason, what).toBe(reason);
+    }
   });
 });
 

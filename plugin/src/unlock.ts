@@ -12,7 +12,12 @@
 export interface VaultKeys {
   /** The vault key: 32 bytes. */
   vaultKey: Uint8Array;
-  /** Names the vault. It is part of what every note is bound to, so every device of a vault has to use the same one. */
+  /**
+   * Names the vault. It is part of what every note is bound to, so every device of a vault has to use the same one. It is not secret.
+   * The setup screens make it, once, when the vault is made; it is kept in the plugin's data file (which a vault shares between its
+   * devices) and beside the wraps on the server, and a new device is handed it in its approval. This plugin does none of that storing:
+   * that is the setup slice's work, and until then this port is the only place the engine gets it from.
+   */
   vaultId: string;
   /** The number of the vault key. It is written in every blob, and a blob under another number is refused. */
   kid: number;
