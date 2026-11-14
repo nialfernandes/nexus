@@ -58,8 +58,13 @@ This makes `main.js` from the TypeScript in `src/`. Obsidian loads three files:
 `manifest.json` (kept in this folder), `main.js` (built) and `styles.css` (this
 plugin has none).
 
-- `npm test` runs the tests. They run the sync engine and the sign-in against a
-  Nexus held in memory (`tests/nexus-stand-in.ts`), so no server has to be running.
+- `npm test` runs the tests. They run the sync engine and the sign-in against the
+  real Nexus server from this repository's `server/` folder, running inside the test
+  over an in-memory SQLite database (`tests/real-nexus.ts`), so no server has to be
+  running. They need Node 22.13 or later, for `node:sqlite`, which prints an
+  "experimental" warning that can be ignored. The tests are pinned to the server as
+  it is in this repository: when the server changes what it holds or answers, they
+  move along with it.
   One test runs `npm run build` and checks that the bundle asks for no Node or
   Electron module.
 - `npm run typecheck` type-checks everything, the plugin's entry (`src/main.ts`) and

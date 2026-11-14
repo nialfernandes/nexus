@@ -1,15 +1,16 @@
-// A world for the Nexus Obsidian plugin's tests: a Nexus held in memory (nexus-stand-in.ts), a vault held in memory, and
-// the plugin's sync engine and sign-in wired to both through the same few ports Obsidian will hand them.
+// A world for the Nexus Obsidian plugin's tests: the real Nexus server held in this process (real-nexus.ts), a vault held in
+// memory, and the plugin's sync engine and sign-in wired to both through the same few ports Obsidian will hand them.
 //
 // WHERE THINGS COME FROM
-//   - Nexus is the stand-in. Every request the plugin makes goes through `nexusOver` into it as a real `Request`, and the
-//     answer comes back as a real `Response`, so every answer the plugin reads has the shape a real Nexus sends: a save
-//     answers `{ result, path, version }` and nothing more, a clash answers 409 with `latest` and `incoming`, the changes
-//     feed answers `{ changes, next }`. What the stand-in does and does not do is written at the top of its file.
+//   - Nexus is the server's own code (server/src), over an in-memory SQLite database. Every request the plugin makes goes
+//     through `nexusOver` into it as a real `Request`, and the answer comes back as a real `Response`, so every answer the
+//     plugin reads is the one the server sends: a save answers `{ result, path, version }` and nothing more, a clash answers
+//     409 with `latest` and `incoming`, the changes feed answers `{ changes, next }`. What is the server's and what is not is
+//     written at the top of real-nexus.ts.
 //   - The plugin's token is never planted. It is got the way a device gets one in use: a sign-in is started, the owner's
 //     session approves it, the device polls (`issueToken`).
 //   - Notes another writer made are saved through the routes as the identity `agents` (a token got the same way), so a
-//     version's writer, its number and its place in the feed are the stand-in's own.
+//     version's writer, its number and its place in the feed are the server's own.
 //   - The vault is the one thing standing in for Obsidian: `FakeVault`. It refuses what Obsidian refuses: reading, renaming
 //     or removing a file that is not there, and renaming onto a file that is.
 //
@@ -31,7 +32,7 @@
 
 import { expect, vi } from "vitest";
 import type { Http, PluginData, SignInDeps, SyncDeps, SyncEngine, VaultPort } from "../src/types";
-import { API, OWNER, ORIGIN, StandInNexus, type Answer, type Who } from "./nexus-stand-in";
+import { API, OWNER, ORIGIN, RealNexus, type Answer, type Who } from "./real-nexus";
 
 export type { Http, PluginData, SignInDeps, SyncDeps, SyncEngine, VaultPort };
 export { ORIGIN, OWNER };
@@ -91,12 +92,12 @@ export function newLog(): Log {
   return log;
 }
 
-// ── Nexus, over the stand-in ─────────────────────────────────────────────────
+// ── Nexus, the real server ───────────────────────────────────────────────────
 
-/** The Nexus the tests of this file talk to: made by `openWorld`, emptied by `emptyNexus`. */
-let open: StandInNexus | undefined;
+/** The Nexus the tests of this file talk to: made by `openWorld`, its notes emptied by `emptyNexus`. */
+let open: RealNexus | undefined;
 
-function nexus(): StandInNexus {
+function nexus(): RealNexus {
   if (!open) throw new Error("openWorld() has not been called: there is no Nexus to talk to.");
   return open;
 }
@@ -246,23 +247,23 @@ export interface World {
   /** The owner's session, as the cookie a browser signed in as the owner sends. */
   ownerCookie: string;
   /** The routes as the owner. */
-  owner: ReturnType<StandInNexus["vault"]>;
+  owner: ReturnType<RealNexus["vault"]>;
   /** The user the plugin signs in as: the name it is given in its settings. */
   user: string;
   /** A bearer token for the plugin as `user`. */
   token: string;
   /** The routes as the identity `agents`: another writer, whose notes the plugin must bring down. */
-  agents: ReturnType<StandInNexus["vault"]>;
+  agents: ReturnType<RealNexus["vault"]>;
   address: string;
   /** A fresh token for `identity`, got through the device approval. */
   tokenFor(identity: string, label: string): Promise<string>;
   /** The routes as `who`. */
-  as(who: Who): ReturnType<StandInNexus["vault"]>;
+  as(who: Who): ReturnType<RealNexus["vault"]>;
 }
 
 /** Once per test file: a Nexus with its owner, the plugin's token and another writer's. */
 export async function openWorld(): Promise<World> {
-  open = new StandInNexus();
+  open = await RealNexus.open();
   const { ownerCookie } = open;
   const tokenFor = (identity: string, label: string) => issueToken(ownerCookie, identity, label);
   const token = await tokenFor(OWNER, "the plugin under test");
