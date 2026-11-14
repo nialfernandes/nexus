@@ -13,21 +13,23 @@
 //     cannot be type-checked from the plugin's install, so the SQL port is written here against the same contract: a batch
 //     is one transaction, a row is a plain object, a count is a number.
 //
-// The plugin is pinned to the server as it is in this repository. When the server changes what it holds or answers (the
-// encrypted-blobs change), the plugin's tests have to move along with it, in the slice that moves the plugin.
+// The plugin is pinned to the server as it is in this repository. When the server changes what it holds or answers, the
+// plugin's tests have to move along with it, in the slice that moves the plugin. The server holds blobs only: a note is an
+// id, a version, a key number and bytes the server cannot read, so these routes take and give exactly that, and the tests
+// that need the text of a note open the blob themselves (world.ts).
 //
 // WHO IS CALLING. The owner's session is the cookie the server's sign-in reads (`nexus_owner=<secret>`). `Authorization:
 // Bearer <token>` is the identity the token was made for. The identities are the owner (named by the NEXUS_OWNER setting)
-// and `agents`, who may write everywhere except under `Private/`, made the way an operator makes them: the owner calls
-// POST identity through the real route.
+// and `agents`, another writer, made the way an operator makes them: the owner calls POST identity through the real route.
+// An identity has no folder rights any more (the folders are inside the encrypted notes), so the two can use every note.
 
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { APPROVE_PATH as SERVER_APPROVE_PATH } from "../../server/src/devices";
+import { APPROVE_PATH as SERVER_APPROVE_PATH, NEXUS_BASE } from "../../server/src/addresses";
 import type { NexusHost, RunResult, SqlDb, SqlStatement, SqlValue } from "../../server/src/ports";
-import { NEXUS_BASE, runNexus } from "../../server/src/routes";
+import { runNexus } from "../../server/src/routes";
 import { workerSecrets } from "../../server/src/plugs/cloudflare/secrets";
 import { settingsFromEnv } from "../../server/src/plugs/cloudflare/settings";
 import { OWNER_COOKIE, ownerSignIn } from "../../server/src/plugs/cloudflare/signin";
@@ -113,9 +115,7 @@ export class RealNexus {
   /** A server with its tables made and the identity `agents` made the way an operator makes it. */
   static async open(): Promise<RealNexus> {
     const nexus = new RealNexus(hex(32));
-    const made = await nexus.send("POST", `${API}/identity`, { cookie: nexus.ownerCookie }, {
-      name: AGENTS, kind: "agent", rights: [{ path: "", access: "write" }, { path: "Private/", access: "none" }],
-    });
+    const made = await nexus.send("POST", `${API}/identity`, { cookie: nexus.ownerCookie }, { name: AGENTS, kind: "agent" });
     if (made.status !== 200) throw new Error(`The server would not make the identity ${AGENTS}: ${made.text}`);
     return nexus;
   }
@@ -153,18 +153,18 @@ export class RealNexus {
     return { status: res.status, body: parsed, text };
   }
 
-  /** The store's routes, called as `who`. */
+  /** The store's routes, called as `who`. A note is named by its id and sent as a blob (base64) under a key number. */
   vault(who: Who) {
     const get = (route: string, params: Record<string, string | number | undefined>) => this.send("GET", `${API}/${route}${query(params)}`, who);
     const post = (route: string, body: unknown) => this.send("POST", `${API}/${route}`, who, body);
     return {
-      save: (path: string, text: string, options: { base?: number; resolves?: number } = {}) => post("save", { path, text, ...options }),
-      note: (path: string, version?: number) => get("note", { path, version }),
-      history: (path: string) => get("history", { path }),
-      list: (folder?: string) => get("list", { folder }),
+      save: (id: string, blob: string, options: { base?: number; kid?: number } = {}) => post("save", { id, base: options.base ?? 0, kid: options.kid ?? 1, blob }),
+      note: (id: string, version?: number) => get("note", { id, version }),
+      history: (id: string) => get("history", { id }),
+      list: () => get("list", {}),
       changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
-      move: (from: string, to: string) => post("move", { from, to }),
-      remove: (path: string) => post("delete", { path }),
+      remove: (id: string, base: number) => post("delete", { id, base }),
+      wraps: () => get("wraps", {}),
     };
   }
 
