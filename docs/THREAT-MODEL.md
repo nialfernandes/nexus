@@ -193,9 +193,11 @@ Someone who can watch or interfere with traffic between a device and the server.
 
 ### 3.4 A lost or stolen device
 
-- **Locked, with disk encryption:** where you use the Obsidian plugin, the key is
-  held in Obsidian's local secret storage, which its own guide describes as local
-  storage and does not promise is encrypted on disk [S63]. Another way in keeps
+- **Locked, with disk encryption:** where you use the Obsidian plugin, the plan is
+  to hold the key in Obsidian's local secret storage, which its own guide describes as local
+  storage and does not promise is encrypted on disk [S63]. The plugin as it is now holds
+  the key in memory only, while the vault is unlocked, and writes it nowhere; the screens
+  that unlock it are not built yet. Another way in keeps
   the key wherever that app keeps secrets, and this document does not vouch for
   that place. The real defence is the device's own lock screen and disk encryption, which Nexus cannot
   add.

@@ -1,4 +1,4 @@
-// The status line: the last sync time, or what went wrong in plain words (signed out, offline, not allowed). Nothing
+// The status line: the last sync time, or what went wrong in plain words (signed out, offline, locked, a note Nexus would not take). Nothing
 // that goes wrong ever throws into Obsidian or costs a note its text, and an edit made while Nexus could not be
 // reached goes up on a later sync. (Signed out is held in sign-in.test.ts, locked in locked.test.ts.) Against the in-memory
 // Nexus (see world.ts), with the network cut by the test and the identity `agents` as another writer.

@@ -14,7 +14,7 @@ const README = readFileSync(path.join(PLUGIN, 'README.md'), 'utf8');
 const WORDS = README.replace(/^> ?/gm, '').replace(/\s+/g, ' ');
 
 describe('the Nexus plugin README on where things are kept', () => {
-  it("says the token and the versions are in Obsidian's per-device local storage, not in the .obsidian folder", () => {
+  it("says the token and what is known of each note's version are in Obsidian's per-device local storage, not in the .obsidian folder", () => {
     expect(WORDS).toMatch(/token[^.]*per-device local storage/i);
     expect(WORDS).toMatch(/version[^.]*per-device local storage/i);
     expect(WORDS).toMatch(/per-device local storage, not in the `\.obsidian` folder/i);

@@ -4,9 +4,10 @@
 // WHERE THINGS COME FROM
 //   - Nexus is the server's own code (server/src), over an in-memory SQLite database. Every request the plugin makes goes
 //     through `nexusOver` into it as a real `Request`, and the answer comes back as a real `Response`, so every answer the
-//     plugin reads is the one the server sends: a save answers `{ result, path, version }` and nothing more, a clash answers
-//     409 with `latest` and `incoming`, the changes feed answers `{ changes, next }`. What is the server's and what is not is
-//     written at the top of real-nexus.ts.
+//     plugin reads is the one the server sends: a save answers `{ result, id, version }` and nothing more, a save from a version the
+//     note has moved past answers 409 with `current`, a note is read as `{ id, version, kind, kid, blob, ... }`, the changes feed
+//     answers `{ changes, next }` with the blob of each save. What is the server's and what is not is written at the top of
+//     real-nexus.ts.
 //   - The plugin's token is never planted. It is got the way a device gets one in use: a sign-in is started, the owner's
 //     session approves it, the device polls (`issueToken`).
 //   - Notes another writer made are saved through the routes as the identity `agents` (a token got the same way), so a

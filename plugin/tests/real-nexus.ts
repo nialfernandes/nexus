@@ -3,8 +3,9 @@
 //
 // WHAT IS THE SERVER'S AND WHAT IS NOT
 //   - The server's own code answers every request: the route table and the sign-in check (server/src/routes.ts), the store,
-//     the merge, the folder rights, the tokens and the device approval behind it, the owner's cookie check and the settings
-//     reader of the Cloudflare plug, and the tables from server/migrations. Nothing of the server is written out again here.
+//     the tokens and the device approval behind it, the owner's cookie check and the settings reader of the Cloudflare plug,
+//     and the tables from server/migrations. Nothing of the server is written out again here. The server holds blobs only: it
+//     reads no note, merges nothing and searches nothing, so none of that is here either.
 //   - Two small things are not the server's. `sqlOver` below is the SQL port (server/src/ports.ts `SqlDb`) over node:sqlite,
 //     and the Worker's own front door (server/src/plugs/cloudflare/worker.ts) is left out, because it names Cloudflare types
 //     that the plugin's type check does not have; it only hands a request under the API's base to `runNexus`, which is what
