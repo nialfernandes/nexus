@@ -166,6 +166,14 @@ describe("two notes made at one path on two devices", () => {
     expect(device.notices).toHaveLength(1);
     expect(device.log.to("POST delete").map((c) => c.body), "this device's own note is deleted from Nexus").toEqual([{ id: LARGE, base: 1 }]);
     expect(Object.keys(await nexusNotes(world)), "one note is left").toEqual([SMALL]);
+
+    // A second sync finds everything where the first left it: the deleted note's own versions in the feed bring nothing back.
+    const before = { texts: device.vault.texts(), notices: [...device.notices], notes: structuredClone(device.data().notes) };
+    await device.engine.sync();
+    expect(device.vault.texts()).toEqual(before.texts);
+    expect(device.notices).toEqual(before.notices);
+    expect(device.data().notes).toEqual(before.notes);
+    expect(device.log.to("POST save"), "and nothing more was sent").toHaveLength(1);
   });
 
   it("leave the path to this device's note when its id is the smaller, and the other note is left for its own device to remove", async () => {

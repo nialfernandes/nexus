@@ -483,6 +483,13 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       return null;
     }
 
+    if ((await readIf(path)) !== text) {
+      // Typing went on while Nexus was asked. Nothing is changed: the note still stands on the version it had, so the next send is refused
+      // again and is merged again, with what is typed now. (Standing on Nexus's version with the newer text would send it over Nexus's changes.)
+      dirty.add(path);
+      return null;
+    }
+
     // A note renamed here keeps the name it was given here; otherwise it follows the name Nexus has now.
     let at = path;
     if (path === entry.savedPath && remote.path !== path && isSafeNotePath(remote.path) && !disk.has(remote.path)) {
@@ -490,11 +497,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       untrack(path);
       at = remote.path;
     }
-    if ((await readIf(at)) === text) {
-      if (merged !== text) await disk.write(at, merged);
-    } else {
-      dirty.add(at); // typing went on while Nexus was asked: the file is left as it is and goes up again from Nexus's version
-    }
+    if (merged !== text) await disk.write(at, merged);
     // The note now stands on Nexus's version with Nexus's text, so what is in the vault is an edit on it, and goes up again.
     track(at, entry.id, remote.version, remote.text, remote.path);
     await save();
@@ -621,8 +624,8 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       if (id > holder.id) return; // this device's note keeps the path
       const here = disk.has(target) ? await disk.read(target) : undefined;
       (data.pendingDeletes ??= []).push({ id: holder.id, version: holder.version });
+      untrack(target); // this device's own note no longer stands here, so nothing in this sync can be matched against it
       if (here === undefined || here === remote.text) {
-        untrack(target);
         if (here === undefined) await disk.write(target, remote.text);
         track(target, id, version, remote.text);
       } else {

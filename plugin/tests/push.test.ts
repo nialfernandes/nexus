@@ -8,7 +8,7 @@
 // becomes version 4.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { bodyOf, emptyNexus, forbidFetch, known, makeDevice, nexusTexts, openWorld, sentNote, syncedDevice, type World } from "./world";
+import { bodyOf, emptyNexus, forbidFetch, known, loadSync, makeDevice, nexusTexts, openWorld, sentNote, syncedDevice, type Http, type World } from "./world";
 
 let world: World;
 
@@ -62,6 +62,36 @@ describe("a local edit goes up", () => {
     expect(device.data().notes["Ideas/a.md"]).toMatchObject({ id, version: 4, savedPath: "Ideas/a.md" });
     expect(await nexusTexts(world)).toEqual({ "Ideas/a.md": "ONE\nTWO\n" });
     expect(device.notices, "a merge that worked is not announced").toEqual([]);
+  });
+
+  it("does not send the person's newer typing over Nexus's changes when they typed while Nexus was being asked", async () => {
+    const { id } = await world.elsewhere.create("Ideas/live.md", "one\ntwo\nthree\nfour\n");
+    await world.elsewhere.update(id, "Ideas/live.md", "ONE\ntwo\nthree\nfour\n"); // another device's edit of line 1
+    const device = await makeDevice(world, {
+      files: { "Ideas/live.md": "one\nTWO\nthree\nfour\n" }, // this device's edit of line 2, not sent
+      notes: { "Ideas/live.md": known("Ideas/live.md", "one\ntwo\nthree\nfour\n", 1, id) },
+      cursor: "0",
+    });
+    // While the note is being read to be merged, the person types on line 4.
+    const { createSyncEngine } = await loadSync();
+    let typed = false;
+    const http: Http = async (request) => {
+      const answer = await device.deps.http(request);
+      if (!typed && new URL(request.url).pathname.endsWith("/note")) {
+        typed = true;
+        device.vault.type("Ideas/live.md", "one\nTWO\nthree\nFOUR\n");
+      }
+      return answer;
+    };
+    const engine = createSyncEngine({ ...device.deps, http });
+
+    await engine.push("Ideas/live.md");
+    await engine.sync();
+
+    expect(typed, "the test typed in the middle").toBe(true);
+    expect(device.vault.textOf("Ideas/live.md"), "all three edits are in the note").toBe("ONE\nTWO\nthree\nFOUR\n");
+    expect(await nexusTexts(world), "and in Nexus").toEqual({ "Ideas/live.md": "ONE\nTWO\nthree\nFOUR\n" });
+    expect(device.notices).toEqual([]);
   });
 
   it("stores the version a plain save is given, and leaves the note's text alone", async () => {
