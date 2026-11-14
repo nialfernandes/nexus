@@ -84,6 +84,26 @@ describe("the list of notes", () => {
     for (const n of notes) expect(n).not.toHaveProperty("blob");
   });
 
+  it("lists the whole vault and leaves out every deleted note, whatever else is in it", async () => {
+    bodyOf(await owner.save({ id: "whole-kept", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "whole-gone", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "whole-gone-later", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "whole-back", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.remove("whole-gone", 1));
+    bodyOf(await owner.remove("whole-back", 1));
+    bodyOf(await owner.save({ id: "whole-gone-later", blob: GARDEN_V2.blob }, 1));
+    bodyOf(await owner.remove("whole-gone-later", 2));
+    // A note that was deleted and then saved again is alive again.
+    bodyOf(await owner.save({ id: "whole-back", blob: GARDEN_V2.blob }, 2));
+
+    // No parameter at all: this is the whole vault, which is the only list there is.
+    const listed = (bodyOf(await owner.list()).notes as Array<{ id: string; version: number }>).filter((n) => n.id.startsWith("whole-"));
+    expect(listed.map((n) => [n.id, n.version])).toEqual([["whole-back", 3], ["whole-kept", 1]]);
+
+    // A deleted note is gone from the list but its history is still there.
+    expect(bodyOf(await owner.history("whole-gone")).versions.map((v: { kind: string }) => v.kind)).toEqual(["save", "delete"]);
+  });
+
   it("has no folder to ask for: a folder in the query changes nothing, and there is no search route", async () => {
     const all = bodyOf(await owner.list()).notes;
     expect(bodyOf(await send("GET", `${API}/list?folder=Ideas`, cookie)).notes).toEqual(all);
