@@ -6,7 +6,7 @@
 // the routes (see world.ts and nexus-stand-in.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { APPROVE_PATH } from "./nexus-stand-in";
+import { APPROVE_PATH } from "./real-nexus";
 import {
   DEVICE_NAME, ORIGIN, bodyOf, deviceRoutes, emptyNexus, forbidFetch, loadSignIn, makeDevice, manage, newLog, nexusOver, openWorld, type PluginData, type World,
 } from "./world";
