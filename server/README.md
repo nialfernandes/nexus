@@ -9,6 +9,9 @@ is for Cloudflare Workers and D1 (`src/plugs/cloudflare/`).
 can read them. They are not encrypted, and this code has not been audited. Do not put anything in it that you
 would not be willing to have the person running the server read.
 
+The planned encryption, and what it will and will not protect against, is in the [threat model](../docs/THREAT-MODEL.md).
+The not-yet-audited notice in the [top-level README](../README.md) applies to everything here.
+
 ## What it does
 
 - Every save is a new version. Nothing is changed or removed once written.
