@@ -110,7 +110,8 @@ describe("changing what was entered", () => {
   it("a different user signs the vault out and starts the sync over", async () => {
     const { plugin, field } = openTab(signedIn());
     await field("User name").typeAndLeave("other");
-    expect(plugin.state).toMatchObject({ user: "other", token: null, cursor: null, notes: {}, pendingDeletes: [], pendingPulls: [] });
+    expect(plugin.state).toMatchObject({ user: "other", token: null, cursor: null, pendingDeletes: [], pendingPulls: [] });
+    expect(plugin.state.notes, "what was known of each note is forgotten: its ids and versions belong to the old user").toEqual({});
     expect(plugin.state.address, "the address is kept").toBe(ADDRESS);
     expect(Notice.messages).toEqual(["Nexus user changed. Sign in again."]);
   });
@@ -118,7 +119,8 @@ describe("changing what was entered", () => {
   it("a different address signs the vault out and starts the sync over", async () => {
     const { plugin, field } = openTab(signedIn());
     await field("Nexus address").typeAndLeave("https://other.example.com/api");
-    expect(plugin.state).toMatchObject({ address: "https://other.example.com/api", user: "demo", token: null, cursor: null, notes: {} });
+    expect(plugin.state).toMatchObject({ address: "https://other.example.com/api", user: "demo", token: null, cursor: null });
+    expect(plugin.state.notes).toEqual({});
     expect(Notice.messages).toEqual(["Nexus address changed. Sign in again."]);
   });
 
