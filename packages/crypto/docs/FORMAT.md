@@ -75,7 +75,11 @@ says little about the size of the note.
 
 1. Take the record bytes (section 6.1), `n` bytes long.
 2. Append one end mark byte `0x80`.
-3. Append zero bytes until the total length is `padme(n + 1)`.
+3. Append zero bytes until the total length is `padme(max(n + 1, 256))`.
+
+So every record is padded to **at least 256 bytes** before Padmé is applied: a
+one-line note and a note of two hundred bytes give blobs of the same size, and
+only records of 255 bytes or more show a length, rounded by Padmé.
 
 **Padmé** (Nikitin et al., 2018) for a length `L`:
 
@@ -87,10 +91,10 @@ mask = 2^(E - S) - 1
 return (L + mask) AND (NOT mask)
 ```
 
-Writers must pad to exactly `padme(n + 1)`. Readers remove padding by dropping
+Writers must pad to exactly `padme(max(n + 1, 256))`. Readers remove padding by dropping
 all trailing `0x00` bytes and then the one `0x80` before them, and refuse
 (`malformed`) data with no `0x80`. A reader does not insist on the exact length,
-so a later writer may pad more (for example to a minimum size) without a new
+so a later writer may pad more (for example to a larger minimum) without a new
 format version.
 
 ## 6. Note blob
@@ -98,14 +102,21 @@ format version.
 ```
 offset  length  field
 0       1       version (0x01)
-1       24      nonce, random, new for every encryption
-25      n + 16  AEAD ciphertext of the padded record, then the 16-byte tag
+1       4       kid, the number of the vault key the blob is under
+5       24      nonce, random, new for every encryption
+29      n + 16  AEAD ciphertext of the padded record, then the 16-byte tag
 ```
 
-The AD is kind `0x01` with the note's `kid`, vault id and note id. The server
-keeps the note id, vault id and `kid` beside the blob; they are **not** inside
-it, and the reader supplies them. Total length = `1 + 24 + padme(n + 1) + 16`.
-The shortest valid blob is 42 bytes.
+The AD is kind `0x01` with the note's `kid`, vault id and note id. The `kid` is
+written in the blob so a blob alone says which key opens it, **and** it is in
+the AD. A reader that is told which `kid` it expects compares it with bytes 1 to
+4 first and, if they differ, refuses with `wrong-kid` before it tries to
+decrypt. Rewriting those bytes cannot make a blob open under another `kid`,
+because the AD still holds the real one. The note id and vault id are **not** in
+the blob: the server keeps them beside it, and the reader supplies them.
+Total length = `1 + 4 + 24 + padme(max(n + 1, 256)) + 16`, so at least 301
+bytes for a new blob. The shortest blob a reader can open is 46 bytes (header,
+tag and the end mark).
 
 ### 6.1 The record
 
@@ -173,11 +184,10 @@ The opening device passes the vault id it expects and refuses an approval for
 another vault (`wrong-vault`). It learns the `kid` from the content.
 
 A sealed box does **not** say who sealed it: anyone who has the public key,
-including a server, can make one. Nothing in this format stops a hostile server
-sealing a key of its own to a device. The approval flow must therefore show the
-person a short code derived from the device's **public key** on both screens, to
-be compared by eye, before the approving device seals anything. That flow is
-outside this package.
+including a server, can make one. **An approval alone is not authenticated.** It
+must be checked by the matching code that the device approval flow shows on both
+screens, which that flow binds to both device keys and to the sealed key, before
+the device trusts what it opened. That flow is outside this package.
 
 ## 8. Writing the Recovery Key down
 
@@ -208,6 +218,7 @@ Every refusal is a `NexusCryptoError` with a `code`:
 | `invalid-argument` | A key, id, kid, password or record is not what the function takes |
 | `truncated` | The data is shorter than the smallest valid blob, wrap or approval |
 | `unsupported-version` | The first byte is not `0x01` |
+| `wrong-kid` | A note blob names a different `kid` than the reader expects (checked before decryption) |
 | `malformed` | The length is too long, the kind byte is wrong, the padding has no end mark, or the decrypted record is not a `{path, text}` object |
 | `decryption-failed` | A note blob did not authenticate |
 | `unwrap-failed` | A wrap or approval did not authenticate |
@@ -217,8 +228,8 @@ Every refusal is a `NexusCryptoError` with a `code`:
 
 **Why one code covers wrong key, wrong ids and damage.** XChaCha20-Poly1305
 reports only that the tag did not match. A wrong key, a changed note id, vault
-id or `kid`, a flipped bit and a cut-off ending all look the same, so Nexus does
-not claim to tell them apart. In every case nothing is returned: the cipher
+id, a rewritten `kid` that still matches the header, a flipped bit and a cut-off
+ending all look the same, so Nexus does not claim to tell them apart. In every case nothing is returned: the cipher
 checks the tag before it releases any plaintext, and a failed call gives the
 caller no partial text.
 
@@ -234,14 +245,21 @@ All use these inputs. **They are test values; never use fixed keys or nonces.**
 | salt | bytes `60 61 ... 6f` (16 bytes) |
 | password | `correct horse battery staple` |
 | vault id, note id, `kid` | `vault-1`, `note-1`, `1` |
-| record | `{"path":"Daily/2026-11-15.md","text":"hello"}` (45 bytes; with the end mark 46, padded to `padme(46)` = 48) |
+| record | `{"path":"Daily/2026-11-15.md","text":"hello"}` (45 bytes; with the end mark 46, which the 256-byte floor raises to `padme(256)` = 256) |
 
-Note blob (89 bytes = 1 + 24 + 48 + 16):
+Note blob (301 bytes = 1 + 4 + 24 + 256 + 16; the `kid` is `00000001` after the version byte):
 
 ```
-01404142434445464748494a4b4c4d4e4f5051525354555657af1b7511a4885b
-2cadb0e6d7c3e54aa0a2889be922687eab5f1f90212b2801e47381764c6fb0ec
-7593de9b6e775adaf137f95b0901c41907f3d49035826cd292
+0100000001404142434445464748494a4b4c4d4e4f5051525354555657af1b75
+11a4885b2cadb0e6d7c3e54aa0a2889be922687eab5f1f90212b2801e4738176
+4c6fb0ec7593de9b6e775adaf19b6b7de86f85b49cb6fc08f413b24c545a2bf8
+7214b345c88503b0ffdc799ceff6c7062b283d647750a30794c56533252675b7
+c9b8e56bb6dda1629a4717c98b9ff313de29ca83e00cbf571222c77b9fdf5147
+0ed1ded6b0a0a0f23069a7de50ee2768ff352c5c1d4d2aa1b93ddb0ab139fc04
+bc7e42e07e51fdcec36bd73cfe81eacae18ce1f48ee9c2078f1a952a99aafdb4
+a3937724fa7b33296dcddd0570c8406b44d2f9a12aa38e4cf7ec3d3ead1f0568
+e31a097342d0f62a600b2351762db7ddff84d44d905575c69e440ccab611d58c
+25e4543bf16b90c265a965aa8e
 ```
 
 Recovery wrap (74 bytes):
@@ -283,8 +301,10 @@ checks that the bytes are the same.
 - **Both ways:** every note blob and wrap is opened by the second library, and
   every one the second library writes is opened here.
 - **Refusals:** a flipped bit anywhere, a wrong note id, vault id, `kid`, key,
-  Recovery Key or password, a truncated or lengthened blob, a wrong version or
-  kind, and out-of-range password settings, each with the named error above.
+  Recovery Key or password, a blob naming another `kid`, a truncated or
+  lengthened blob, a wrong version or kind, and out-of-range password settings,
+  each with the named error above.
+- **Padding:** a record of any length up to 255 bytes gives a blob of one size.
 - The sealed approval has no second implementation in the tests (libsodium's
   sealed box is the one implementation); it has round-trip and refusal tests.
 
@@ -292,8 +312,6 @@ checks that the bytes are the same.
 
 - It does not hide that a note exists, when it changed, or roughly how big it
   is; Padmé blurs the size, nothing hides the rest.
-- It does not name the `kid` inside a blob: the reader takes it from the record
-  the blob came with (the server keeps it beside the blob).
 - It does not rotate keys, re-encrypt notes, or store anything. Those belong to
   the callers.
 - It does not authenticate who sealed an approval (section 7.3).

@@ -104,12 +104,25 @@ describe("Padmé", () => {
     }
   });
 
-  it("pads a record to the Padmé length of the record plus its end mark, and takes it off again", () => {
+  it("pads a short record to 256 bytes and takes it off again", () => {
     const record = new TextEncoder().encode('{"path":"a.md","text":"hello"}');
     const padded = padRecord(record);
-    expect(padded.length).toBe(padmeLength(record.length + 1));
+    expect(padded.length).toBe(256);
     expect(padded[record.length]).toBe(0x80);
     expect(Array.from(unpadRecord(padded))).toEqual(Array.from(record));
+  });
+
+  it("pads a record at or past the floor to the Padmé length of record plus its end mark", () => {
+    for (const length of [254, 255, 256, 257, 1000, 5000]) {
+      const record = new Uint8Array(length).fill(0x41);
+      const padded = padRecord(record);
+      expect(padded.length, `record of ${length}`).toBe(padmeLength(Math.max(length + 1, 256)));
+      expect(padded.length).toBeGreaterThanOrEqual(length + 1);
+      expect(Array.from(unpadRecord(padded))).toEqual(Array.from(record));
+    }
+    expect(padRecord(new Uint8Array(254)).length).toBe(256);
+    expect(padRecord(new Uint8Array(255)).length).toBe(256);
+    expect(padRecord(new Uint8Array(256)).length).toBe(padmeLength(257));
   });
 
   it("refuses padding that has no end mark", () => {

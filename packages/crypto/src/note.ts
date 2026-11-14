@@ -1,7 +1,7 @@
 import { aeadOpen, aeadSeal } from "./aead.js";
 import { noteAssociatedData, type NoteContext } from "./associated-data.js";
-import { fromUtf8, requireBytes, utf8 } from "./bytes.js";
-import { FORMAT_VERSION, Kind, KEY_BYTES, MAX_RECORD_BYTES, NONCE_BYTES, TAG_BYTES } from "./constants.js";
+import { fromUtf8, readU32be, requireBytes, u32be, utf8 } from "./bytes.js";
+import { FORMAT_VERSION, Kind, KEY_BYTES, KID_BYTES, MAX_RECORD_BYTES, NONCE_BYTES, TAG_BYTES } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
 import { padRecord, unpadRecord } from "./padme.js";
 import { loadSodium, type Sodium } from "./sodium.js";
@@ -12,8 +12,13 @@ export interface NoteRecord {
   text: string;
 }
 
-/** The shortest possible blob: version, nonce, the tag, and one byte (the end mark). */
-export const MIN_NOTE_BLOB_BYTES = 1 + NONCE_BYTES + TAG_BYTES + 1;
+/** Where each part of a note blob starts: version (1), kid (4), nonce (24), then the ciphertext. */
+const KID_OFFSET = 1;
+const NONCE_OFFSET = KID_OFFSET + KID_BYTES;
+const SEALED_OFFSET = NONCE_OFFSET + NONCE_BYTES;
+
+/** The shortest possible blob: the header, the tag, and one byte (the end mark). */
+export const MIN_NOTE_BLOB_BYTES = SEALED_OFFSET + TAG_BYTES + 1;
 
 /** A new vault key: 256 random bits. */
 export async function generateVaultKey(): Promise<Uint8Array> {
@@ -22,8 +27,8 @@ export async function generateVaultKey(): Promise<Uint8Array> {
 }
 
 /**
- * Encrypts one note. The blob is: version (1 byte), nonce (24), then the
- * ciphertext and tag. See docs/FORMAT.md.
+ * Encrypts one note. The blob is: version (1 byte), kid (4), nonce (24), then
+ * the ciphertext and tag. See docs/FORMAT.md.
  */
 export async function encryptNote(
   vaultKey: Uint8Array,
@@ -37,7 +42,8 @@ export async function encryptNote(
 /**
  * Decrypts one note, or throws a NexusCryptoError and returns nothing.
  * The key, vault id, note id and kid must all be the ones the note was
- * encrypted with.
+ * encrypted with. A blob that names another kid than the context's is refused
+ * as "wrong-kid" before any decryption is tried.
  */
 export async function decryptNote(
   vaultKey: Uint8Array,
@@ -56,8 +62,12 @@ export async function decryptNote(
   if (blob[0] !== FORMAT_VERSION) {
     throw new NexusCryptoError("unsupported-version", `note blob has format version ${blob[0]}`);
   }
-  const nonce = blob.subarray(1, 1 + NONCE_BYTES);
-  const sealed = blob.subarray(1 + NONCE_BYTES);
+  const blobKid = readU32be(blob, KID_OFFSET);
+  if (blobKid !== context.kid) {
+    throw new NexusCryptoError("wrong-kid", `note blob is under kid ${blobKid}, not kid ${context.kid}`);
+  }
+  const nonce = blob.subarray(NONCE_OFFSET, SEALED_OFFSET);
+  const sealed = blob.subarray(SEALED_OFFSET);
   const padded = aeadOpen(sodium, vaultKey, nonce, associatedData, sealed, "decryption-failed");
   try {
     return parseRecord(unpadRecord(padded));
@@ -82,10 +92,11 @@ export function sealNote(
   const padded = padRecord(serializeRecord(record));
   try {
     const sealed = aeadSeal(sodium, vaultKey, nonce, associatedData, padded);
-    const blob = new Uint8Array(1 + NONCE_BYTES + sealed.length);
+    const blob = new Uint8Array(SEALED_OFFSET + sealed.length);
     blob[0] = FORMAT_VERSION;
-    blob.set(nonce, 1);
-    blob.set(sealed, 1 + NONCE_BYTES);
+    blob.set(u32be(context.kid), KID_OFFSET);
+    blob.set(nonce, NONCE_OFFSET);
+    blob.set(sealed, SEALED_OFFSET);
     return blob;
   } finally {
     sodium.memzero(padded);

@@ -5,6 +5,7 @@ export const KEY_BYTES = 32;
 export const NONCE_BYTES = 24;
 export const TAG_BYTES = 16;
 export const SALT_BYTES = 16;
+export const KID_BYTES = 4;
 
 /**
  * What a piece of encrypted data is. It is the second byte of every wrap, the
@@ -41,6 +42,9 @@ export const PASSWORD_KDF_LIMITS = {
   iterations: { min: 3, max: 12 },
   parallelism: { min: 1, max: 1 },
 } as const;
+
+/** Every note record is padded to at least this many bytes (the end mark included) before Padmé. */
+export const MIN_PADDED_RECORD_BYTES = 256;
 
 /** Longest vault id, note id or other id, in UTF-8 bytes. */
 export const MAX_ID_BYTES = 1024;

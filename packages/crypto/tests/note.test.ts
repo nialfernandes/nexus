@@ -36,14 +36,33 @@ describe("encryptNote and decryptNote", () => {
     }
   });
 
-  it("writes version 1, then the nonce, then a ciphertext padded to the Padmé length", async () => {
-    const blob = await encryptNote(VAULT_KEY, NOTE_CONTEXT, RECORD);
-    const recordLength = new TextEncoder().encode(JSON.stringify(RECORD)).length;
+  it("writes version 1, then the kid, then the nonce, then a ciphertext padded to at least 256 bytes", async () => {
+    const context = { ...NOTE_CONTEXT, kid: 0x01020304 };
+    const blob = await encryptNote(VAULT_KEY, context, RECORD);
     expect(blob[0]).toBe(1);
-    expect(blob.length).toBe(1 + 24 + padmeLength(recordLength + 1) + 16);
+    expect(toHex(blob.slice(1, 5))).toBe("01020304");
+    expect(blob.length).toBe(1 + 4 + 24 + 256 + 16);
   });
 
-  it("gives notes of nearby sizes the same blob size, which is the point of padding", async () => {
+  it("pads past 256 bytes to the Padmé length of the record plus its end mark", async () => {
+    const record = { path: "long.md", text: "x".repeat(3000) };
+    const recordLength = new TextEncoder().encode(JSON.stringify(record)).length;
+    const blob = await encryptNote(VAULT_KEY, NOTE_CONTEXT, record);
+    expect(blob.length).toBe(1 + 4 + 24 + padmeLength(recordLength + 1) + 16);
+    expect(padmeLength(recordLength + 1)).toBeGreaterThan(256);
+  });
+
+  it("gives every note up to 255 bytes the same blob size, so a one-line note shows no length", async () => {
+    const sizes = new Set<number>();
+    for (const n of [0, 1, 5, 40, 100, 200, 255 - 40]) {
+      const record = { path: "p.md", text: "x".repeat(n) };
+      expect(new TextEncoder().encode(JSON.stringify(record)).length).toBeLessThan(256);
+      sizes.add((await encryptNote(VAULT_KEY, NOTE_CONTEXT, record)).length);
+    }
+    expect([...sizes]).toEqual([1 + 4 + 24 + 256 + 16]);
+  });
+
+  it("gives notes of nearby larger sizes the same blob size, which is the point of padding", async () => {
     const sizes = new Set<number>();
     for (let n = 1000; n < 1020; n++) {
       sizes.add((await encryptNote(VAULT_KEY, NOTE_CONTEXT, { path: "p.md", text: "x".repeat(n) })).length);
@@ -54,7 +73,7 @@ describe("encryptNote and decryptNote", () => {
   it("uses a fresh random nonce each time", async () => {
     const a = await encryptNote(VAULT_KEY, NOTE_CONTEXT, RECORD);
     const b = await encryptNote(VAULT_KEY, NOTE_CONTEXT, RECORD);
-    expect(toHex(a.slice(1, 25))).not.toBe(toHex(b.slice(1, 25)));
+    expect(toHex(a.slice(5, 29))).not.toBe(toHex(b.slice(5, 29)));
     expect(toHex(a)).not.toBe(toHex(b));
   });
 
@@ -86,8 +105,16 @@ describe("decryptNote refuses with a named error and gives back no plaintext", (
     expect(error.code).toBe("decryption-failed");
   });
 
-  it("when the kid differs", async () => {
+  it("when the blob names a different kid than the context, before any decryption is tried", async () => {
     const error = await refusal(decryptNote(VAULT_KEY, { ...NOTE_CONTEXT, kid: 2 }, await blobPromise));
+    expect(error.code).toBe("wrong-kid");
+    expect(error.message).toMatch(/kid 1/);
+  });
+
+  it("when the header kid is rewritten to match the context: the kid is also in the associated data", async () => {
+    const blob = (await blobPromise).slice();
+    blob.set([0, 0, 0, 2], 1);
+    const error = await refusal(decryptNote(VAULT_KEY, { ...NOTE_CONTEXT, kid: 2 }, blob));
     expect(error.code).toBe("decryption-failed");
   });
 
@@ -106,7 +133,8 @@ describe("decryptNote refuses with a named error and gives back no plaintext", (
     const blob = await blobPromise;
     for (let index = 1; index < blob.length; index++) {
       const error = await refusal(decryptNote(VAULT_KEY, NOTE_CONTEXT, flipBit(blob, index, index % 8)));
-      expect(error.code, `byte ${index}`).toBe("decryption-failed");
+      // bytes 1 to 4 are the kid, which is compared first
+      expect(error.code, `byte ${index}`).toBe(index <= 4 ? "wrong-kid" : "decryption-failed");
     }
   });
 
@@ -118,10 +146,10 @@ describe("decryptNote refuses with a named error and gives back no plaintext", (
 
   it("when the blob is cut short", async () => {
     const blob = await blobPromise;
-    for (const length of [0, 1, 24, 25, MIN_NOTE_BLOB_BYTES - 1]) {
+    for (const length of [0, 1, 4, 5, 28, 29, MIN_NOTE_BLOB_BYTES - 1]) {
       expect((await refusal(decryptNote(VAULT_KEY, NOTE_CONTEXT, blob.slice(0, length)))).code, `length ${length}`).toBe("truncated");
     }
-    for (const length of [MIN_NOTE_BLOB_BYTES, 50, blob.length - 16, blob.length - 1]) {
+    for (const length of [MIN_NOTE_BLOB_BYTES, 60, blob.length - 16, blob.length - 1]) {
       expect((await refusal(decryptNote(VAULT_KEY, NOTE_CONTEXT, blob.slice(0, length)))).code, `length ${length}`).toBe("decryption-failed");
     }
   });

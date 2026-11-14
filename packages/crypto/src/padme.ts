@@ -1,3 +1,4 @@
+import { MIN_PADDED_RECORD_BYTES } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
 
 /** Marks where the record ends inside the padding. */
@@ -21,9 +22,13 @@ export function padmeLength(length: number): number {
   return (length + mask) & ~mask;
 }
 
-/** The record, one end mark (0x80), then zeros up to the Padmé length of record + mark. */
+/**
+ * The record, one end mark (0x80), then zeros up to the Padmé length of the
+ * record plus mark, or of MIN_PADDED_RECORD_BYTES if that is more, so a
+ * one-line note does not show its length.
+ */
 export function padRecord(record: Uint8Array): Uint8Array {
-  const padded = new Uint8Array(padmeLength(record.length + 1));
+  const padded = new Uint8Array(padmeLength(Math.max(record.length + 1, MIN_PADDED_RECORD_BYTES)));
   padded.set(record);
   padded[record.length] = END_MARK;
   return padded;

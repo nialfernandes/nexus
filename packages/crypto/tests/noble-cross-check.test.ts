@@ -42,9 +42,9 @@ function padme(length: number): number {
   return (length + mask) & ~mask;
 }
 
-/** FORMAT.md, "Padding": record, 0x80, zeros up to padme(len + 1). */
+/** FORMAT.md, "Padding": record, 0x80, zeros up to padme(max(len + 1, 256)). */
 function pad(record: Uint8Array): Uint8Array {
-  const out = new Uint8Array(padme(record.length + 1));
+  const out = new Uint8Array(padme(Math.max(record.length + 1, 256)));
   out.set(record);
   out[record.length] = 0x80;
   return out;
@@ -61,7 +61,7 @@ const recordBytes = (r: { path: string; text: string }) => text.encode(JSON.stri
 
 function nobleSealNote(key: Uint8Array, nonce: Uint8Array, vaultId: string, noteId: string, kid: number, r: typeof RECORD) {
   const sealed = xchacha20poly1305(key, nonce, associatedData(1, vaultId, kid, noteId)).encrypt(pad(recordBytes(r)));
-  return concat(Uint8Array.of(1), nonce, sealed);
+  return concat(Uint8Array.of(1), u32(kid), nonce, sealed);
 }
 
 describe("note blobs: libsodium writes, noble reads, and the other way round", () => {
@@ -69,9 +69,10 @@ describe("note blobs: libsodium writes, noble reads, and the other way round", (
     for (const size of [0, 1, 5, 31, 32, 100, 1000, 4097, 70_000]) {
       const record = { path: `Folder/note ${size} ✓.md`, text: "x".repeat(size) };
       const blob = await encryptNote(VAULT_KEY, NOTE_CONTEXT, record);
-      const nonce = blob.slice(1, 25);
-      const padded = xchacha20poly1305(VAULT_KEY, nonce, associatedData(1, VAULT_ID, KID, NOTE_ID)).decrypt(blob.slice(25));
-      expect(padded.length).toBe(padme(recordBytes(record).length + 1));
+      expect(Array.from(blob.slice(0, 5))).toEqual([1, 0, 0, 0, KID]);
+      const nonce = blob.slice(5, 29);
+      const padded = xchacha20poly1305(VAULT_KEY, nonce, associatedData(1, VAULT_ID, KID, NOTE_ID)).decrypt(blob.slice(29));
+      expect(padded.length).toBe(padme(Math.max(recordBytes(record).length + 1, 256)));
       expect(JSON.parse(new TextDecoder().decode(unpad(padded)))).toEqual(record);
     }
   });

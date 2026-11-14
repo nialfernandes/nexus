@@ -12,6 +12,8 @@ export const ERROR_CODES = [
   "unsupported-version",
   // The data has the right length but its layout is wrong.
   "malformed",
+  // A note blob names a different kid than the one the caller expects.
+  "wrong-kid",
   // A note blob did not authenticate: wrong key, wrong ids, or damaged bytes.
   // The cipher cannot tell these apart, so neither does this code.
   "decryption-failed",
