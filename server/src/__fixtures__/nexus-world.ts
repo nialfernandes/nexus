@@ -116,16 +116,22 @@ const STARTING_IDENTITIES = [
   { name: "recorder", kind: "app", rights: [{ path: "Podcasts/Transcripts/", access: "write" }] },
 ];
 
-/** A fresh database with the migrations applied and the starting identities made, and a Worker pointed at it. Once per test file. */
-export async function setUpNexus(): Promise<void> {
+/** A fresh database with the migrations applied, and a Worker's variables pointing at it. `settings` change or take away what the Worker is told. */
+export async function nexusEnv(settings: Partial<NexusEnv> = {}): Promise<NexusEnv> {
   const db = memoryD1();
   for (const sql of nexusMigrations()) await db.applyMigration(sql);
-  current = {
+  return {
     NEXUS_DB: db,
     NEXUS_OWNER: OWNER,
     NEXUS_OWNER_SECRET: OWNER_SECRET,
     ASSETS: staticAssets(),
+    ...settings,
   };
+}
+
+/** A fresh world and the starting identities made in it. Once per test file. */
+export async function setUpNexus(): Promise<void> {
+  current = await nexusEnv();
   const owner = (await signInOwner()).cookie;
   for (const identity of STARTING_IDENTITIES) {
     expect((await send("POST", `${API}/identity`, owner, identity)).status, `making ${identity.name}`).toBe(200);

@@ -108,10 +108,10 @@ const query = (params: Record<string, string | number | undefined>): string => {
 };
 
 /** The store's routes (nexus-world.ts's `vault`), called as `who`. */
-export function vaultAs(who: Who) {
+export function vaultAs(who: Who, env?: NexusEnv) {
   const get = (route: string, params: Record<string, string | number | undefined>) =>
-    sendAs("GET", `${API}/${route}${query(params)}`, who);
-  const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body);
+    sendAs("GET", `${API}/${route}${query(params)}`, who, undefined, env);
+  const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body, env);
   return {
     save: (path: string, text: string, options: { base?: number; resolves?: number } = {}) =>
       post("save", { path, text, ...options }),
@@ -126,23 +126,23 @@ export function vaultAs(who: Who) {
 }
 
 /** The routes only `owner` may call, as `who`. */
-export function manage(who: Who) {
-  const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body);
+export function manage(who: Who, env?: NexusEnv) {
+  const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body, env);
   return {
     createIdentity: (name: string, kind: string, rights?: FolderRight[]) =>
       post("identity", { name, kind, ...(rights ? { rights } : {}) }),
     setRights: (identity: string, rights: FolderRight[]) => post("rights", { identity, rights }),
-    tokens: () => sendAs("GET", `${API}/tokens`, who),
+    tokens: () => sendAs("GET", `${API}/tokens`, who, undefined, env),
     revoke: (id: string) => post("token/revoke", { id }),
   };
 }
 
 /** The device's calls, and the owner's answers to them. `who` is whoever makes the call. */
-export function device(who: Who = null) {
-  const post = (route: string, body: unknown) => sendAs("POST", `${API}/device/${route}`, who, body);
+export function device(who: Who = null, env?: NexusEnv) {
+  const post = (route: string, body: unknown) => sendAs("POST", `${API}/device/${route}`, who, body, env);
   return {
     start: (identity: string, label: string) => post("start", { identity, label }),
-    pending: (code: string) => sendAs("GET", `${API}/device/pending${query({ code })}`, who),
+    pending: (code: string) => sendAs("GET", `${API}/device/pending${query({ code })}`, who, undefined, env),
     approve: (code: string) => post("approve", { code }),
     deny: (code: string) => post("deny", { code }),
     poll: (secret: string) => post("poll", { secret }),
