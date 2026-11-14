@@ -64,7 +64,7 @@ export interface Bytes {
   bytes: Uint8Array;
 }
 
-/** An encrypted blob or a wrap, sent as base64: checked for what it is and how long it is, and never looked into. */
+/** An encrypted blob or a wrap, sent as base64: checked for what it is and how long it is. Its header is checked by the caller (header.ts); nothing is looked into past that. */
 export function bytesOf(value: unknown, what: string, maxBytes: number): Bytes {
   if (typeof value !== "string" || value === "") {
     throw new Refusal(400, `A ${what} is needed, as base64 text.`);

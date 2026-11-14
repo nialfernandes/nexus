@@ -1,7 +1,8 @@
 // Nexus's route table, and the one place a request becomes an answer.
 //
 //   THE STORE (any identity). A note is an encrypted blob under an id the device chose; the server reads none of it.
-//   POST /save      { id, base, kid, blob }            200 saved, 409 the note is at another version (with `current`)
+//   POST /save      { id, base, kid, blob }            200 saved, 409 the note is at another version (with `current`),
+//                                                      400 with a `reason` if the blob does not begin as an encrypted note does (header.ts)
 //   GET  /note      ?id=I[&version=N]                  200 the note's blob, 404 no such note or version
 //   GET  /history   ?id=I                              200 the versions, oldest first, without blobs
 //   GET  /list      (no parameters)                    200 the live notes: id, latest version, time, kid, hash
@@ -10,7 +11,7 @@
 //   GET  /wraps                                        200 the vault key's wraps (Recovery, password), each with its kid
 //
 //   MANAGING (the owner only; any other identity is 403)
-//   POST /wrap           { kid, kind, wrap }           200 kept (replaces the wrap of that kind for that kid)
+//   POST /wrap           { kid, kind, wrap }           200 kept (replaces the wrap of that kind for that kid), 400 with a `reason` if it does not begin as that wrap does
 //   POST /wrap/delete    { kid, kind }                 200 removed, 404 no such wrap
 //   POST /identity       { name, kind }                200 the identity, 400 a bad name or kind, 409 name taken
 //   GET  /tokens                                       200 the tokens that work (never the token), newest first

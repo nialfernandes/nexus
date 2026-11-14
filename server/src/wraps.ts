@@ -1,7 +1,8 @@
 // The vault key's wraps: the vault key locked under the Recovery Key (the Recovery wrap) and, if the person chose one,
-// under a password (the password wrap). Each is opaque bytes made on a device (docs/FORMAT.md section 7), kept as
-// base64 with the number of the vault key (`kid`) it holds. The server cannot open a wrap: it only keeps them, so a
-// new device that has the Recovery Key or the password can fetch the wrap and unlock the vault key.
+// under a password (the password wrap). Each is bytes made on a device (docs/FORMAT.md section 7), kept as base64 with
+// the number of the vault key (`kid`) it holds. The server cannot open a wrap: it reads only its first two bytes and
+// its length (header.ts), and keeps it, so a new device that has the Recovery Key or the password can fetch the wrap and
+// unlock the vault key.
 //
 // Anyone signed in may read the wraps. Only the owner may write or remove one, so a token handed to an agent cannot
 // replace a wrap.

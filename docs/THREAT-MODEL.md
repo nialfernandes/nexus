@@ -24,8 +24,11 @@ when it matters.
 ## 1. Can the server operator read my notes?
 
 **Today, it depends on the device.** The server in this repository holds only the
-blobs a device sends and never reads a note, but no device encrypts yet, and the
-server cannot tell whether what it is sent is encrypted. The answer below, **No**,
+blobs a device sends and never reads a note, but no device encrypts yet. The
+server turns away a blob that does not begin the way an encrypted note does (the
+format's version, the key number, and at least the smallest length), so a device
+that forgot to encrypt is told so; it looks at nothing past that header, so it
+cannot tell a blob with the right header that is not really encrypted. The answer below, **No**,
 is what you get once every device you use encrypts, and it is not true of anything
 you can run now.
 

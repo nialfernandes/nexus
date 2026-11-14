@@ -8,7 +8,8 @@
 > **Not for real notes yet.** The server in this repository now stores only the
 > blobs a device sends and never reads a note. But no device encrypts yet: the
 > Obsidian plugin has not been updated and does not sync with this server, and the
-> server cannot tell whether what it is sent is encrypted. Until a device that
+> server checks only that a blob begins the way an encrypted one does (a plain-text
+> save is refused), not that it really is encrypted. Until a device that
 > encrypts is released, do not use Nexus for notes you want to keep private.
 
 Nexus is end-to-end encrypted notes and sync that works with any notes app. It
