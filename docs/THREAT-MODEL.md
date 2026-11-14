@@ -22,9 +22,14 @@ when it matters.
 
 ## 1. Can the server operator read my notes?
 
-**No.** Each note is scrambled (encrypted) on your device with a key that stays
-on your devices, before it is sent anywhere. The server stores the scrambled
-result. The key never reaches the server in a form the server can use. Whoever
+**Today, yes.** The server in this repository stores notes as plain text, and
+whoever runs it can read them. The encrypted server is not built yet. The answer
+below, **No**, is what the design gives once the encrypted server lands, and it
+is not true of anything you can run now.
+
+**Once the encrypted server lands: No.** Each note is scrambled (encrypted) on
+your device with a key that stays on your devices, before it is sent anywhere.
+The server stores the scrambled result. The key never reaches the server in a form the server can use. Whoever
 runs your server, whether that is a hosting company, a stranger or you, holds
 scrambled blobs and a few labels, and cannot turn them back into notes.
 
@@ -37,7 +42,8 @@ too, and so can the assistant's company. Section 3.6 explains the limits we put
 around this. If you never approve a cloud assistant, this exception never
 applies to you.
 
-**What the operator does see:**
+**What the operator does see** (with the encrypted server; today it sees the
+notes too):
 
 - That your vault exists, how many notes it has, and how many versions each has.
 - A random id for each note.
@@ -47,7 +53,7 @@ applies to you.
 - That a version is a deletion.
 - Network details such as your IP address, as with any server.
 
-**What the operator does not see:** the text of your notes, their names, the
+**What the operator does not see, once the encrypted server lands:** the text of your notes, their names, the
 folders they are in, links, tags, or anything else inside the text.
 
 **What the operator can still do,** even though it cannot read: it can refuse to
