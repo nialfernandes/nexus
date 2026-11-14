@@ -1,15 +1,16 @@
-// A world for the Nexus Obsidian plugin's tests: a Nexus held in memory (nexus-stand-in.ts), a vault held in memory, and
-// the plugin's sync engine and sign-in wired to both through the same few ports Obsidian will hand them.
+// A world for the Nexus Obsidian plugin's tests: the real Nexus server held in this process (real-nexus.ts), a vault held in
+// memory, and the plugin's sync engine and sign-in wired to both through the same few ports Obsidian will hand them.
 //
 // WHERE THINGS COME FROM
-//   - Nexus is the stand-in. Every request the plugin makes goes through `nexusOver` into it as a real `Request`, and the
-//     answer comes back as a real `Response`, so every answer the plugin reads has the shape a real Nexus sends: a save
-//     answers `{ result, path, version }` and nothing more, a clash answers 409 with `latest` and `incoming`, the changes
-//     feed answers `{ changes, next }`. What the stand-in does and does not do is written at the top of its file.
+//   - Nexus is the server's own code (server/src), over an in-memory SQLite database. Every request the plugin makes goes
+//     through `nexusOver` into it as a real `Request`, and the answer comes back as a real `Response`, so every answer the
+//     plugin reads is the one the server sends: a save answers `{ result, path, version }` and nothing more, a clash answers
+//     409 with `latest` and `incoming`, the changes feed answers `{ changes, next }`. What is the server's and what is not is
+//     written at the top of real-nexus.ts.
 //   - The plugin's token is never planted. It is got the way a device gets one in use: a sign-in is started, the owner's
 //     session approves it, the device polls (`issueToken`).
 //   - Notes another writer made are saved through the routes as the identity `agents` (a token got the same way), so a
-//     version's writer, its number and its place in the feed are the stand-in's own.
+//     version's writer, its number and its place in the feed are the server's own.
 //   - The vault is the one thing standing in for Obsidian: `FakeVault`. It refuses what Obsidian refuses: reading, renaming
 //     or removing a file that is not there, and renaming onto a file that is.
 //
@@ -91,9 +92,9 @@ export function newLog(): Log {
   return log;
 }
 
-// ── Nexus, over the stand-in ─────────────────────────────────────────────────
+// ── Nexus, the real server ───────────────────────────────────────────────────
 
-/** The Nexus the tests of this file talk to: made by `openWorld`, emptied by `emptyNexus`. */
+/** The Nexus the tests of this file talk to: made by `openWorld`, its notes emptied by `emptyNexus`. */
 let open: RealNexus | undefined;
 
 function nexus(): RealNexus {

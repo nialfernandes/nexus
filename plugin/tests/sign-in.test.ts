@@ -3,7 +3,7 @@
 // out, and keeps the token in its own data. The token is never shown. A token Nexus no longer knows (a 401) leaves the
 // plugin signed out, in plain words, with nothing sent after. A plugin that has not been told its address and user name
 // sends nothing and says what is missing. Against the in-memory Nexus: the approval is the owner's own session answering
-// the routes (see world.ts and nexus-stand-in.ts).
+// the routes (see world.ts and real-nexus.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { APPROVE_PATH } from "./real-nexus";
