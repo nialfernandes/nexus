@@ -1,8 +1,9 @@
 // The approval page, read from what the Worker serves: that the link a device is handed opens a page for the owner and
 // for nobody else, that the page's stylesheets take every colour from the page's own token variables, that its script
 // never builds markup from what a device sent, and that the answers a browser check would give the page
-// (__fixtures__/approve-answers.ts) are the answers the real routes give. What the page looks like and does on a
-// screen is not checked here: this package has no browser tests yet.
+// (__fixtures__/approve-answers.ts) are the answers the real routes give. What the page does when the owner taps is
+// run against the real Worker in approval-page-actions.test.ts. What the page looks like on a screen (its layout, its
+// size on a phone, its colours in both looks) is checked nowhere: this package has no browser tests.
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseRules } from "./__fixtures__/css-rules";
