@@ -275,7 +275,9 @@ These are not defended against. They are stated so you do not assume otherwise.
 - **What an assistant company does with text it is given** (3.6).
 - **The web page's delivered code and other plugins on your device** (3.2, 3.5).
 - **Mistakes in our own code or the libraries we use.** That is what testing and
-  an outside audit are for, and neither is finished (section 7).
+  an outside audit are for, and neither is finished (section 7). If you find
+  such a mistake, please report it privately, as [SECURITY.md](../SECURITY.md)
+  describes, and not in a public issue.
 
 ## 5. What the design uses
 

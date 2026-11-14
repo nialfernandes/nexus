@@ -25,6 +25,11 @@ cannot hold a key, and the threat model explains what you give up if you allow o
   the server can and cannot see, and what is out of scope.
 - [docs/FORMAT.md](docs/FORMAT.md): the format of the encrypted data.
 
+## Security
+
+Found a flaw? Please report it privately and do not open a public issue. How to do
+that, and what is and is not in scope, is in [SECURITY.md](SECURITY.md).
+
 ## Licence
 
 Nexus is open source under the MIT licence. See [LICENSE](LICENSE).
