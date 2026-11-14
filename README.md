@@ -5,11 +5,13 @@
 > afford to lose until it has. What it is meant to protect against, and what it is
 > not, is written down in the [threat model](docs/THREAT-MODEL.md).
 >
-> **Not for real notes yet.** The server in this repository now stores only the
-> blobs a device sends and never reads a note. But no device encrypts yet: the
-> Obsidian plugin has not been updated and does not sync with this server, and the
-> server cannot tell whether what it is sent is encrypted. Until a device that
-> encrypts is released, do not use Nexus for notes you want to keep private.
+> **Not for real notes yet.** The server in this repository stores only the blobs
+> a device sends and never reads a note, and the Obsidian plugin now encrypts every
+> note on your device before it sends it. But the screens that make the vault key,
+> show you the Recovery Key and unlock the vault are not built yet, so the plugin
+> has no key and syncs nothing: it says the vault is locked. The server still
+> cannot tell whether what it is sent is encrypted. Until a release with those
+> screens exists, do not use Nexus for notes you want to keep private.
 
 Nexus is end-to-end encrypted notes and sync that works with any notes app. It
 keeps a person's notes in sync across their devices and across the assistants they

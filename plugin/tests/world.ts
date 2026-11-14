@@ -237,6 +237,9 @@ export function bodyOf(answer: Answer, status = 200): any {
   return answer.body;
 }
 
+/** One raw request to the server's API, as `who`: for what the plugin must never call (a route the server no longer has). */
+export const askNexus = (method: string, route: string, who: Who, body?: unknown): Promise<Answer> => nexus().send(method, `${API}/${route}`, who, body);
+
 /** Every row of every table of the server's database, as text: what whoever runs the server could read. */
 export const everythingStored = (): string => nexus().everythingStored();
 

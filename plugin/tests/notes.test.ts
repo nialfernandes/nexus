@@ -2,7 +2,31 @@
 // These are plain functions, so they are called directly.
 
 import { describe, expect, it } from "vitest";
-import { clashCopyName, dayStamp, fingerprint, isClashCopy, isNote, nameOf } from "../src/notes";
+import { clashCopyName, dayStamp, fingerprint, isClashCopy, isNote, isSafeNotePath, nameOf } from "../src/notes";
+
+describe("isSafeNotePath", () => {
+  it("takes a path of plain names that is a note", () => {
+    for (const path of ["Ideas/a.md", "top.md", "Daily/2026-11-15.md", "A folder/Deep/with spaces & ümlauts.md", "日本語/メモ.md"]) {
+      expect(isSafeNotePath(path), path).toBe(true);
+    }
+  });
+
+  it("refuses a path that starts at the root, climbs out of the vault, or has an empty step", () => {
+    for (const path of ["/etc/outside.md", "../outside.md", "Ideas/../../outside.md", "Ideas//double.md", "Ideas/./a.md", "Ideas/"]) {
+      expect(isSafeNotePath(path), path).toBe(false);
+    }
+  });
+
+  it("refuses a backslash and a control character, which some systems read as a folder or end of name", () => {
+    for (const path of ["Ideas\\a.md", "Ideas/a\u0000.md", "Ideas/a\nb.md"]) expect(isSafeNotePath(path), JSON.stringify(path)).toBe(false);
+  });
+
+  it("refuses what is not a note at all: a hidden folder, an attachment, a clash copy", () => {
+    for (const path of [".obsidian/plugins/x/main.js", ".obsidian/snippets/tidy.md", "Ideas/pic.png", "Ideas/a (clash Mac 2026-11-14).md"]) {
+      expect(isSafeNotePath(path), path).toBe(false);
+    }
+  });
+});
 
 describe("isNote", () => {
   it("is a markdown file outside hidden folders", () => {

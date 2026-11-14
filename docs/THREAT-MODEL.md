@@ -5,10 +5,11 @@ version 1: who it defends against, what the server can and cannot see, and what
 it does not try to defend against. No outside security firm has reviewed the
 design or the code. Until one has, treat every statement here as a goal that
 the code is trying to meet, not as something anyone has proved. Do not rely on
-Nexus for anything you cannot afford to lose. The server in this repository now
-stores only the blobs a device sends and never reads a note, but no device
-encrypts yet (the Obsidian plugin has not been updated to), so nothing is
-protected until one does.
+Nexus for anything you cannot afford to lose. The server in this repository
+stores only the blobs a device sends and never reads a note, and the Obsidian
+plugin encrypts every note on the device before it sends it. But the screens that
+make the vault key and unlock the vault are not built yet, so the plugin has no key
+and syncs nothing, and nothing is protected in use until they are.
 
 The exact byte layout of the encrypted data is in [FORMAT.md](FORMAT.md). This
 document says what that format is for.
@@ -24,10 +25,11 @@ when it matters.
 ## 1. Can the server operator read my notes?
 
 **Today, it depends on the device.** The server in this repository holds only the
-blobs a device sends and never reads a note, but no device encrypts yet, and the
-server cannot tell whether what it is sent is encrypted. The answer below, **No**,
-is what you get once every device you use encrypts, and it is not true of anything
-you can run now.
+blobs a device sends and never reads a note. The Obsidian plugin encrypts every
+note before it sends it, but it cannot yet be given a key (the screens for that are
+not built), so it syncs nothing. The server cannot tell whether what it is sent is
+encrypted. The answer below, **No**, is what you get once every device you use
+encrypts, and it is not true of anything you can run in use now.
 
 **With a device that encrypts: No.** Each note is scrambled (encrypted) on
 your device with a key that stays on your devices, before it is sent anywhere.

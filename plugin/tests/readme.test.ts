@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 const PLUGIN = fileURLToPath(new URL('..', import.meta.url));
 const README = readFileSync(path.join(PLUGIN, 'README.md'), 'utf8');
 
-/** The README as one line of words: its line breaks and extra spaces do not matter to what it says. */
-const WORDS = README.replace(/\s+/g, ' ');
+/** The README as one line of words: its line breaks, extra spaces and the `>` that starts each line of a quoted notice do not matter to what it says. */
+const WORDS = README.replace(/^> ?/gm, '').replace(/\s+/g, ' ');
 
 describe('the Nexus plugin README on where things are kept', () => {
   it("says the token and the versions are in Obsidian's per-device local storage, not in the .obsidian folder", () => {
@@ -41,8 +41,29 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(existsSync(path.join(PLUGIN, link!)), `${link} is a file in this repository`).toBe(true);
   });
 
-  it('says plainly that this version does not encrypt yet', () => {
-    expect(WORDS).toMatch(/does not encrypt yet/i);
+  it('says plainly what this version does with notes and what it cannot do yet: it encrypts on the device, but nothing can unlock it', () => {
+    expect(WORDS).toMatch(/encrypts every note on your own device before it is sent/i);
+    expect(WORDS).toMatch(/screens that make the vault key[^.]*are not built yet/i);
+    expect(WORDS).toMatch(/has no key and syncs nothing/i);
+    expect(WORDS).toMatch(/status line says the vault is locked/i);
+    expect(WORDS, 'and no longer says that notes are sent as they are').not.toMatch(/does not encrypt yet|sends the text of each note to your Nexus server as it is/i);
+  });
+
+  it('says that the key is held in memory only, and where the engine asks for it', () => {
+    expect(WORDS).toMatch(/held in memory only while unlocked, and nothing in this plugin writes it to disk/i);
+    expect(WORDS).toMatch(/unlock port \(`src\/unlock\.ts`\)/);
+  });
+
+  it('says that merging and search are done on the device, because Nexus cannot read a note', () => {
+    expect(WORDS).toMatch(/merges the two edits line by line on your device/i);
+    expect(WORDS).toMatch(/Search is done on your device/i);
+    expect(WORDS).toMatch(/Nexus cannot read a note, merge two edits or search/i);
+  });
+
+  it('says to run npm run check, which builds the packages the plugin depends on', () => {
+    expect(WORDS).toMatch(/npm run check/);
+    expect(WORDS).toMatch(/builds the two packages the plugin depends on/i);
+    expect(WORDS).toMatch(/npm run packages/);
   });
 
   it('says there is no default address and no default user, and that nothing is sent until both are set', () => {
