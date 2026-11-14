@@ -95,13 +95,13 @@ describe("a feed of 30 versions of 1 MB each, capped at 4 MB", () => {
     expect(second.next).toBe(cursors[1]);
   });
 
-  it("answers in pages of at most 3 when the blobs are the largest a note may be (1,000,000 bytes, 1,333,336 characters)", async () => {
+  it("answers in pages of 2 when the blobs are the largest a note may be (1,000,000 bytes, 1,333,336 characters: a third would pass the cap by 8)", async () => {
     const { feed } = await world(4_000_000);
     const blobs = await saveNotes(feed, "big", Array(30).fill(MAX_BLOB_BYTES));
     const ids = blobs.map((_, n) => `big-${n}`);
 
     const { pages } = await readPages(feed);
-    expect(pages.map((p) => p.length)).toEqual(Array(10).fill(3));
+    expect(pages.map((p) => p.length)).toEqual(Array(15).fill(2));
     for (const page of pages) expect(sent(page)).toBeLessThanOrEqual(4_000_000);
     expectWhole(pages, ids, blobs);
   });

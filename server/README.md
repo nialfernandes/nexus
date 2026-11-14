@@ -51,7 +51,8 @@ Sign-in tokens, device labels and identity names are kept, since the server need
   with a `reason` beside the words in `error`, and nothing is kept. This stops a device that forgot to encrypt from
   leaving a note in plain text here. It is not proof of encryption: a header followed by random bytes is accepted, since
   the server never opens a blob.
-- A **changes feed** lets a device catch up from a cursor. A history and a list say what the server holds, without blobs.
+- A **changes feed** lets a device catch up from a cursor, a page at a time: a page is cut by its size as well as by its
+  number of versions (see "The changes feed"). A history and a list say what the server holds, without blobs.
 - A delete is a version too, and a save that starts from the delete's version brings the note back.
 - Callers are **identities** (a person, an agent or an app). There are **no folder rights**: the folders are inside the
   encrypted notes, so an identity that is let in can use every note, and one that is not cannot. A caller calls with a
@@ -77,7 +78,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `GET /note?id=I[&version=N]` | any | `200 { id, version, kind, kid, blob, hash, writer, at }` |
 | `GET /history?id=I` | any | `200 { id, versions: [ { version, kind, kid, writer, at, hash } ] }` |
 | `GET /list` | any | `200 { notes: [ { id, version, at, kid, hash } ] }`, the live notes |
-| `GET /changes[?after=C][&limit=N]` | any | `200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`, a delete has no blob |
+| `GET /changes[?after=C][&limit=N]` | any | `200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`, a delete has no blob. A page can hold fewer than `limit` versions: see "The changes feed" |
 | `POST /delete` `{ id, base }` | any | `200 { result: "deleted", id, version }`; `404`; `409 { error, current }` |
 | `GET /wraps` | any | `200 { wraps: [ { kid, kind, wrap, writer, at } ] }` |
 | `POST /wrap` `{ kid, kind, wrap }` | owner | Keeps a wrap, replacing the one of that kind for that `kid`; `400` with a `reason` when the wrap does not begin as that kind of wrap does |
@@ -88,6 +89,17 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 
 A note id is 1 to 128 letters, digits, hyphens or underscores (what url-safe base64, hex and a UUID are written in): a
 path, with its slashes and dots, is refused as an id so it cannot be used as one by mistake.
+
+### The changes feed
+
+`GET /changes` answers the versions after a cursor, oldest first, with `next`, the cursor to ask from again. A page ends
+at `limit` versions (100 when none is asked for, at most 500) **or** just before the version that would take the blobs
+on the page past `NEXUS_CHANGES_PAGE_BYTES` (4,000,000 when it is not set), whichever comes first. A version is never
+cut in two, `next` is the place of the last version on the page so the next page starts at the version after it, and a
+page always holds at least one version, so a single version larger than the cap is sent on its own. What is counted is
+each blob as it is sent, as base64 text (a blob of the largest size a note may be, 1,000,000 bytes, is 1,333,336
+characters); a delete is sent with no blob and counts for none. So a page can be shorter than `limit` without the feed
+being at its end: a device keeps asking from `next` until a page comes back empty (the same cursor comes back).
 
 ## Addresses: `/nexus`, and `/apps/nexus` for one release
 
@@ -123,10 +135,11 @@ device's sign-in. Which identity that is, is a setting. There is no built-in own
 | --- | --- | --- |
 | `NEXUS_OWNER` | The owner's identity name: lower case letters, digits and hyphens, up to 40 characters, such as `owner`. | **None.** Nexus has no owner, so no browser session is let in and no device can be approved. It stays closed. Tokens that already exist still work. |
 | `NEXUS_ADDRESS` | The public address of this Nexus, such as `https://nexus.example.org`. Only the scheme, host and port are kept. | **None.** The link a device is handed is built on the address the request came to. Set this when the server sits behind a proxy that changes the address. |
+| `NEXUS_CHANGES_PAGE_BYTES` | The most blob text one page of the changes feed sends, in bytes: a whole number, 1 or more, such as `4000000`. See "The changes feed" below. | **4,000,000.** |
 | `NEXUS_OWNER_SECRET` | The Cloudflare plug's way of knowing the owner: a long secret, at least 32 characters. See "Signing in as the owner". Make one with `openssl rand -hex 32`. | **None.** No cookie lets anyone in as the owner. |
 
 A setting that is there but cannot be used (an owner name that is not a name, an address that is not a web address,
-a secret shorter than 32 characters) stops every request with a plain 503, and the Worker's log says which
+a page size that is not a whole number of bytes, a secret shorter than 32 characters) stops every request with a plain 503, and the Worker's log says which
 variable is wrong.
 
 ## Run it on Cloudflare
@@ -213,8 +226,8 @@ Cloudflare, write one plug that builds a `NexusHost` and hands each request to `
 - **`signIn`**, a `NexusSignIn`: `identify(request)` answers who is making the request with a browser session, or
   null. It must answer only `{ identity: settings.owner }` or null, and null when there is no owner. How the owner
   proves who they are (a cookie, a header set by a proxy, a client certificate) is the plug's choice.
-- **`settings`**, a `NexusSettings`: the owner and the address, each `null` when not set, read from the host's own
-  configuration.
+- **`settings`**, a `NexusSettings`: the owner and the address, each `null` when not set, and the size of a page of the
+  changes feed, a number of bytes (4,000,000 when the host has no choice), read from the host's own configuration.
 
 Besides the host, the plug must create the tables by applying the files in `migrations/` in name order (split at the
 semicolons: the files hold no semicolon inside a comment or a literal), and may serve the approval page in `public/`

@@ -6,7 +6,8 @@
 //   GET  /note      ?id=I[&version=N]                  200 the note's blob, 404 no such note or version
 //   GET  /history   ?id=I                              200 the versions, oldest first, without blobs
 //   GET  /list      (no parameters)                    200 the live notes: id, latest version, time, kid, hash
-//   GET  /changes   [?after=CURSOR][&limit=N]          200 every version after the cursor, oldest first, and `next`
+//   GET  /changes   [?after=CURSOR][&limit=N]          200 the versions after the cursor, oldest first, and `next`: a page ends at N versions or at the
+//                                                      size cap on its blobs, whichever is first (store.ts `changes`), so it can be short
 //   POST /delete    { id, base }                       200 deleted, 404 no such note, 409 the note is at another version
 //   GET  /wraps                                        200 the vault key's wraps (Recovery, password), each with its kid
 //
