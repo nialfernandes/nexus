@@ -1,20 +1,18 @@
 // Nexus's route table, and the one place a request becomes an answer.
 //
-//   THE STORE (any identity, held to its folder rights)
-//   POST /save      { path, text, base?, resolves? }   200 saved or merged, 409 clash (with both texts)
-//   GET  /note      ?path=P[&version=N]                200 the note, 404 no such note or version
-//   GET  /history   ?path=P                            200 the versions, oldest first
-//   GET  /list      [?folder=F]                        200 the live notes under F, or all of them
-//   GET  /search    ?q=TEXT                            200 the live notes whose latest text holds TEXT
+//   THE STORE (any identity). A note is an encrypted blob under an id the device chose; the server reads none of it.
+//   POST /save      { id, base, kid, blob }            200 saved, 409 the note is at another version (with `current`)
+//   GET  /note      ?id=I[&version=N]                  200 the note's blob, 404 no such note or version
+//   GET  /history   ?id=I                              200 the versions, oldest first, without blobs
+//   GET  /list      (no parameters)                    200 the live notes: id, latest version, time, kid, hash
 //   GET  /changes   [?after=CURSOR][&limit=N]          200 every version after the cursor, oldest first, and `next`
-//   POST /move      { from, to }                       200 moved, 404 no such note, 409 `to` is a live note
-//   POST /delete    { path }                           200 deleted, 404 no such note
-//   A read or write outside the caller's rights is 403 naming the path. List, search and changes show only what
-//   the caller may read.
+//   POST /delete    { id, base }                       200 deleted, 404 no such note, 409 the note is at another version
+//   GET  /wraps                                        200 the vault key's wraps (Recovery, password), each with its kid
 //
 //   MANAGING (the owner only; any other identity is 403)
-//   POST /identity       { name, kind, rights? }       200 the identity, 400 a bad name, kind or rights, 409 name taken
-//   POST /rights         { identity, rights }          200 the new list, 404 no such identity, the owner's cannot be set
+//   POST /wrap           { kid, kind, wrap }           200 kept (replaces the wrap of that kind for that kid)
+//   POST /wrap/delete    { kid, kind }                 200 removed, 404 no such wrap
+//   POST /identity       { name, kind }                200 the identity, 400 a bad name or kind, 409 name taken
 //   GET  /tokens                                       200 the tokens that work (never the token), newest first
 //   POST /token/revoke   { id }                        200 revoked, 404 no such token
 //
@@ -30,29 +28,29 @@
 // not a Bearer one are all 401, before any route runs. Only the two device routes a device itself calls (start and
 // poll) need no credential: a device has none yet.
 //
-// Every route lives under /apps/nexus/api. A note's path rides in the body or the query string, never in the URL
-// path: a URL parser folds `../` away before any route sees it. Every answer is JSON, a refusal is
-// `{ error: "<plain words>" }`, and nothing is cached.
+// Every route lives under /nexus/api, and for one release also under /apps/nexus/api, answered by the same handlers
+// (addresses.ts). A note is named by its id, which rides in the body or the query string. Every answer is JSON, a
+// refusal is `{ error: "<plain words>" }` (a stale save adds `current`), and nothing is cached.
 //
 // Nothing here names a Cloudflare type: the Worker (plugs/cloudflare/worker.ts) hands each request to `runNexus`
-// with a NexusHost built from plugs.
+// with a NexusHost built from plugs. Nothing a note holds reaches here, and no log line written here names one.
 
+import { routeName } from "./addresses";
 import * as devices from "./devices";
 import * as identities from "./identities";
+import { base64Length } from "./bytes";
+import { MAX_BLOB_BYTES } from "./fields";
 import { operations } from "./operations";
 import type { Answered } from "./operations";
 import type { NexusHost } from "./ports";
 import { Refusal } from "./refusal";
-import type { Caller } from "./rights";
-import * as store from "./store";
+import type { Caller } from "./caller";
 
-export const NEXUS_BASE = "/apps/nexus/api";
+/** A request body is turned away unread above this: a blob at its limit, written as base64, and the rest of the JSON. */
+const MAX_BODY_BYTES = base64Length(MAX_BLOB_BYTES) + 4096;
 
-/** A request body is turned away unread above this: a note's text at its limit, written with six-byte escapes, and the rest. */
-const MAX_BODY_BYTES = store.MAX_TEXT_BYTES * 6 + 4096;
-
-/** What a route that needs no sign-in is handed as its caller: no name and no rights. None of them reads it. */
-const NOBODY: Caller = { name: "", rights: [], owner: false };
+/** What a route that needs no sign-in is handed as its caller: no name. None of them reads it. */
+const NOBODY: Caller = { name: "", owner: false };
 
 /** Who may call a route: anyone (the device's own two), any identity, or only the owner. */
 type Who = "anyone" | "identity" | "owner";
@@ -83,23 +81,17 @@ const numberParam = (call: Call, name: string): number | undefined => {
 
 const ROUTES: readonly Route[] = [
   { method: "POST", name: "save", who: "identity", run: async (c) => operations.save(c.host, c.caller, await c.body()) },
-  { method: "GET", name: "note", who: "identity", run: (c) => operations.note(c.host, c.caller, param(c, "path"), numberParam(c, "version")) },
-  { method: "GET", name: "history", who: "identity", run: (c) => operations.history(c.host, c.caller, param(c, "path")) },
-  { method: "GET", name: "list", who: "identity", run: (c) => operations.list(c.host, c.caller, param(c, "folder")) },
-  { method: "GET", name: "search", who: "identity", run: (c) => operations.search(c.host, c.caller, param(c, "q")) },
+  { method: "GET", name: "note", who: "identity", run: (c) => operations.note(c.host, c.caller, param(c, "id"), numberParam(c, "version")) },
+  { method: "GET", name: "history", who: "identity", run: (c) => operations.history(c.host, c.caller, param(c, "id")) },
+  { method: "GET", name: "list", who: "identity", run: (c) => operations.list(c.host, c.caller) },
   { method: "GET", name: "changes", who: "identity", run: (c) => operations.changes(c.host, c.caller, param(c, "after"), param(c, "limit")) },
-  {
-    method: "POST", name: "move", who: "identity",
-    run: async (c) => {
-      const body = await c.body();
-      return operations.move(c.host, c.caller, body.from, body.to);
-    },
-  },
-  { method: "POST", name: "delete", who: "identity", run: async (c) => operations.remove(c.host, c.caller, (await c.body()).path) },
+  { method: "POST", name: "delete", who: "identity", run: async (c) => operations.remove(c.host, c.caller, await c.body()) },
+  { method: "GET", name: "wraps", who: "identity", run: (c) => operations.wraps(c.host) },
 
   // Managing: only the owner.
+  { method: "POST", name: "wrap", who: "owner", run: async (c) => operations.setWrap(c.host, c.caller, await c.body()) },
+  { method: "POST", name: "wrap/delete", who: "owner", run: async (c) => operations.removeWrap(c.host, await c.body()) },
   { method: "POST", name: "identity", who: "owner", run: async (c) => ok(await identities.createIdentity(c.host, await c.body())) },
-  { method: "POST", name: "rights", who: "owner", run: async (c) => ok(await identities.setRights(c.host, await c.body())) },
   { method: "GET", name: "tokens", who: "owner", run: async (c) => ok({ tokens: await identities.listTokens(c.host) }) },
   { method: "POST", name: "token/revoke", who: "owner", run: async (c) => ok(await identities.revokeToken(c.host, (await c.body()).id)) },
 
@@ -117,7 +109,8 @@ const respond = (status: number, json: unknown): Response =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
-const refuse = (status: number, error: string): Response => respond(status, { error });
+const refuse = (status: number, error: string, details: Readonly<Record<string, unknown>> = {}): Response =>
+  respond(status, { error, ...details });
 
 const BEARER = /^Bearer ([\x21-\x7e]+)$/;
 
@@ -136,11 +129,11 @@ async function identify(request: Request, host: NexusHost): Promise<Caller | nul
   return session === null ? null : identities.loadCaller(host, session.identity);
 }
 
-/** Answers one request to /apps/nexus/api/*. Sign-in first (except for the two calls a device makes), then the route; nothing here throws. */
+/** Answers one request to /nexus/api/* (or the old /apps/nexus/api/*). Sign-in first (except for the two calls a device makes), then the route; nothing here throws. */
 export async function runNexus(request: Request, host: NexusHost): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const name = url.pathname.startsWith(`${NEXUS_BASE}/`) ? url.pathname.slice(NEXUS_BASE.length + 1) : "";
+    const name = routeName(url.pathname) ?? "";
     const named = ROUTES.filter((r) => r.name === name);
 
     // A device has no credential yet, so its own two routes are the only ones that skip the sign-in. Anything else,
@@ -179,7 +172,8 @@ export async function runNexus(request: Request, host: NexusHost): Promise<Respo
     const answer = await route.run({ host, caller: caller ?? NOBODY, url, body });
     return respond(answer.status, answer.json);
   } catch (error) {
-    if (error instanceof Refusal) return refuse(error.status, error.message);
+    if (error instanceof Refusal) return refuse(error.status, error.message, error.details);
+    // What is logged is the fault, which holds nothing a caller sent: a request's body, its query and its address are never put in a log line.
     console.error("nexus: a request failed", error);
     return refuse(503, "Nexus could not answer just now.");
   }

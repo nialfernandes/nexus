@@ -16,14 +16,13 @@
 //
 // Status runs: pending, then approved or denied, then collected.
 
+import { APPROVE_PATH } from "./addresses";
 import { identityExists, ownerRow } from "./identities";
 import type { NexusHost } from "./ports";
 import { stmt } from "./ports";
 import { Refusal } from "./refusal";
 
 export const SIGNIN_LIFETIME_MS = 10 * 60 * 1000;
-/** Where the approval page lives: the link a device is handed opens it, on the `address` setting or the address the request came to. */
-export const APPROVE_PATH = "/apps/nexus/approve";
 /** The longest label a device can ask with: it is shown on a phone screen. */
 export const MAX_LABEL = 80;
 /** Sign-ins that may wait at once. Starting one needs no credential, so a flood must not be able to fill the table. */

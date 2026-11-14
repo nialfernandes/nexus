@@ -7,7 +7,7 @@
 //
 // THE SQL CONTRACT. `sql` speaks the common ground of SQLite and Postgres:
 //   - `?` placeholders, in order. (A Postgres plug rewrites them to $1, $2, ...)
-//   - values are text, whole numbers or null. Booleans are 0 and 1 INTEGERs.
+//   - values are text, whole numbers or null. Booleans are 0 and 1 INTEGERs. Encrypted bytes are kept as base64 text.
 //   - no SQLite-only functions or syntax; src/portable.test.ts reads every source and refuses them.
 //   - a `batch` is ONE TRANSACTION: every statement is applied or none is. Every write Nexus makes relies on it.
 //   - rows come back as plain objects keyed by column name, counts as JS numbers.
@@ -41,15 +41,17 @@ export interface Clock {
   now(): number;
 }
 
-/** The things only the machine can give: random bytes, and a hash that is safe to keep in place of a secret. */
+/** The things only the machine can give: random bytes, and SHA-256. */
 export interface Secrets {
   /** `count` random bytes that cannot be guessed (a token, a code, an id). */
   random(count: number): Uint8Array;
   /** SHA-256 of the text, as 64 lowercase hex characters. Tokens are long and random, so a plain hash is enough. */
   hash(text: string): Promise<string>;
+  /** SHA-256 of the bytes, as 64 lowercase hex characters: the fingerprint kept with every encrypted note (hash.ts). */
+  hashBytes(bytes: Uint8Array): Promise<string>;
 }
 
-/** Who a sign-in says is calling. `identity` is the name of an identity (rights.ts holds what it may touch). */
+/** Who a sign-in says is calling. `identity` is the name of an identity (caller.ts says what a caller is). */
 export interface SignedIn {
   identity: string;
 }
@@ -68,8 +70,8 @@ export interface NexusSignIn {
 /**
  * What the person who runs this Nexus has chosen. Each setting is optional, and left out means none.
  *
- *   owner    The name of the identity that holds write on everything, always, and alone may manage identities,
- *            rights and tokens and answer a device's sign-in. None means Nexus has no owner, so no browser session
+ *   owner    The name of the identity that alone may manage identities, tokens and the key wraps and answer a
+ *            device's sign-in. None means Nexus has no owner, so no browser session
  *            is let in and nobody can approve a device: Nexus stays closed until an owner is named.
  *   address  The public address of this Nexus (such as https://nexus.example.org), used to build the link a device
  *            is handed to open the approval page. None means the address the request itself arrived on.

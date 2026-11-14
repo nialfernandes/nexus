@@ -14,4 +14,7 @@ export const workerSecrets: Secrets = {
   async hash(text) {
     return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
   },
+  async hashBytes(bytes) {
+    return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+  },
 };

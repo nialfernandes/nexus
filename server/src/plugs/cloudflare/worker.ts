@@ -1,11 +1,12 @@
-// The Worker: what Cloudflare runs. It sends /apps/nexus/api/* to Nexus, and gives the owner the device approval
-// page; every other address is not Nexus's and is a plain 404.
+// The Worker: what Cloudflare runs. It sends /nexus/api/* (and, for one release, the old /apps/nexus/api/*) to Nexus, and
+// gives the owner the device approval page; every other address is not Nexus's and is a plain 404.
 //
 // Nexus answers an unknown caller 401 itself (a program that calls an API has to be told it is not allowed, and a
 // redirect to a sign-in page would be mistaken for an answer), so there is no gate in front of it. The approval page
 // is for the owner's browser: anyone else is told 401 in plain words, and the page is not sent.
 
-import { NEXUS_BASE, runNexus } from "../../routes";
+import { routeName } from "../../addresses";
+import { runNexus } from "../../routes";
 import { cloudflareHost, type NexusEnv } from "./host";
 import { isNexusAsset, serveNexusAsset } from "./page";
 
@@ -16,7 +17,7 @@ export default {
   async fetch(request: Request, env: NexusEnv): Promise<Response> {
     try {
       const { pathname } = new URL(request.url);
-      if (pathname.startsWith(`${NEXUS_BASE}/`)) return await runNexus(request, cloudflareHost(env));
+      if (routeName(pathname) !== null) return await runNexus(request, cloudflareHost(env));
 
       if (request.method === "GET" && isNexusAsset(pathname)) {
         const owner = await cloudflareHost(env).signIn.identify(request);
