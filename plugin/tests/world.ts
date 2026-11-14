@@ -237,6 +237,9 @@ export function bodyOf(answer: Answer, status = 200): any {
   return answer.body;
 }
 
+/** Every row of every table of the server's database, as text: what whoever runs the server could read. */
+export const everythingStored = (): string => nexus().everythingStored();
+
 /** The routes only the owner may call, as `who`. */
 export const manage = (who: Who) => nexus().manage(who);
 

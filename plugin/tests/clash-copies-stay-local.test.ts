@@ -4,7 +4,7 @@
 // (see world.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { EDIT_PAUSE, bodyOf, emptyNexus, fakeTimers, forbidFetch, makeDevice, nexusTexts, openWorld, quiet, type World } from "./world";
+import { EDIT_PAUSE, emptyNexus, fakeTimers, forbidFetch, known, makeDevice, nexusTexts, openWorld, quiet, sentNote, type World } from "./world";
 
 let world: World;
 
@@ -26,10 +26,10 @@ const COPY = /^Ideas\/a \(clash Test iPhone 2026-11-14[^)]*\)\.md$/;
 
 /** A note that clashed on a send: the vault's edit and another device's edit touch the same line. */
 async function clashedDevice() {
-  bodyOf(await world.agents.save("Ideas/a.md", "zero\n"));
-  bodyOf(await world.agents.save("Ideas/a.md", "one\ntwo\n", { base: 1 }));
-  bodyOf(await world.agents.save("Ideas/a.md", "one\nREMOTE\n", { base: 2 }));
-  const device = await makeDevice(world, { files: { "Ideas/a.md": "one\nLOCAL\n" }, versions: { "Ideas/a.md": 2 }, cursor: "0" });
+  const { id } = await world.elsewhere.create("Ideas/a.md", "zero\n");
+  await world.elsewhere.update(id, "Ideas/a.md", "one\ntwo\n");
+  await world.elsewhere.update(id, "Ideas/a.md", "one\nREMOTE\n");
+  const device = await makeDevice(world, { files: { "Ideas/a.md": "one\nLOCAL\n" }, notes: { "Ideas/a.md": known("Ideas/a.md", "one\ntwo\n", 2, id) }, cursor: "0" });
   await device.engine.push("Ideas/a.md");
   const copies = device.vault.pathsStarting("Ideas/a (clash ");
   expect(copies, "the clash made its one copy").toHaveLength(1);
@@ -37,7 +37,8 @@ async function clashedDevice() {
   return { device, copy: copies[0] };
 }
 
-const sentPaths = (device: Awaited<ReturnType<typeof clashedDevice>>["device"]) => device.log.to("POST save").map((c) => c.body.path);
+const sentPaths = async (device: Awaited<ReturnType<typeof clashedDevice>>["device"]) =>
+  (await Promise.all(device.log.to("POST save").map((c) => sentNote(world, c)))).map((n) => n.path);
 
 describe("a clash copy", () => {
   it("is not sent by a sync, by the vault reporting its creation, or by a restart", async () => {
@@ -49,19 +50,19 @@ describe("a clash copy", () => {
     await vi.advanceTimersByTimeAsync(EDIT_PAUSE * 2);
     vi.useRealTimers();
     await device.engine.push(copy);
-    const restarted = await makeDevice(world, { vault: device.vault, from: device.data() });
+    const restarted = await makeDevice(world, { vault: device.vault, from: device.data(), unlock: device.unlock });
     await restarted.engine.sync();
     await quiet(restarted.log);
 
-    expect(sentPaths(device), "only the note's own send, which clashed").toEqual(["Ideas/a.md"]);
+    expect(await sentPaths(device), "only the note's own send, which was refused").toEqual(["Ideas/a.md"]);
     expect(restarted.log.to("POST save")).toEqual([]);
     expect(Object.keys(await nexusTexts(world))).toEqual(["Ideas/a.md"]);
     expect(device.vault.textOf(copy), "and it is still in the vault, untouched").toBe("one\nLOCAL\n");
-    expect(device.data().versions[copy]).toBeUndefined();
+    expect(device.data().notes[copy]).toBeUndefined();
   });
 
   it("made by a first sync is not sent either", async () => {
-    bodyOf(await world.agents.save("Ideas/a.md", "nexus text\n"));
+    await world.elsewhere.create("Ideas/a.md", "nexus text\n");
     const device = await makeDevice(world, { files: { "Ideas/a.md": "vault text\n" } });
     await device.engine.sync();
     await device.engine.sync();

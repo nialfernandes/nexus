@@ -120,6 +120,14 @@ export class RealNexus {
     return nexus;
   }
 
+  /** The text of every row of every table in the server's database, so a test can look for text that must not be there (the same look the server's own no-plaintext test takes). */
+  everythingStored(): string {
+    const tables = this.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>;
+    return tables
+      .map(({ name }) => `${name}: ${JSON.stringify(this.db.prepare(`SELECT * FROM "${name.replace(/"/g, '""')}"`).all(), (_, value) => (typeof value === "bigint" ? Number(value) : value))}`)
+      .join("\n");
+  }
+
   /** No notes and no versions, so a test starts from a feed that begins at its own first change. Identities and tokens stay. */
   emptyNotes(): void {
     this.db.exec("DELETE FROM nexus_versions");

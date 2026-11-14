@@ -506,7 +506,10 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     try {
       return await pushOne(path);
     } catch (error) {
-      if (error instanceof Disconnected || error instanceof Locked) throw error;
+      if (error instanceof Disconnected || error instanceof Locked) {
+        dirty.add(path); // the note was taken from the waiting set and did not get through: it waits again
+        throw error;
+      }
       const key = notes()[path]?.id ?? path;
       if (error instanceof Unreadable) {
         // The note's latest blob does not open, so there is nothing to merge into: the note here stays as it is.
@@ -601,18 +604,32 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     if (!waiting.includes(id)) waiting.push(id);
   }
 
-  /** A note Nexus holds that this device has no entry for: written here, matched if the same text is already here, kept both if not. */
+  /**
+   * A note Nexus holds that this device has no entry for: written here, matched if the same text is already here, kept both if not.
+   *
+   * Two notes with one path (two devices made a note there before either saw the other's) are two ids in Nexus. The one with the
+   * smaller id keeps the path, on every device alike. The device that holds the other one is the one that acts: its text goes
+   * into a copy beside the note, which is never sent, and it deletes its own note from Nexus. A device that holds the winner leaves
+   * the other note alone, because the device it came from does the same. Nothing is lost on either.
+   */
   async function adoptNew(disk: Disk, id: string, version: number, remote: NoteContent, final: boolean): Promise<void> {
     const target = remote.path;
     const holder = notes()[target];
     if (holder && holder.version > 0 && holder.id !== id) {
-      // Another note this device knows has this path. It may be about to move (an edit of it is waiting to be sent, and Nexus may
-      // have moved it already), so the first time the note waits. If the path is still held after that, the text is kept beside it,
-      // as a copy that is never sent, and nothing is lost.
+      // The holder may be about to move (an edit of it is waiting to be sent, or Nexus has moved it already), so the first time the note waits.
       if (!final) throw new Waiting();
-      const copy = clashCopyName(target, deps.device, deps.now(), (taken) => disk.has(taken));
-      await disk.write(copy, remote.text);
-      deps.notify(`Two notes in Nexus have the path ${nameOf(target)}. The second one's text is in ${nameOf(copy)}. Merge them by hand, then delete the copy.`);
+      if (id > holder.id) return; // this device's note keeps the path
+      const here = disk.has(target) ? await disk.read(target) : undefined;
+      (data.pendingDeletes ??= []).push({ id: holder.id, version: holder.version });
+      if (here === undefined || here === remote.text) {
+        untrack(target);
+        if (here === undefined) await disk.write(target, remote.text);
+        track(target, id, version, remote.text);
+      } else {
+        await keepBoth(disk, target, here, { id, version, ...remote });
+      }
+      await save();
+      await flushDeletes();
       return;
     }
     if (!disk.has(target)) {
