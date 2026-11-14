@@ -98,7 +98,7 @@ on the page past `NEXUS_CHANGES_PAGE_BYTES` (4,000,000 when it is not set), whic
 cut in two, `next` is the place of the last version on the page so the next page starts at the version after it, and a
 page always holds at least one version, so a single version larger than the cap is sent on its own. What is counted is
 each blob as it is sent, as base64 text (a blob of the largest size a note may be, 1,000,000 bytes, is 1,333,336
-characters); a delete is sent with no blob and counts for none. So a page can be shorter than `limit` without the feed
+characters); a delete is sent with no blob and counts for none, and the few hundred bytes of JSON around each blob are not counted. So a page can be shorter than `limit` without the feed
 being at its end: a device keeps asking from `next` until a page comes back empty (the same cursor comes back).
 
 ## Addresses: `/nexus`, and `/apps/nexus` for one release
