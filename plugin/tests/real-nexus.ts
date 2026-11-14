@@ -1,0 +1,190 @@
+// The real Nexus server, for the plugin's tests: the server package's own routes, rules and store (server/src, as they are
+// in this repository), over an in-memory SQLite database (node:sqlite) made from the server's own migrations.
+//
+// WHAT IS THE SERVER'S AND WHAT IS NOT
+//   - The server's own code answers every request: the route table and the sign-in check (server/src/routes.ts), the store,
+//     the merge, the folder rights, the tokens and the device approval behind it, the owner's cookie check and the settings
+//     reader of the Cloudflare plug, and the tables from server/migrations. Nothing of the server is written out again here.
+//   - Two small things are not the server's. `sqlOver` below is the SQL port (server/src/ports.ts `SqlDb`) over node:sqlite,
+//     and the Worker's own front door (server/src/plugs/cloudflare/worker.ts) is left out, because it names Cloudflare types
+//     that the plugin's type check does not have; it only hands a request under the API's base to `runNexus`, which is what
+//     `RealNexus.fetch` does.
+//   - The server's own tests build the same thing from a stand-in for D1 (server/src/__fixtures__/d1-sqlite.ts). That file
+//     cannot be type-checked from the plugin's install, so the SQL port is written here against the same contract: a batch
+//     is one transaction, a row is a plain object, a count is a number.
+//
+// The plugin is pinned to the server as it is in this repository. When the server changes what it holds or answers (the
+// encrypted-blobs change), the plugin's tests have to move along with it, in the slice that moves the plugin.
+//
+// WHO IS CALLING. The owner's session is the cookie the server's sign-in reads (`nexus_owner=<secret>`). `Authorization:
+// Bearer <token>` is the identity the token was made for. The identities are the owner (named by the NEXUS_OWNER setting)
+// and `agents`, who may write everywhere except under `Private/`, made the way an operator makes them: the owner calls
+// POST identity through the real route.
+
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { APPROVE_PATH as SERVER_APPROVE_PATH } from "../../server/src/devices";
+import type { NexusHost, RunResult, SqlDb, SqlStatement, SqlValue } from "../../server/src/ports";
+import { NEXUS_BASE, runNexus } from "../../server/src/routes";
+import { workerSecrets } from "../../server/src/plugs/cloudflare/secrets";
+import { settingsFromEnv } from "../../server/src/plugs/cloudflare/settings";
+import { OWNER_COOKIE, ownerSignIn } from "../../server/src/plugs/cloudflare/signin";
+
+export const OWNER = "owner";
+export const AGENTS = "agents";
+/** Where the server "lives": the address a plugin under test is given is ORIGIN + API. */
+export const ORIGIN = "https://nexus.example.test";
+export const API = NEXUS_BASE;
+/** Where the server's approval page is: the link a device is handed opens it. */
+export const APPROVE_PATH = SERVER_APPROVE_PATH;
+
+const MIGRATIONS = join(import.meta.dirname, "../../server/migrations");
+
+// ── the SQL port over node:sqlite ────────────────────────────────────────────
+
+function sqlOver(db: DatabaseSync): SqlDb {
+  const params = (values: readonly SqlValue[]): SQLInputValue[] => [...values];
+  const runOne = (sql: string, values: readonly SqlValue[]): RunResult => ({ changes: Number(db.prepare(sql).run(...params(values)).changes) });
+  return {
+    async first<T>(sql: string, values: readonly SqlValue[] = []): Promise<T | null> {
+      const row = db.prepare(sql).get(...params(values));
+      return row === undefined ? null : ({ ...row } as T);
+    },
+    async all<T>(sql: string, values: readonly SqlValue[] = []): Promise<T[]> {
+      return db.prepare(sql).all(...params(values)).map((row) => ({ ...row }) as T);
+    },
+    async run(sql: string, values: readonly SqlValue[] = []): Promise<RunResult> {
+      return runOne(sql, values);
+    },
+    // One transaction: every statement is applied or none is.
+    async batch(statements: readonly SqlStatement[]): Promise<RunResult[]> {
+      db.exec("BEGIN");
+      try {
+        const results = statements.map((s) => runOne(s.sql, s.params));
+        db.exec("COMMIT");
+        return results;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  };
+}
+
+// ── the answers a test reads ─────────────────────────────────────────────────
+
+export interface Answer {
+  status: number;
+  /** The parsed JSON, or null when the answer was not JSON. */
+  body: any;
+  text: string;
+}
+
+export type Who = { cookie: string } | { bearer: string } | { authorization: string } | null;
+
+const hex = (count: number): string => randomBytes(count).toString("hex");
+
+function query(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined) q.set(key, String(value));
+  const text = q.toString();
+  return text ? `?${text}` : "";
+}
+
+export class RealNexus {
+  /** The owner's session, as the cookie a browser signed in as the owner would send. */
+  readonly ownerCookie: string;
+
+  private readonly db = new DatabaseSync(":memory:");
+  private readonly host: NexusHost;
+
+  private constructor(secret: string) {
+    this.ownerCookie = `${OWNER_COOKIE}=${secret}`;
+    for (const name of readdirSync(MIGRATIONS).filter((n) => n.endsWith(".sql")).sort()) {
+      this.db.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+    }
+    const env = { NEXUS_OWNER: OWNER, NEXUS_OWNER_SECRET: secret };
+    const settings = settingsFromEnv(env);
+    this.host = { sql: sqlOver(this.db), clock: { now: () => Date.now() }, secrets: workerSecrets, signIn: ownerSignIn(env, settings), settings };
+  }
+
+  /** A server with its tables made and the identity `agents` made the way an operator makes it. */
+  static async open(): Promise<RealNexus> {
+    const nexus = new RealNexus(hex(32));
+    const made = await nexus.send("POST", `${API}/identity`, { cookie: nexus.ownerCookie }, {
+      name: AGENTS, kind: "agent", rights: [{ path: "", access: "write" }, { path: "Private/", access: "none" }],
+    });
+    if (made.status !== 200) throw new Error(`The server would not make the identity ${AGENTS}: ${made.text}`);
+    return nexus;
+  }
+
+  /** No notes and no versions, so a test starts from a feed that begins at its own first change. Identities and tokens stay. */
+  emptyNotes(): void {
+    this.db.exec("DELETE FROM nexus_versions");
+    this.db.exec("DELETE FROM nexus_notes");
+  }
+
+  /** Answers one request to the API: the server's own `runNexus`. */
+  fetch(request: Request): Promise<Response> {
+    return runNexus(request, this.host);
+  }
+
+  // ── the calls a test makes, as a given caller ──────────────────────────────
+
+  /** One request as `who`. */
+  async send(method: string, path: string, who: Who, body?: unknown): Promise<Answer> {
+    const headers: Record<string, string> = {};
+    if (who && "cookie" in who) headers.cookie = who.cookie;
+    if (who && "bearer" in who) headers.authorization = `Bearer ${who.bearer}`;
+    if (who && "authorization" in who) headers.authorization = who.authorization;
+    if (body !== undefined) headers["content-type"] = "application/json";
+    const res = await this.fetch(
+      new Request(`${ORIGIN}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" }),
+    );
+    const text = await res.text();
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      /* not JSON */
+    }
+    return { status: res.status, body: parsed, text };
+  }
+
+  /** The store's routes, called as `who`. */
+  vault(who: Who) {
+    const get = (route: string, params: Record<string, string | number | undefined>) => this.send("GET", `${API}/${route}${query(params)}`, who);
+    const post = (route: string, body: unknown) => this.send("POST", `${API}/${route}`, who, body);
+    return {
+      save: (path: string, text: string, options: { base?: number; resolves?: number } = {}) => post("save", { path, text, ...options }),
+      note: (path: string, version?: number) => get("note", { path, version }),
+      history: (path: string) => get("history", { path }),
+      list: (folder?: string) => get("list", { folder }),
+      changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
+      move: (from: string, to: string) => post("move", { from, to }),
+      remove: (path: string) => post("delete", { path }),
+    };
+  }
+
+  /** The routes only the owner may call. */
+  manage(who: Who) {
+    return {
+      tokens: () => this.send("GET", `${API}/tokens`, who),
+      revoke: (id: string) => this.send("POST", `${API}/token/revoke`, who, { id }),
+    };
+  }
+
+  /** The device's calls, and the owner's answers to them. `who` is whoever makes the call. */
+  device(who: Who = null) {
+    const post = (route: string, body: unknown) => this.send("POST", `${API}/device/${route}`, who, body);
+    return {
+      start: (identity: string, label: string) => post("start", { identity, label }),
+      pending: (code: string) => this.send("GET", `${API}/device/pending${query({ code })}`, who),
+      approve: (code: string) => post("approve", { code }),
+      deny: (code: string) => post("deny", { code }),
+      poll: (secret: string) => post("poll", { secret }),
+    };
+  }
+}
