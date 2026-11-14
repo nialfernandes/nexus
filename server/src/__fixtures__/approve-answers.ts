@@ -12,10 +12,10 @@
 export const CODE = 'K7QM-4XNP';
 
 /** Where the page is opened, and the three calls it makes of Nexus. */
-export const PAGE_PATH = '/apps/nexus/approve';
-export const API_PENDING = '/apps/nexus/api/device/pending';
-export const API_APPROVE = '/apps/nexus/api/device/approve';
-export const API_DENY = '/apps/nexus/api/device/deny';
+export const PAGE_PATH = '/nexus/approve';
+export const API_PENDING = '/nexus/api/device/pending';
+export const API_APPROVE = '/nexus/api/device/approve';
+export const API_DENY = '/nexus/api/device/deny';
 
 /** What GET device/pending answers for a sign-in that is waiting for the owner. */
 export const PENDING = { code: CODE, identity: 'agents', label: 'lab-m', expiresAt: 1790000600000 };

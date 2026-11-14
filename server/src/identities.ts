@@ -1,16 +1,18 @@
-// Identities, their folder rights and their tokens.
+// Identities and their tokens.
 //
-// An identity is a name, a kind and a list of rights (rights.ts says what the list means). They live in Nexus's own
-// database, so the rights are read again on every request: a change is held to from the very next call.
+// An identity is a name and a kind (person, agent or app). It has no folder rights: the folders are inside the
+// encrypted notes, which the server cannot read, so an identity can use every note or none (caller.ts). The owner is
+// the one identity that manages the others.
 //
 // A token is a long random string. Only its SHA-256 hash is kept, so the database holds nothing that can be used
 // as a token. It belongs to one identity, has a label, and is turned away the moment it is revoked. Tokens are made
 // by device approval (devices.ts), the only way one is got.
 
-import type { NexusHost, SqlDb, SqlStatement } from "./ports";
+import { onlyFields } from "./fields";
+import type { NexusHost, SqlStatement } from "./ports";
 import { stmt } from "./ports";
 import { Refusal } from "./refusal";
-import { ownerCaller, parseRights, type Caller, type FolderRight } from "./rights";
+import { ownerCaller, type Caller } from "./caller";
 
 export const KINDS = ["person", "agent", "app"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -19,19 +21,10 @@ export type Kind = (typeof KINDS)[number];
 export const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 interface IdentityRow { name: string; kind: Kind }
-interface RightRow { path: string; access: FolderRight["access"] }
 
-async function rightsOf(sql: SqlDb, name: string): Promise<FolderRight[]> {
-  return sql.all<RightRow>("SELECT path, access FROM nexus_rights WHERE identity = ? ORDER BY slot", [name]);
-}
-
-/**
- * The caller for an identity, with the rights it holds right now. The owner (the `owner` setting) is always write
- * on everything. A name that is no identity holds no rights, so everything it asks for is refused.
- */
-export async function loadCaller(host: NexusHost, name: string): Promise<Caller> {
-  if (name === host.settings.owner) return ownerCaller(name);
-  return { name, rights: await rightsOf(host.sql, name), owner: false };
+/** The caller for an identity: the owner (the `owner` setting) if it is that name, otherwise one who may use the notes and nothing more. */
+export function loadCaller(host: NexusHost, name: string): Caller {
+  return name === host.settings.owner ? ownerCaller(name) : { name, owner: false };
 }
 
 /** Whether a name is an identity: the owner always is, whether or not its row has been made yet, and any other is a row. */
@@ -52,9 +45,14 @@ export function ownerRow(host: NexusHost, name: string): SqlStatement[] {
 
 // ── managing (only the owner calls these) ────────────────────────────────────
 
-export interface IdentityAnswer { name: string; kind: Kind; rights: FolderRight[] }
+export interface IdentityAnswer { name: string; kind: Kind }
+
+/** Said to anyone who still sends folder rights: they are gone, and a silent drop would leave an identity wider than meant. */
+const RIGHTS_GONE = "Folder rights are gone: a note's folder is inside the encrypted note, which Nexus cannot read, so an identity can use every note or none.";
 
 export async function createIdentity(host: NexusHost, input: Record<string, unknown>): Promise<IdentityAnswer> {
+  if ("rights" in input) throw new Refusal(400, RIGHTS_GONE);
+  onlyFields(input, ["name", "kind"], "An identity");
   const { name, kind } = input;
   if (typeof name !== "string" || !NAME.test(name)) {
     throw new Refusal(400, "An identity's name is lower case letters, digits and hyphens, such as lab-m or scribe.");
@@ -62,38 +60,17 @@ export async function createIdentity(host: NexusHost, input: Record<string, unkn
   if (typeof kind !== "string" || !(KINDS as readonly string[]).includes(kind)) {
     throw new Refusal(400, "An identity's kind has to be person, agent or app.");
   }
-  const rights = input.rights === undefined ? [] : parseRights(input.rights);
   const taken = new Refusal(409, `There is already an identity called ${name}.`);
   if (await identityExists(host, name)) throw taken;
 
   try {
-    await host.sql.batch([
-      stmt("INSERT INTO nexus_identities (name, kind, created_at) VALUES (?, ?, ?)", name, kind, host.clock.now()),
-      ...rights.map((r, slot) =>
-        stmt("INSERT INTO nexus_rights (identity, slot, path, access) VALUES (?, ?, ?, ?)", name, slot, r.path, r.access)),
-    ]);
+    await host.sql.run("INSERT INTO nexus_identities (name, kind, created_at) VALUES (?, ?, ?)", [name, kind, host.clock.now()]);
   } catch (error) {
     // Someone made the same name between the check and the write: the primary key refused it.
     if (await identityExists(host, name)) throw taken;
     throw error;
   }
-  return { name, kind: kind as Kind, rights };
-}
-
-/** Replaces an identity's whole list of rights. The owner is never narrowed, so its rights cannot be set at all. */
-export async function setRights(host: NexusHost, input: Record<string, unknown>): Promise<{ identity: string; rights: FolderRight[] }> {
-  const { identity } = input;
-  if (typeof identity !== "string" || identity === "") throw new Refusal(400, "Setting rights needs the name of an identity.");
-  const rights = parseRights(input.rights);
-  if (identity === host.settings.owner) throw new Refusal(400, "The owner holds write on everything, always, and that cannot be changed.");
-  if (!(await identityExists(host, identity))) throw new Refusal(404, `There is no identity called ${identity}.`);
-
-  await host.sql.batch([
-    stmt("DELETE FROM nexus_rights WHERE identity = ?", identity),
-    ...rights.map((r, slot) =>
-      stmt("INSERT INTO nexus_rights (identity, slot, path, access) VALUES (?, ?, ?, ?)", identity, slot, r.path, r.access)),
-  ]);
-  return { identity, rights };
+  return { name, kind: kind as Kind };
 }
 
 // ── tokens ───────────────────────────────────────────────────────────────────

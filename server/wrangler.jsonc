@@ -3,12 +3,15 @@
   "name": "nexus",
   "compatibility_date": "2026-06-01",
   "main": "src/plugs/cloudflare/worker.ts",
-  // The device approval page: the four files in public/nexus, served by the Worker to the owner only (page.ts).
+  // The device approval page: the four files in public/nexus, served by the Worker to the owner only (page.ts). They sit
+  // at the same address the page is served at, so `run_worker_first` makes the Worker see every /nexus/* request before
+  // the asset server can hand a file to anyone.
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": ["/nexus/*"]
   },
-  // Nexus's own database: the notes and every version of them. Create it once with
+  // Nexus's own database: every version of every note, as the encrypted blobs the devices made, and the key wraps. Create it once with
   //   npx wrangler d1 create nexus
   // and put the id that command prints in `database_id` below. Migrations live in `migrations/`, and
   //   npx wrangler d1 migrations apply nexus --remote

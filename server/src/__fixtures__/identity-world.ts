@@ -12,27 +12,21 @@
 //   - The answers' shapes are written here by hand (no recorded answer exists before the code does); they are
 //     the contract, in the same way nexus-world.ts's header is the contract of the store routes.
 //
-// THE WIRE CONTRACT OF IDENTITIES (all routes are under /apps/nexus/api, JSON in and out, a refusal is
+// THE WIRE CONTRACT OF IDENTITIES (all routes are under /nexus/api, JSON in and out, a refusal is
 // `{ error: "<plain words>" }`; the store routes of nexus-world.ts keep their shapes)
 //
 //   WHO IS CALLING. The owner's own session cookie is the identity `owner`. A header `Authorization: Bearer <token>` is
 //   the identity the token was made for. No credential, a token that is not known, and a revoked token are all 401,
 //   before any route runs. A signed-in person who is not the owner and sends no token is 401 too.
 //
-//   FOLDER RIGHTS. An identity has a list of `{ path, access }`. `path` is a folder prefix as the notes' own paths
-//   are written, with its closing slash ("Podcasts/Transcripts/"); "" is the whole vault. `access` is "read",
-//   "write" (which includes read) or "none". For a note, the entry with the longest `path` that the note's path
-//   starts with decides; a note no entry reaches is not allowed at all. "none" exists so that "everything except
-//   Private/" can be written as { "" write } and { "Private/" none }.
-//   A save, a delete and a move need write on the path (a move needs write on both ends). A note read and a
-//   history read need read. Each answers 403 with an error that names the path, whether or not a note is there.
-//   `list`, `search` and `changes` answer 200 and leave out what the identity may not read; the changes cursor
-//   still moves past what was left out. `owner` has write on every path, always.
+//   NO FOLDER RIGHTS. The folders are inside the encrypted notes, which the server cannot read, so an identity that is
+//   let in can save, read and delete every note, and an identity that is not let in cannot. What differs is managing:
+//   only the owner calls the routes below, and any other identity is 403 on them.
 //
 //   DEVICE APPROVAL (a device asks, the owner allows it, the device is handed a token)
 //   POST device/start   { identity, label }       no credential needed
 //       200 { code, link, secret, expiresAt }     `code` is short (4 to 16 characters), `link` is
-//                                                 `<origin>/apps/nexus/approve?code=<code>`, `secret` is long and
+//                                                 `<origin>/nexus/approve?code=<code>`, `secret` is long and
 //                                                 only the device knows it, `expiresAt` is unix ms, 10 minutes on
 //       404 no such identity    400 a label that is missing or blank
 //   GET  device/pending ?code=C                   the owner only
@@ -48,15 +42,15 @@
 //       403 denied   404 no such secret   410 expired, or the token was already handed over
 //
 //   MANAGING (only the identity `owner`: the owner's session, or a token made for `owner`; any other identity is 403)
-//   POST identity    { name, kind, rights? }   200 { name, kind, rights }   kind is "person", "agent" or "app"
-//                                              400 a bad kind or name, 409 the name is taken
-//   POST rights      { identity, rights }      200 { identity, rights }     replaces the whole list; 404 no such identity
-//                                              `owner` cannot be narrowed or emptied: refused, 4xx, nothing changes
+//   POST identity    { name, kind }            200 { name, kind }           kind is "person", "agent" or "app"
+//                                              400 a bad kind or name, or `rights` (folder rights are gone), 409 the name is taken
 //   GET  tokens                                200 { tokens: [ { id, identity, label, createdAt, lastUsedAt } ] }
 //                                              `id` is text that means nothing by itself
 //                                              `lastUsedAt` is null until the token has been used, then unix ms.
 //                                              A token itself, and anything made from it, is never in an answer.
 //   POST token/revoke { id }                   200 { result: "revoked", id }, 404 no such token
+//   POST wrap        { kid, kind, wrap }       200 { result: "saved", kid, kind }   kind is "recovery" or "password"
+//   POST wrap/delete { kid, kind }             200 { result: "removed", kid, kind }, 404 no such wrap
 //
 //   THE IN-WORKER ENTRY. An app inside the same Worker does not use a token. The Cloudflare plug exports
 //   `nexusAsApp(env, identity)`; see app-identity.test.ts for what it gives back.
@@ -64,7 +58,7 @@
 import { expect } from "vitest";
 import type { NexusEnv } from "../plugs/cloudflare/host";
 import worker from "../plugs/cloudflare/worker";
-import { API, ORIGIN, appEnv, bodyOf, nexusDb, type Answer } from "./nexus-world";
+import { API, ORIGIN, appEnv, bodyOf, nexusDb, type Answer, type Sent } from "./nexus-world";
 
 /** The Worker's own bindings, as the tests run it: what an app inside the Worker is handed. */
 export const workerEnv = (): NexusEnv => appEnv();
@@ -75,8 +69,6 @@ export const workerEnv = (): NexusEnv => appEnv();
  * file does not fail whole before any test has run.
  */
 export type Who = { cookie: string } | { bearer: string } | { authorization: string } | { lazy: () => Promise<Who> } | null;
-
-export interface FolderRight { path: string; access: "read" | "write" | "none" }
 
 /** One request through the Nexus Worker, as `who`. */
 export async function sendAs(
@@ -113,15 +105,13 @@ export function vaultAs(who: Who, env?: NexusEnv) {
     sendAs("GET", `${API}/${route}${query(params)}`, who, undefined, env);
   const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body, env);
   return {
-    save: (path: string, text: string, options: { base?: number; resolves?: number } = {}) =>
-      post("save", { path, text, ...options }),
-    note: (path: string, version?: number) => get("note", { path, version }),
-    history: (path: string) => get("history", { path }),
-    list: (folder?: string) => get("list", { folder }),
-    search: (q: string) => get("search", { q }),
+    save: (note: Sent, base: number, kid = 1) => post("save", { id: note.id, base, kid, blob: note.blob }),
+    note: (id: string, version?: number) => get("note", { id, version }),
+    history: (id: string) => get("history", { id }),
+    list: () => get("list", {}),
     changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
-    move: (from: string, to: string) => post("move", { from, to }),
-    remove: (path: string) => post("delete", { path }),
+    remove: (id: string, base: number) => post("delete", { id, base }),
+    wraps: () => get("wraps", {}),
   };
 }
 
@@ -129,11 +119,11 @@ export function vaultAs(who: Who, env?: NexusEnv) {
 export function manage(who: Who, env?: NexusEnv) {
   const post = (route: string, body: unknown) => sendAs("POST", `${API}/${route}`, who, body, env);
   return {
-    createIdentity: (name: string, kind: string, rights?: FolderRight[]) =>
-      post("identity", { name, kind, ...(rights ? { rights } : {}) }),
-    setRights: (identity: string, rights: FolderRight[]) => post("rights", { identity, rights }),
+    createIdentity: (name: string, kind: string) => post("identity", { name, kind }),
     tokens: () => sendAs("GET", `${API}/tokens`, who, undefined, env),
     revoke: (id: string) => post("token/revoke", { id }),
+    setWrap: (kid: number, kind: string, wrap: string) => post("wrap", { kid, kind, wrap }),
+    removeWrap: (kid: number, kind: string) => post("wrap/delete", { kid, kind }),
   };
 }
 
@@ -183,15 +173,12 @@ export async function everythingStored(): Promise<string> {
   return parts.join("\n");
 }
 
-/** The paths of the notes in a list answer, in the order given. */
-export const listedPaths = (answer: Answer): string[] => bodyOf(answer).notes.map((n: { path: string }) => n.path);
+/** The ids of the notes in a list answer, in the order given. */
+export const listedIds = (answer: Answer): string[] => bodyOf(answer).notes.map((n: { id: string }) => n.id);
 
-/**
- * Every change a feed holds for `who`, read `size` at a time by following the cursor until it stops moving. A page
- * that holds nothing the caller may read can still move the cursor, so the loop ends on the cursor, not on a page.
- */
-export async function readWholeFeed(who: Who, size: number): Promise<Array<{ path: string; version: number; writer: string; from?: string }>> {
-  const all: Array<{ path: string; version: number; writer: string; from?: string }> = [];
+/** Every change a feed holds for `who`, read `size` at a time by following the cursor until it stops moving. */
+export async function readWholeFeed(who: Who, size: number): Promise<Array<{ id: string; version: number; writer: string; kind: string }>> {
+  const all: Array<{ id: string; version: number; writer: string; kind: string }> = [];
   let after: string | undefined;
   for (let guard = 0; guard < 200; guard++) {
     const page = bodyOf(await vaultAs(who).changes(after, size));

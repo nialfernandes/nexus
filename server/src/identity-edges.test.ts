@@ -1,17 +1,17 @@
 // The edges of identities that the main tests leave alone: who wins when two requests race, which credential counts
-// when a request carries two, what the history and the changes feed hide about a move, the limits on a sign-in a
-// device starts with no credential, what a list of rights may hold, and which files the approval page's route will
-// serve. Through the Nexus Worker (see __fixtures__/identity-world.ts for how a token is got).
+// when a request carries two, the limits on a sign-in a device starts with no credential, what an identity's name may
+// be, and which files the approval page's route will serve. Through the Nexus Worker (see
+// __fixtures__/identity-world.ts for how a token is got).
 
 import { beforeAll, describe, expect, it } from "vitest";
 import worker from "./plugs/cloudflare/worker";
+import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { ORIGIN, appEnv, bodyOf, expectRefusal, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
-import { device, issueToken, manage, readWholeFeed, sendAs, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { device, issueToken, manage, sendAs, vaultAs, type Who } from "./__fixtures__/identity-world";
 import { MAX_LABEL, MAX_WAITING } from "./devices";
 
 let ownerCookie: string;
 let owner: Who;
-let agents: Who;
 
 /** A GET through the Nexus Worker with exactly these headers, so a request can carry a cookie and a token together. */
 const rawGet = async (path: string, headers: Record<string, string>): Promise<Response> =>
@@ -21,7 +21,6 @@ beforeAll(async () => {
   await setUpNexus();
   ownerCookie = (await signInOwner()).cookie;
   owner = { cookie: ownerCookie };
-  agents = tokenFor(() => ownerCookie, "agents", "edge-test agents");
 });
 
 describe("two requests at once", () => {
@@ -48,20 +47,28 @@ describe("two requests at once", () => {
 });
 
 describe("a request that carries two credentials", () => {
-  const PRIVATE_NOTE = "/apps/nexus/api/note?path=Private%2Fedge-both.md";
+  /** A save through the Worker with exactly these headers, so a request can carry a cookie and a token together. */
+  const saveWith = async (headers: Record<string, string>, id: string): Promise<Response> =>
+    worker.fetch(new Request(`${ORIGIN}/nexus/api/save`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ id, base: 0, kid: 1, blob: GARDEN_V1.blob }),
+      redirect: "manual",
+    }), appEnv());
 
   it("is the identity of the token, not of the cookie beside it", async () => {
-    bodyOf(await vaultAs(owner).save("Private/edge-both.md", "private\n"));
     const { token } = await issueToken(ownerCookie, "agents", "edge-both");
 
-    expect((await rawGet(PRIVATE_NOTE, { cookie: ownerCookie })).status, "the cookie alone is owner").toBe(200);
-    const withToken = await rawGet(PRIVATE_NOTE, { cookie: ownerCookie, authorization: `Bearer ${token}` });
-    expect(withToken.status, "the owner's cookie beside the agents' token is held to the agents' rights").toBe(403);
+    expect((await saveWith({ cookie: ownerCookie }, "edge-cookie")).status, "the cookie alone").toBe(200);
+    expect(bodyOf(await vaultAs(owner).note("edge-cookie")).writer, "the cookie alone is owner").toBe("owner");
+    expect((await saveWith({ cookie: ownerCookie, authorization: `Bearer ${token}` }, "edge-both")).status).toBe(200);
+    expect(bodyOf(await vaultAs(owner).note("edge-both")).writer, "the owner's cookie beside the agents' token is the agents").toBe("agents");
   });
 
   it("is turned away when the token is no good, with no falling back to the cookie", async () => {
-    const answer = await rawGet(PRIVATE_NOTE, { cookie: ownerCookie, authorization: "Bearer not-a-token-0123456789abcdef0123456789abcdef" });
+    const answer = await saveWith({ cookie: ownerCookie, authorization: "Bearer not-a-token-0123456789abcdef0123456789abcdef" }, "edge-bad-token");
     expect(answer.status).toBe(401);
+    expectRefusal(await vaultAs(owner).note("edge-bad-token"), 404, "the note the turned-away save tried to make");
   });
 });
 
@@ -72,36 +79,19 @@ describe("a body that is not declared as JSON", () => {
   it("cannot allow a sign-in, even with the owner's cookie, so a page on another site cannot do it for the owner", async () => {
     const sign = bodyOf(await device().start("agents", "edge-cross-site"));
     for (const type of ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data"]) {
-      const answer = await post("/apps/nexus/api/device/approve", { cookie: ownerCookie, "content-type": type }, { code: sign.code });
+      const answer = await post("/nexus/api/device/approve", { cookie: ownerCookie, "content-type": type }, { code: sign.code });
       expect(answer.status, type).toBe(400);
     }
-    const noType = await post("/apps/nexus/api/device/approve", { cookie: ownerCookie }, { code: sign.code });
+    const noType = await post("/nexus/api/device/approve", { cookie: ownerCookie }, { code: sign.code });
     expect(noType.status, "no content type at all").toBe(400);
     expect(bodyOf(await device().poll(sign.secret)), "nothing was allowed").toMatchObject({ status: "pending" });
     expect(bodyOf(await device(owner).approve(sign.code)).result, "sent as JSON it works").toBe("approved");
   });
 
   it("is refused by the store's routes too, and keeps nothing", async () => {
-    const answer = await post("/apps/nexus/api/save", { cookie: ownerCookie, "content-type": "text/plain" }, { path: "Edge/cross-site.md", text: "x\n" });
+    const answer = await post("/nexus/api/save", { cookie: ownerCookie, "content-type": "text/plain" }, { id: "edge-cross-site", base: 0, kid: 1, blob: GARDEN_V1.blob });
     expect(answer.status).toBe(400);
-    expectRefusal(await vaultAs(owner).note("Edge/cross-site.md"), 404, "the note the refused save tried to make");
-  });
-});
-
-describe("what the history and the feed hide about a move", () => {
-  it("shows an agent a note moved out of Private/ without saying where it came from", async () => {
-    bodyOf(await vaultAs(owner).save("Private/edge-moved.md", "moving out\n"));
-    bodyOf(await vaultAs(owner).move("Private/edge-moved.md", "Ideas/edge-moved.md"));
-
-    const history = bodyOf(await vaultAs(agents).history("Ideas/edge-moved.md")).versions;
-    expect(history.map((v: { kind: string }) => v.kind)).toEqual(["save", "move"]);
-    expect(JSON.stringify(history), "the old name in the history").not.toContain("Private/edge-moved.md");
-    expect(JSON.stringify(bodyOf(await vaultAs(owner).history("Ideas/edge-moved.md")).versions), "owner still sees it").toContain("Private/edge-moved.md");
-
-    const feed = await readWholeFeed(agents, 50);
-    const move = feed.find((c) => c.path === "Ideas/edge-moved.md");
-    expect(move, "the move is in the agents' feed").toBeTruthy();
-    expect(JSON.stringify(feed), "the old name in the agents' feed").not.toContain("Private/edge-moved.md");
+    expectRefusal(await vaultAs(owner).note("edge-cross-site"), 404, "the note the refused save tried to make");
   });
 });
 
@@ -118,22 +108,8 @@ describe("a sign-in a device starts with no credential", () => {
   });
 });
 
-describe("a list of rights", () => {
-  it("is refused when a folder has no closing slash, climbs out of the vault, or is named twice", async () => {
-    for (const [rights, what] of [
-      [[{ path: "Ideas", access: "write" }], "a folder with no closing slash"],
-      [[{ path: "../Ideas/", access: "write" }], "a folder that climbs out of the vault"],
-      [[{ path: "/Ideas/", access: "write" }], "an absolute folder"],
-      [[{ path: "Ideas/", access: "write" }, { path: "Ideas/", access: "read" }], "a folder named twice"],
-      [[{ path: 7, access: "write" }], "a path that is not text"],
-      [{ path: "Ideas/", access: "write" }, "rights that are not a list"],
-    ] as const) {
-      expectRefusal(await manage(owner).createIdentity("edge-rights", "agent", rights as never), 400, what);
-    }
-    expect(bodyOf(await manage(owner).createIdentity("edge-rights", "agent", [{ path: "Ideas/", access: "write" }])).name, "none of the refused ones made it").toBe("edge-rights");
-  });
-
-  it("is only ever made for a name of lower case letters, digits and hyphens", async () => {
+describe("an identity's name", () => {
+  it("is only ever made of lower case letters, digits and hyphens", async () => {
     for (const name of ["Upper", "has space", "-leading", "a/b", "x".repeat(41)]) {
       expectRefusal(await manage(owner).createIdentity(name, "agent"), 400, `the name ${name}`);
     }
@@ -162,33 +138,33 @@ describe("the tokens list and revoking", () => {
 
 describe("routes that are not there, and the two a device calls", () => {
   it("tells nobody what routes exist: an unknown route is 401 with no credential and 404 for the owner", async () => {
-    expect((await sendAs("GET", "/apps/nexus/api/no-such-route", null)).status).toBe(401);
-    expect((await sendAs("GET", "/apps/nexus/api/no-such-route", owner)).status).toBe(404);
+    expect((await sendAs("GET", "/nexus/api/no-such-route", null)).status).toBe(401);
+    expect((await sendAs("GET", "/nexus/api/no-such-route", owner)).status).toBe(404);
   });
 
   it("answers a device route with the wrong method 405, with or without a credential", async () => {
-    expect((await sendAs("GET", "/apps/nexus/api/device/start", null)).status).toBe(405);
-    expect((await sendAs("GET", "/apps/nexus/api/device/poll", owner)).status).toBe(405);
+    expect((await sendAs("GET", "/nexus/api/device/start", null)).status).toBe(405);
+    expect((await sendAs("GET", "/nexus/api/device/poll", owner)).status).toBe(405);
   });
 
   it("does not let the two open device routes reach anything else: pending and approve still need the owner", async () => {
-    expect((await sendAs("GET", "/apps/nexus/api/device/pending?code=ABCD-EFGH", null)).status).toBe(401);
-    expect((await sendAs("POST", "/apps/nexus/api/device/approve", null, { code: "ABCD-EFGH" })).status).toBe(401);
+    expect((await sendAs("GET", "/nexus/api/device/pending?code=ABCD-EFGH", null)).status).toBe(401);
+    expect((await sendAs("POST", "/nexus/api/device/approve", null, { code: "ABCD-EFGH" })).status).toBe(401);
   });
 });
 
 describe("the approval page's route", () => {
-  it("serves the page and the three files it is made of to the owner, and nothing else under /apps/nexus", async () => {
-    for (const path of ["/apps/nexus/approve", "/apps/nexus/approve.css", "/apps/nexus/approve.js", "/apps/nexus/theme-boot.js"]) {
+  it("serves the page and the three files it is made of to the owner, and nothing else under /nexus", async () => {
+    for (const path of ["/nexus/approve", "/nexus/approve.css", "/nexus/approve.js", "/nexus/theme-boot.js"]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(200);
     }
-    for (const path of ["/apps/nexus/approve.html", "/apps/nexus/", "/apps/nexus/other.js", "/apps/nexus/approve/index.html"]) {
+    for (const path of ["/nexus/approve.html", "/nexus/", "/nexus/other.js", "/nexus/approve/index.html"]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(404);
     }
   });
 
   it("is not kept by the browser, because it is for one person at one moment", async () => {
-    const res = await rawGet("/apps/nexus/approve?code=ABCD-EFGH", { cookie: ownerCookie });
+    const res = await rawGet("/nexus/approve?code=ABCD-EFGH", { cookie: ownerCookie });
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
   });

@@ -1,9 +1,9 @@
 // Nexus for an app inside the same Worker. An app calls `nexusAsApp(env, "scribe")` with the Worker's own bindings and
-// gets the store's calls under that identity's name: no token, and the same folder rights as a token holder
+// gets the store's calls under that identity's name: no token, and the same calls as a token holder
 // (app-store.ts says what each call gives back and how it is refused).
 //
 //   const nexus = nexusAsApp(env, "scribe");
-//   await nexus.save("Podcasts/Transcripts/Ep 1.md", text);
+//   await nexus.save({ id, base: 0, kid, blob });
 
 import { appStore, type AppStore } from "../../app-store";
 import { hostFromEnv } from "./host";

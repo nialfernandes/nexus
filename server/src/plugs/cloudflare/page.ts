@@ -1,18 +1,22 @@
 // Serves the device approval page: a plain static page (public/nexus) that the Worker hands out to the owner. Only
-// the four files the page is made of are served, each at its own address under /apps/nexus, so no other file in the
-// assets (and no folder) can be asked for by name. The page is the same for everyone and needs nothing written into
-// it per request: the code it shows is read from its own address by its own script, and everything it asks of Nexus
-// goes to the API, which checks the owner again.
+// the four files the page is made of are served, each at its own address under /nexus (and, for one release, under the
+// old /apps/nexus), so no other file in the assets (and no folder) can be asked for by name. The page is the same for
+// everyone and needs nothing written into it per request: the code it shows is read from its own address by its own
+// script, and everything it asks of Nexus goes to the API, which checks the owner again.
+//
+// The files sit in the assets under /nexus, the same address the page is served at, so the asset server would hand
+// them to anyone before the Worker ran. wrangler.jsonc's `run_worker_first` makes the Worker see /nexus/* first.
 
+import { LEGACY_PREFIX, NEXUS_PREFIX } from "../../addresses";
 import type { NexusEnv } from "./host";
 
-/** The addresses the page is served at, and where each file sits in the assets. The page itself has no extension. */
-const FILES: Readonly<Record<string, string>> = {
-  "/apps/nexus/approve": "/nexus/approve",
-  "/apps/nexus/approve.css": "/nexus/approve.css",
-  "/apps/nexus/approve.js": "/nexus/approve.js",
-  "/apps/nexus/theme-boot.js": "/nexus/theme-boot.js",
-};
+/** The page's four files: the name after the prefix, and where each sits in the assets. The page itself has no extension. */
+const FILE_NAMES = ["approve", "approve.css", "approve.js", "theme-boot.js"] as const;
+
+/** Every address a file is served at (both prefixes), and where that file sits in the assets. */
+const FILES: Readonly<Record<string, string>> = Object.fromEntries(
+  [NEXUS_PREFIX, LEGACY_PREFIX].flatMap((prefix) => FILE_NAMES.map((name) => [`${prefix}/${name}`, `${NEXUS_PREFIX}/${name}`])),
+);
 
 /** Whether an address is one of the page's four files. */
 export const isNexusAsset = (pathname: string): boolean => Object.hasOwn(FILES, pathname);

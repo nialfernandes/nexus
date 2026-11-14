@@ -1,16 +1,16 @@
 // The device approval page. It reads the code from its own address, asks Nexus what is being asked, and lets the
 // owner allow or deny it. Everything a device sent (its label, the identity) goes on the page as text, never as markup.
 //
-//   GET  /apps/nexus/api/device/pending?code=C    what is being asked, or a refusal in plain words
-//   POST /apps/nexus/api/device/approve { code }  Allow
-//   POST /apps/nexus/api/device/deny    { code }  Deny
+//   GET  /nexus/api/device/pending?code=C    what is being asked, or a refusal in plain words
+//   POST /nexus/api/device/approve { code }  Allow
+//   POST /nexus/api/device/deny    { code }  Deny
 //
 // A refusal's own words are shown as they come (an expired code, a code nobody was given). A refusal that says the
 // code is finished (404 or 410) takes the buttons away, so nothing can be tapped twice.
 (function () {
   'use strict';
 
-  var DEVICE = '/apps/nexus/api/device/';
+  var DEVICE = '/nexus/api/device/';
   var CANT_REACH = 'Nexus could not be reached. Check the connection and try again.';
   var NO_CODE = 'This link has no code in it. Open the link the device gave you.';
 

@@ -17,6 +17,9 @@
 -- allowing the sign-in can make the token's row without the token ever being kept. status runs pending, then
 -- approved or denied, then collected once the device has been handed its token. A sign-in lives ten minutes.
 --
+-- Migration 0003 later dropped nexus_rights: there are no folder rights now, because the folders are inside the encrypted
+-- notes. The identities, tokens and sign-ins below are unchanged.
+--
 -- The SQL is the common ground of SQLite and Postgres. The statements are split at the semicolon when the tests
 -- build the tables, so this file holds no semicolon inside a comment, a literal or a trigger.
 

@@ -1,225 +1,245 @@
-// Saving a note in Nexus: every save is a version, a save names the version it started from, edits on different
-// lines are merged, edits on the same lines are a clash that is kept beside the note and never overwrites it, and
-// a clash is resolved by an ordinary save. Through the Nexus Worker, as the owner (see __fixtures__/nexus-world.ts for
-// the routes and the shape of every answer).
+// Saving a note in Nexus: a note is an encrypted blob under an id the device chose, every save is a version, and a save
+// names the version it started from. A save that started from any other version than the note's latest is refused
+// with the version the note is at, and the device merges and saves again (the server cannot read a note, so it never
+// merges). Through the Nexus Worker, as the owner (see __fixtures__/nexus-world.ts for the routes and the shape of
+// every answer).
 
+import { createHash } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { bodyOf, expectRefusal, setUpNexus, signInOwner, vault } from "./__fixtures__/nexus-world";
+import { GARDEN_V1, GARDEN_V2, PODCAST_V1 } from "./__fixtures__/device-blobs";
+import { API, bodyOf, expectRefusal, send, setUpNexus, signInOwner, vault } from "./__fixtures__/nexus-world";
 
 let owner: ReturnType<typeof vault>;
+let cookie: string;
 
-type Entry = { version: number; kind: string; merged: boolean; clash: boolean; writer: string; at: number; hash: string };
-
-/** The note's text, from the latest version or the one asked for. */
-const textAt = async (path: string, version?: number): Promise<string> => bodyOf(await owner.note(path, version)).text;
+type Entry = { version: number; kind: string; kid: number; writer: string; at: number; hash: string };
 
 beforeAll(async () => {
   await setUpNexus();
-  owner = vault((await signInOwner()).cookie);
+  cookie = (await signInOwner()).cookie;
+  owner = vault(cookie);
+});
+
+/** SHA-256 of the bytes a base64 text stands for, worked out here with Node's own hash. */
+const sha256OfBlob = (blob: string): string => createHash("sha256").update(Buffer.from(blob, "base64")).digest("hex");
+
+/** A save written out by hand, for the requests that are wrong in some way. */
+const rawSave = (body: unknown) => send("POST", `${API}/save`, cookie, body);
+
+describe("the worked example: a save at version 0, a second one at version 0, and the feed", () => {
+  it("stores the first, refuses the second with the current version 1, and lists n-1 at version 1", async () => {
+    expect(bodyOf(await owner.save(GARDEN_V1, 0))).toEqual({ result: "saved", id: "n-1", version: 1 });
+
+    const second = await owner.save(GARDEN_V2, 0);
+    expectRefusal(second, 409, "a second save at version 0");
+    expect(second.body.current).toBe(1);
+
+    const feed = bodyOf(await owner.changes());
+    expect(feed.changes.map((c: { id: string; version: number }) => [c.id, c.version])).toEqual([["n-1", 1]]);
+    expect(bodyOf(await owner.note("n-1"))).toMatchObject({ version: 1, blob: GARDEN_V1.blob });
+  });
 });
 
 describe("a first save and the saves after it", () => {
-  it("makes version 1 of a new note, kept with who saved it, when, and a short hash of the text", async () => {
+  it("keeps the blob exactly as sent, with the kid, who saved it, when, and SHA-256 of the blob", async () => {
     const before = Date.now();
-    expect(bodyOf(await owner.save("Ideas/first.md", "one\ntwo\nthree\n"))).toMatchObject({
-      result: "saved", path: "Ideas/first.md", version: 1,
-    });
+    expect(bodyOf(await owner.save(PODCAST_V1, 0, 7))).toMatchObject({ result: "saved", id: PODCAST_V1.id, version: 1 });
 
-    const read = bodyOf(await owner.note("Ideas/first.md"));
-    expect(read).toMatchObject({ path: "Ideas/first.md", version: 1, text: "one\ntwo\nthree\n", writer: "owner", clash: false });
+    const read = bodyOf(await owner.note(PODCAST_V1.id));
+    expect(read).toMatchObject({ id: PODCAST_V1.id, version: 1, kind: "save", kid: 7, blob: PODCAST_V1.blob, writer: "owner" });
     expect(read.at).toBeGreaterThanOrEqual(before);
     expect(read.at).toBeLessThanOrEqual(Date.now());
-    expect(typeof read.hash).toBe("string");
-    expect(read.hash.length).toBeGreaterThanOrEqual(4);
-    expect(read.hash.length).toBeLessThanOrEqual(32);
+    expect(read.hash).toBe(sha256OfBlob(PODCAST_V1.blob));
+    expect(read.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("makes the next version when the save starts from the latest one, and never changes an old version", async () => {
-    bodyOf(await owner.save("Ideas/second.md", "alpha\n"));
-    expect(bodyOf(await owner.save("Ideas/second.md", "alpha\nbeta\n", { base: 1 }))).toMatchObject({
-      result: "saved", path: "Ideas/second.md", version: 2,
-    });
+    bodyOf(await owner.save({ id: "next-1", blob: GARDEN_V1.blob }, 0));
+    expect(bodyOf(await owner.save({ id: "next-1", blob: GARDEN_V2.blob }, 1))).toMatchObject({ result: "saved", id: "next-1", version: 2 });
 
-    expect(bodyOf(await owner.note("Ideas/second.md"))).toMatchObject({ version: 2, text: "alpha\nbeta\n" });
-    expect(bodyOf(await owner.note("Ideas/second.md", 1))).toMatchObject({ version: 1, text: "alpha\n" });
-    expect(bodyOf(await owner.note("Ideas/second.md", 2))).toMatchObject({ version: 2, text: "alpha\nbeta\n" });
+    expect(bodyOf(await owner.note("next-1"))).toMatchObject({ version: 2, blob: GARDEN_V2.blob });
+    expect(bodyOf(await owner.note("next-1", 1))).toMatchObject({ version: 1, blob: GARDEN_V1.blob });
+    expect(bodyOf(await owner.note("next-1", 2))).toMatchObject({ version: 2, blob: GARDEN_V2.blob });
 
-    const history = bodyOf(await owner.history("Ideas/second.md"));
-    expect(history.path).toBe("Ideas/second.md");
+    const history = bodyOf(await owner.history("next-1"));
+    expect(history.id).toBe("next-1");
     expect(history.versions.map((v: Entry) => v.version)).toEqual([1, 2]);
-    for (const entry of history.versions) {
-      expect(entry).toMatchObject({ kind: "save", writer: "owner", merged: false, clash: false });
+    for (const entry of history.versions as Entry[]) {
+      expect(entry).toMatchObject({ kind: "save", kid: 1, writer: "owner" });
       expect(typeof entry.at).toBe("number");
-      expect(typeof entry.hash).toBe("string");
+      expect(entry).not.toHaveProperty("blob");
+    }
+    expect(history.versions.map((v: Entry) => v.hash)).toEqual([sha256OfBlob(GARDEN_V1.blob), sha256OfBlob(GARDEN_V2.blob)]);
+  });
+
+  it("gives the same blob the same hash and a different blob a different one", async () => {
+    bodyOf(await owner.save({ id: "hash-one", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "hash-two", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "hash-three", blob: GARDEN_V2.blob }, 0));
+    const hashOf = async (id: string): Promise<string> => bodyOf(await owner.note(id)).hash;
+    expect(await hashOf("hash-one")).toBe(await hashOf("hash-two"));
+    expect(await hashOf("hash-one")).not.toBe(await hashOf("hash-three"));
+  });
+
+  it("keeps blobs of any length up to the limit, down to a single byte and up to the largest the limit allows", async () => {
+    const sizes: Record<string, number> = { "size-one": 1, "size-three": 3, "size-odd": 1001, "size-limit": 1_000_000 };
+    for (const [id, size] of Object.entries(sizes)) {
+      const bytes = Buffer.alloc(size, 0xa5);
+      bytes[0] = 0;
+      bytes[size - 1] = 255;
+      const blob = bytes.toString("base64");
+      bodyOf(await owner.save({ id, blob }, 0));
+      const read = bodyOf(await owner.note(id));
+      expect(read.blob, id).toBe(blob);
+      expect(read.hash, id).toBe(sha256OfBlob(blob));
     }
   });
 
-  it("gives the same text the same hash and different text a different one", async () => {
-    bodyOf(await owner.save("Hash/one.md", "same words\n"));
-    bodyOf(await owner.save("Hash/two.md", "same words\n"));
-    bodyOf(await owner.save("Hash/three.md", "other words\n"));
-    const hashOf = async (path: string): Promise<string> => bodyOf(await owner.note(path)).hash;
-    expect(await hashOf("Hash/one.md")).toBe(await hashOf("Hash/two.md"));
-    expect(await hashOf("Hash/one.md")).not.toBe(await hashOf("Hash/three.md"));
+  it("is a different note for each id, and the id is all that names it", async () => {
+    bodyOf(await owner.save({ id: "same-bytes-a", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "same-bytes-b", blob: GARDEN_V1.blob }, 0));
+    const listed = bodyOf(await owner.list()).notes.map((n: { id: string }) => n.id);
+    expect(listed).toEqual(expect.arrayContaining(["same-bytes-a", "same-bytes-b"]));
+  });
+});
+
+describe("a save that did not start from the latest version is refused, and keeps nothing", () => {
+  it("is told the version the note is at, and the note and its history are as they were", async () => {
+    bodyOf(await owner.save({ id: "stale-1", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "stale-1", blob: GARDEN_V2.blob }, 1));
+
+    const behind = await owner.save({ id: "stale-1", blob: PODCAST_V1.blob }, 1);
+    expectRefusal(behind, 409, "a save that started from version 1 of a note at version 2");
+    expect(behind.body.current).toBe(2);
+    expect(behind.body.error).toMatch(/version 2/);
+
+    const ahead = await owner.save({ id: "stale-1", blob: PODCAST_V1.blob }, 5);
+    expectRefusal(ahead, 409, "a save that started from a version the note never had");
+    expect(ahead.body.current).toBe(2);
+
+    expect(bodyOf(await owner.note("stale-1"))).toMatchObject({ version: 2, blob: GARDEN_V2.blob });
+    expect(bodyOf(await owner.history("stale-1")).versions).toHaveLength(2);
   });
 
-  it("keeps any UTF-8 text exactly: empty, no final newline, Windows line ends, accents, emoji, a long one", async () => {
-    const texts: Record<string, string> = {
-      "Text/empty.md": "",
-      "Text/no-final-newline.md": "no newline at the end",
-      "Text/windows.md": "first\r\nsecond\r\n",
-      "Text/unicode.md": "Café résumé naïve 日本語 🎙️ ✨\n",
-      "Text/long.md": "a line of text that repeats\n".repeat(4000),
-    };
-    for (const [path, text] of Object.entries(texts)) {
-      bodyOf(await owner.save(path, text));
-      expect(await textAt(path), path).toBe(text);
+  it("is saved again from the version it was told, which is how a device merges", async () => {
+    bodyOf(await owner.save({ id: "stale-2", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "stale-2", blob: GARDEN_V2.blob }, 1));
+    const refused = await owner.save({ id: "stale-2", blob: PODCAST_V1.blob }, 1);
+    expect(refused.status).toBe(409);
+    // The device would now read the note, merge its edit into it and save the merge from `current`.
+    expect(bodyOf(await owner.save({ id: "stale-2", blob: PODCAST_V1.blob }, refused.body.current))).toMatchObject({ result: "saved", version: 3 });
+  });
+
+  it("says the note is at version 0 when there is no such note, for a base above 0", async () => {
+    const answer = await owner.save({ id: "never-made", blob: GARDEN_V1.blob }, 3);
+    expectRefusal(answer, 409, "a save that starts from a version of a note the server has not got");
+    expect(answer.body.current).toBe(0);
+    expectRefusal(await owner.note("never-made"), 404, "the note the refused save tried to make");
+    expect(bodyOf(await owner.changes()).changes.some((c: { id: string }) => c.id === "never-made")).toBe(false);
+  });
+
+  it("never merges, even for two edits that touch different lines: the server cannot tell", async () => {
+    bodyOf(await owner.save({ id: "no-merge", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "no-merge", blob: GARDEN_V2.blob }, 1));
+    expect((await owner.save({ id: "no-merge", blob: PODCAST_V1.blob }, 1)).status).toBe(409);
+    expect(bodyOf(await owner.history("no-merge")).versions.map((v: Entry) => v.kind)).toEqual(["save", "save"]);
+  });
+});
+
+describe("a save that is not a save is refused, and keeps nothing", () => {
+  it("is refused with 400 for a missing id, base, kid or blob", async () => {
+    const whole = { id: "bad-whole", base: 0, kid: 1, blob: GARDEN_V1.blob };
+    for (const field of ["id", "base", "kid", "blob"] as const) {
+      const { [field]: _left, ...without } = whole;
+      expectRefusal(await rawSave(without), 400, `a save with no ${field}`);
     }
+    expectRefusal(await send("GET", `${API}/note?id=bad-whole`, cookie), 404, "the note none of them made");
   });
 
-  it("refuses a save with no path, no text or a base that is not a whole number, and keeps nothing", async () => {
-    bodyOf(await owner.save("Bad/ok.md", "fine\n"));
-
-    expectRefusal(await owner.save(undefined as never, "x\n"), 400, "a save with no path");
-    expectRefusal(await owner.save("Bad/no-text.md", undefined as never), 400, "a save with no text");
-    expectRefusal(await owner.save("Bad/ok.md", "changed\n", { base: "one" as never }), 400, "a save with a base that is a word");
-
-    expect(bodyOf(await owner.note("Bad/ok.md"))).toMatchObject({ version: 1, text: "fine\n" });
-    expectRefusal(await owner.note("Bad/no-text.md"), 404, "the note that was never made");
-  });
-});
-
-describe("edits on different lines are merged", () => {
-  it("keeps both edits as the next version, and says merged", async () => {
-    expect(bodyOf(await owner.save("Ideas/a.md", "one\ntwo\nthree\n"))).toMatchObject({ result: "saved", version: 1 });
-    expect(bodyOf(await owner.save("Ideas/a.md", "ONE\ntwo\nthree\n", { base: 1 }))).toMatchObject({ result: "saved", version: 2 });
-
-    const merged = await owner.save("Ideas/a.md", "one\ntwo\nTHREE\n", { base: 1 });
-    expect(bodyOf(merged)).toMatchObject({ result: "merged", path: "Ideas/a.md", version: 3 });
-
-    expect(bodyOf(await owner.note("Ideas/a.md"))).toMatchObject({ version: 3, text: "ONE\ntwo\nTHREE\n", clash: false });
-
-    const history = bodyOf(await owner.history("Ideas/a.md"));
-    expect(history.versions.map((v: Entry) => [v.version, v.merged, v.clash])).toEqual([
-      [1, false, false],
-      [2, false, false],
-      [3, true, false],
-    ]);
+  it("is refused with 400 for a base that is not a whole number from 0, or a kid that is not a key number", async () => {
+    const body = { id: "bad-numbers", kid: 1, blob: GARDEN_V1.blob };
+    for (const base of ["one", "0", -1, 1.5, null, true, [0]]) {
+      expectRefusal(await rawSave({ ...body, base }), 400, `a base of ${JSON.stringify(base)}`);
+    }
+    for (const kid of ["1", -1, 1.5, 4294967296, null, undefined]) {
+      expectRefusal(await rawSave({ ...body, base: 0, kid }), 400, `a kid of ${JSON.stringify(kid)}`);
+    }
+    for (const kid of [0, 1, 4294967295]) {
+      expect((await rawSave({ id: `kid-${kid}`, base: 0, kid, blob: GARDEN_V1.blob })).status, `kid ${kid}`).toBe(200);
+    }
+    expectRefusal(await send("GET", `${API}/note?id=bad-numbers`, cookie), 404, "the note none of them made");
   });
 
-  it("merges a line added at the end with an edit to the first line", async () => {
-    bodyOf(await owner.save("Merge/append.md", "one\ntwo\nthree\n"));
-    bodyOf(await owner.save("Merge/append.md", "ONE\ntwo\nthree\n", { base: 1 }));
-    const appended = await owner.save("Merge/append.md", "one\ntwo\nthree\nfour\n", { base: 1 });
-    expect(bodyOf(appended)).toMatchObject({ result: "merged", version: 3 });
-    expect(await textAt("Merge/append.md")).toBe("ONE\ntwo\nthree\nfour\n");
+  it("is refused with 400 for a blob that is not base64 exactly as it would be written, and for an empty one", async () => {
+    const body = { id: "bad-blob", base: 0, kid: 1 };
+    const real = GARDEN_V1.blob;
+    for (const [blob, what] of [
+      ["", "an empty blob"],
+      ["not base64 at all!", "characters that are not base64"],
+      [real.slice(0, -1), "a length that is not a multiple of four"],
+      [real.replace(/=+$/, "") + "====", "padding in the wrong place"],
+      ["AB==", "spare bits that are not zero"],
+      ["AAB=", "spare bits that are not zero, one byte shorter"],
+      [real.replace(/\+/g, "-").replace(/\//g, "_") + "!", "url-safe characters beside others"],
+      [`${real}\n`, "a line break"],
+      [42, "a number"],
+      [[real], "a list"],
+    ] as const) {
+      expectRefusal(await rawSave({ ...body, blob }), 400, what);
+    }
+    expect((await rawSave({ ...body, blob: "AA==" })).status, "a canonical one-byte blob").toBe(200);
   });
 
-  it("merges against the version the save started from, not the first one", async () => {
-    bodyOf(await owner.save("Merge/from-two.md", "a\nb\nc\nd\ne\n"));
-    bodyOf(await owner.save("Merge/from-two.md", "A\nb\nc\nd\ne\n", { base: 1 }));
-    bodyOf(await owner.save("Merge/from-two.md", "A\nb\nc\nd\nE\n", { base: 2 }));
-    const middle = await owner.save("Merge/from-two.md", "A\nb\nC\nd\ne\n", { base: 2 });
-    expect(bodyOf(middle)).toMatchObject({ result: "merged", version: 4 });
-    expect(await textAt("Merge/from-two.md")).toBe("A\nb\nC\nd\nE\n");
-  });
-});
-
-describe("edits to the same lines are a clash, kept beside the note and never an overwrite", () => {
-  it("saves the first, answers clash with both texts, flags the note, and keeps the second as a clash version", async () => {
-    bodyOf(await owner.save("Clash/line.md", "one\ntwo\nthree\n"));
-    const first = await owner.save("Clash/line.md", "one\nTWO\nthree\n", { base: 1 });
-    expect(bodyOf(first)).toMatchObject({ result: "saved", version: 2 });
-
-    const second = bodyOf(await owner.save("Clash/line.md", "one\nDEUX\nthree\n", { base: 1 }), 409);
-    expect(second.result).toBe("clash");
-    expect(second.path).toBe("Clash/line.md");
-    expect(second.latest).toMatchObject({ version: 2, text: "one\nTWO\nthree\n" });
-    expect(second.incoming).toMatchObject({ version: 3, text: "one\nDEUX\nthree\n" });
-
-    // The note still reads the first save, and is flagged on a read and in a list.
-    expect(bodyOf(await owner.note("Clash/line.md"))).toMatchObject({ version: 2, text: "one\nTWO\nthree\n", clash: true });
-    const listed = bodyOf(await owner.list("Clash")).notes.find((n: { path: string }) => n.path === "Clash/line.md");
-    expect(listed).toMatchObject({ version: 2, clash: true });
-
-    // History shows the clash version, and it holds the second text. Nothing before it changed.
-    const history = bodyOf(await owner.history("Clash/line.md"));
-    expect(history.versions.map((v: Entry) => [v.version, v.clash, v.merged])).toEqual([
-      [1, false, false],
-      [2, false, false],
-      [3, true, false],
-    ]);
-    expect(await textAt("Clash/line.md", 3)).toBe("one\nDEUX\nthree\n");
-    expect(await textAt("Clash/line.md", 2)).toBe("one\nTWO\nthree\n");
-    expect(await textAt("Clash/line.md", 1)).toBe("one\ntwo\nthree\n");
+  it("is refused with 413 for a blob over the limit, and the largest is kept", async () => {
+    const tooLong = Buffer.alloc(1_000_001, 1).toString("base64");
+    expectRefusal(await rawSave({ id: "too-long", base: 0, kid: 1, blob: tooLong }), 413, "a blob one byte over the limit");
+    expectRefusal(await send("GET", `${API}/note?id=too-long`, cookie), 404, "the note the refused save tried to make");
   });
 
-  it("is cleared by a save that names the latest version as base and resolves the clash version", async () => {
-    bodyOf(await owner.save("Clash/resolve.md", "one\ntwo\nthree\n"));
-    bodyOf(await owner.save("Clash/resolve.md", "one\nTWO\nthree\n", { base: 1 }));
-    const clash = bodyOf(await owner.save("Clash/resolve.md", "one\nDEUX\nthree\n", { base: 1 }), 409);
-    expect(clash.result).toBe("clash");
-    expect(bodyOf(await owner.note("Clash/resolve.md")).clash).toBe(true);
+  it("is refused with 400 for a field that is not one of id, base, kid and blob, and nothing is kept or echoed", async () => {
+    // What an old client sends: the path and the text in plain.
+    const legacy = await rawSave({ path: "Projects/Garden plan.md", text: GARDEN_V1.text, base: 1 });
+    expectRefusal(legacy, 400, "a save in the old plain shape");
+    expect(legacy.text, "the refusal repeats nothing it was sent").not.toContain("Garden plan");
+    expect(legacy.text).not.toContain(GARDEN_V1.text.slice(0, 10));
 
-    const resolved = await owner.save("Clash/resolve.md", "one\nTWO and DEUX\nthree\n", {
-      base: clash.latest.version,
-      resolves: clash.incoming.version,
-    });
-    expect(bodyOf(resolved)).toMatchObject({ result: "saved", version: 4 });
-
-    expect(bodyOf(await owner.note("Clash/resolve.md"))).toMatchObject({ version: 4, text: "one\nTWO and DEUX\nthree\n", clash: false });
-    const listed = bodyOf(await owner.list("Clash")).notes.find((n: { path: string }) => n.path === "Clash/resolve.md");
-    expect(listed).toMatchObject({ version: 4, clash: false });
-
-    // The clash version is still there, with the text it held.
-    expect(await textAt("Clash/resolve.md", 3)).toBe("one\nDEUX\nthree\n");
-    const history = bodyOf(await owner.history("Clash/resolve.md"));
-    expect(history.versions.map((v: Entry) => v.version)).toEqual([1, 2, 3, 4]);
-  });
-
-  it("is what a save with no base on a note that exists becomes: never an overwrite", async () => {
-    bodyOf(await owner.save("Clash/no-base.md", "the original\n"));
-    const blind = bodyOf(await owner.save("Clash/no-base.md", "written without looking\n"), 409);
-    expect(blind.result).toBe("clash");
-    expect(blind.latest).toMatchObject({ version: 1, text: "the original\n" });
-    expect(blind.incoming).toMatchObject({ version: 2, text: "written without looking\n" });
-
-    expect(bodyOf(await owner.note("Clash/no-base.md"))).toMatchObject({ version: 1, text: "the original\n", clash: true });
-    expect(await textAt("Clash/no-base.md", 2)).toBe("written without looking\n");
-    const history = bodyOf(await owner.history("Clash/no-base.md"));
-    expect(history.versions.map((v: Entry) => [v.version, v.clash])).toEqual([
-      [1, false],
-      [2, true],
-    ]);
+    const extra = await rawSave({ id: "extra-field", base: 0, kid: 1, blob: GARDEN_V1.blob, path: "Projects/Garden plan.md" });
+    expectRefusal(extra, 400, "a good save with a path beside it");
+    expect(extra.body.error).toContain("id, base, kid, blob");
+    expectRefusal(await send("GET", `${API}/note?id=extra-field`, cookie), 404, "the note the refused save tried to make");
   });
 });
 
 describe("two saves at the same moment", () => {
-  it("both survive when they change different lines: one saved, one merged, no edit lost", async () => {
-    bodyOf(await owner.save("Same moment/lines.md", "one\ntwo\nthree\n"));
+  it("make one version: one is saved, the other is told the note is at the version the first made", async () => {
+    bodyOf(await owner.save({ id: "race-1", blob: GARDEN_V1.blob }, 0));
     const [a, b] = await Promise.all([
-      owner.save("Same moment/lines.md", "ONE\ntwo\nthree\n", { base: 1 }),
-      owner.save("Same moment/lines.md", "one\ntwo\nTHREE\n", { base: 1 }),
-    ]);
-    expect([a.status, b.status]).toEqual([200, 200]);
-    expect([a.body.result, b.body.result].sort()).toEqual(["merged", "saved"]);
-    expect(bodyOf(await owner.note("Same moment/lines.md"))).toMatchObject({ version: 3, text: "ONE\ntwo\nTHREE\n", clash: false });
-  });
-
-  it("lose nothing when they change the same line: one saved, one clash, both texts kept", async () => {
-    bodyOf(await owner.save("Same moment/clash.md", "one\ntwo\nthree\n"));
-    const [a, b] = await Promise.all([
-      owner.save("Same moment/clash.md", "one\nTWO\nthree\n", { base: 1 }),
-      owner.save("Same moment/clash.md", "one\nDEUX\nthree\n", { base: 1 }),
+      owner.save({ id: "race-1", blob: GARDEN_V2.blob }, 1),
+      owner.save({ id: "race-1", blob: PODCAST_V1.blob }, 1),
     ]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
-    expect([a.body.result, b.body.result].sort()).toEqual(["clash", "saved"]);
+    const refused = a.status === 409 ? a : b;
+    expect(refused.body.current).toBe(2);
 
-    const history = bodyOf(await owner.history("Same moment/clash.md"));
-    expect(history.versions).toHaveLength(3);
-    const held: string[] = [];
-    for (const v of history.versions as Entry[]) held.push(await textAt("Same moment/clash.md", v.version));
-    expect(held.sort()).toEqual(["one\nDEUX\nthree\n", "one\nTWO\nthree\n", "one\ntwo\nthree\n"]);
-    expect(bodyOf(await owner.note("Same moment/clash.md")).clash).toBe(true);
+    const history = bodyOf(await owner.history("race-1"));
+    expect(history.versions.map((v: Entry) => v.version), "no gap and no repeated number").toEqual([1, 2]);
+    const saved = a.status === 200 ? GARDEN_V2 : PODCAST_V1;
+    expect(bodyOf(await owner.note("race-1")).blob, "the one that was saved is the note").toBe(saved.blob);
+  });
+
+  it("make one note when the note is new: one is version 1 and the other is told the note is at 1", async () => {
+    const [a, b] = await Promise.all([
+      owner.save({ id: "race-new", blob: GARDEN_V1.blob }, 0),
+      owner.save({ id: "race-new", blob: GARDEN_V2.blob }, 0),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect((a.status === 409 ? a : b).body.current).toBe(1);
+    expect(bodyOf(await owner.history("race-new")).versions).toHaveLength(1);
+  });
+
+  it("keep the changes feed's numbering whole when different notes are saved together", async () => {
+    await Promise.all(Array.from({ length: 6 }, (_, n) => owner.save({ id: `together-${n}`, blob: GARDEN_V1.blob }, 0)));
+    const ids = bodyOf(await owner.changes(undefined, 500)).changes.map((c: { id: string }) => c.id).filter((id: string) => id.startsWith("together-"));
+    expect(ids.sort()).toEqual(Array.from({ length: 6 }, (_, n) => `together-${n}`));
   });
 });
