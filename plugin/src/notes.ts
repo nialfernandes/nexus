@@ -14,6 +14,17 @@ export function isNote(path: string): boolean {
 }
 
 /**
+ * True for a path from another device that is safe to write into this vault: a note (see isNote) whose steps are all
+ * plain names. The path in a blob was chosen by whoever made the blob, so it is never trusted as it is: one that starts at
+ * the root, climbs out with `..`, holds an empty step or a backslash or a control character is refused, and the note is
+ * not written.
+ */
+export function isSafeNotePath(path: string): boolean {
+  if (!isNote(path) || path.startsWith("/") || /[\\\u0000-\u001f]/.test(path)) return false;
+  return path.split("/").every((step) => step !== "" && step !== "." && step !== "..");
+}
+
+/**
  * A short fingerprint of a text. It tells "the same text as last time" from "edited since", so two different texts
  * must not share one in practice. It is not a security hash and nothing relies on it as one.
  */

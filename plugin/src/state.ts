@@ -1,10 +1,11 @@
 // What the plugin keeps, and where. The plugin's data file (`data.json`) sits inside the vault, so anything that syncs
 // the vault between devices (iCloud) syncs it too. Only the Nexus address and the user name, which are the same for every
-// device, may live there. Neither has a default: a plugin that has never been set up has neither, and does nothing until it has both. The token, the device's id and name, the changes cursor and the version of every note belong to one device: they
+// device, may live there. Neither has a default: a plugin that has never been set up has neither, and does nothing until it has both. The token, the device's id and name, the changes cursor and what is known of every note belong to one device: they
 // are kept in Obsidian's per-device local storage (`app.saveLocalStorage`), so a vault shared between a Mac and an iPhone
 // never shares them. These are plain functions so a test can call them without Obsidian.
 
-import type { PluginData } from "./types";
+import { encodeBase64Url } from "./base64";
+import type { KnownNote, PendingDelete, PluginData } from "./types";
 
 /** The key the per-device state is kept under in Obsidian's local storage for this vault. */
 export const STATE_KEY = "nexus-state";
@@ -25,12 +26,16 @@ export const isSetUp = (data: Pick<PluginData, "address" | "user">): boolean => 
 export interface DeviceState {
   token: string | null;
   cursor: string | null;
-  versions: Record<string, number>;
-  hashes: Record<string, string>;
-  pendingDeletes: string[];
+  notes: Record<string, KnownNote>;
+  pendingDeletes: PendingDelete[];
   pendingPulls: string[];
   deviceName?: string;
   deviceId: string;
+}
+
+/** A random id for a note, made the first time the note is synced: 16 random bytes in url-safe base64, 22 characters. It says nothing about the note. */
+export function newNoteId(): string {
+  return encodeBase64Url(crypto.getRandomValues(new Uint8Array(16)));
 }
 
 /** A random id for this device, made once: 16 hex characters. */
@@ -45,8 +50,7 @@ export function splitState(state: PluginData): { shared: SharedState; device: De
     device: {
       token: state.token,
       cursor: state.cursor,
-      versions: state.versions,
-      hashes: state.hashes ?? {},
+      notes: state.notes,
       pendingDeletes: state.pendingDeletes ?? [],
       pendingPulls: state.pendingPulls ?? [],
       ...(state.deviceName !== undefined ? { deviceName: state.deviceName } : {}),
@@ -58,40 +62,57 @@ export function splitState(state: PluginData): { shared: SharedState; device: De
 const record = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
-const numbers = (value: unknown): Record<string, number> => {
-  const found: Record<string, number> = {};
-  for (const [path, version] of Object.entries(record(value) ?? {})) if (typeof version === "number") found[path] = version;
+const pathList = (value: unknown): string[] => (Array.isArray(value) ? value.filter((path): path is string => typeof path === "string") : []);
+
+/** What was kept of each note: an entry that is not whole is left out, and that note is met again as a new one. */
+const knownNotes = (value: unknown): Record<string, KnownNote> => {
+  const found: Record<string, KnownNote> = {};
+  for (const [path, entry] of Object.entries(record(value) ?? {})) {
+    const note = record(entry);
+    if (
+      typeof note?.id === "string" && note.id !== "" &&
+      typeof note.version === "number" && Number.isInteger(note.version) && note.version >= 0 &&
+      typeof note.hash === "string" &&
+      typeof note.savedPath === "string"
+    ) {
+      found[path] = { id: note.id, version: note.version, hash: note.hash, savedPath: note.savedPath };
+    }
+  }
   return found;
 };
 
-const pathList = (value: unknown): string[] => (Array.isArray(value) ? value.filter((path): path is string => typeof path === "string") : []);
-
-const strings = (value: unknown): Record<string, string> => {
-  const found: Record<string, string> = {};
-  for (const [path, text] of Object.entries(record(value) ?? {})) if (typeof text === "string") found[path] = text;
-  return found;
+const deleteList = (value: unknown): PendingDelete[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const item = record(entry);
+    return typeof item?.id === "string" && item.id !== "" && typeof item.version === "number" ? [{ id: item.id, version: item.version }] : [];
+  });
 };
 
 /**
  * Puts what the two places hold back together. Only the address and the user name are taken from the data file: a token or a version left
  * there by anything else is not trusted, because a synced vault would have carried it from another device. A device with
  * nothing stored is signed out and has never synced, and is given an id of its own.
+ *
+ * A device that kept its notes by path and version, as the plugin did before notes were encrypted (no `notes` in what it stored),
+ * has nothing that fits the server as it is now: its cursor and versions belong to a feed of plain text. It starts over, as a
+ * device that has never synced, and the first sync (which deletes nothing) brings the vault and Nexus together.
  */
 export function joinState(sharedRaw: unknown, deviceRaw: unknown, makeId: () => string = newDeviceId): PluginData {
   const shared = record(sharedRaw);
   const device = record(deviceRaw);
   const address = typeof shared?.address === "string" ? shared.address.trim() : "";
   const user = typeof shared?.user === "string" ? shared.user.trim() : "";
+  const current = record(device?.notes) !== null;
   const id = typeof device?.deviceId === "string" && device.deviceId !== "" ? device.deviceId : makeId();
   return {
     address,
     user,
     token: typeof device?.token === "string" && device.token !== "" ? device.token : null,
-    cursor: typeof device?.cursor === "string" ? device.cursor : null,
-    versions: numbers(device?.versions),
-    hashes: strings(device?.hashes),
-    pendingDeletes: pathList(device?.pendingDeletes),
-    pendingPulls: pathList(device?.pendingPulls),
+    cursor: current && typeof device?.cursor === "string" ? device.cursor : null,
+    notes: knownNotes(device?.notes),
+    pendingDeletes: deleteList(device?.pendingDeletes),
+    pendingPulls: current ? pathList(device?.pendingPulls) : [],
     ...(typeof device?.deviceName === "string" ? { deviceName: device.deviceName } : {}),
     deviceId: id,
   };

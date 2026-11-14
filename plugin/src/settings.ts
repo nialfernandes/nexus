@@ -167,7 +167,7 @@ export class NexusSettingTab extends PluginSettingTab {
 
   /**
    * A new address or a new user starts over: the token and what was stored belong to the old one. A different user may be
-   * allowed to see different notes, so the changes cursor and the versions are not carried across either, and the first
+   * allowed to see different notes, so the changes cursor and what is known of each note are not carried across either, and the first
    * sync that follows (which deletes nothing) brings the vault and Nexus together again.
    */
   private async startOver(change: (state: PluginData) => void, message: string): Promise<void> {
@@ -179,8 +179,7 @@ export class NexusSettingTab extends PluginSettingTab {
     change(state);
     state.token = null;
     state.cursor = null;
-    state.versions = {};
-    state.hashes = {};
+    state.notes = {};
     state.pendingDeletes = [];
     state.pendingPulls = [];
     await this.plugin.save();

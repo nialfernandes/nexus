@@ -1,0 +1,27 @@
+// The one door to the vault key. The sync engine never makes, stores or asks for a key: each time it has to encrypt or
+// decrypt it asks this port what is unlocked right now, and uses the answer for that one job.
+//
+// The setup screens (Recovery Key, optional password, approving a device) are a later piece of work. They will fill this
+// port: when a person unlocks the vault they put the key here, and when they lock it, or the plugin unloads, they take it
+// away. Until then the plugin is given NEVER_UNLOCKED, so it syncs nothing and says that the vault is locked.
+//
+// THE KEY LIVES IN MEMORY ONLY. Nothing in this plugin writes it anywhere: not to the data file, not to local storage,
+// not to the vault. A port that held it on disk would be a different port, and a later piece of work would have to say so.
+
+/** What is needed to encrypt and decrypt one vault's notes. */
+export interface VaultKeys {
+  /** The vault key: 32 bytes. */
+  vaultKey: Uint8Array;
+  /** Names the vault. It is part of what every note is bound to, so every device of a vault has to use the same one. */
+  vaultId: string;
+  /** The number of the vault key. It is written in every blob, and a blob under another number is refused. */
+  kid: number;
+}
+
+export interface Unlock {
+  /** The keys while the vault is unlocked, or null while it is locked. Asked again each time: a copy is never kept. */
+  keys(): VaultKeys | null;
+}
+
+/** The port the plugin has until the setup screens exist: nothing is ever unlocked. */
+export const NEVER_UNLOCKED: Unlock = { keys: () => null };

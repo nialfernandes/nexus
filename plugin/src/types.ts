@@ -2,6 +2,9 @@
 // given these few ports, and the plugin's entry (main.ts) wires Obsidian's own vault, `requestUrl` and `Notice` to them.
 // That keeps both files free of anything that only runs inside Obsidian, so a test can load them on their own.
 
+import type { SearchHit } from "./search";
+import type { Unlock } from "./unlock";
+
 /**
  * What the plugin keeps between runs. Only the address and the user name are saved in the vault's data file; the rest is
  * this device's own, in local storage (see state.ts).
@@ -15,18 +18,38 @@ export interface PluginData {
   token: string | null;
   /** Where the changes feed stood after the last pull, or null for a vault that has never synced. */
   cursor: string | null;
-  /** The Nexus version last seen for each note path. */
-  versions: Record<string, number>;
-  /** A fingerprint of each note's text as it was when it last matched Nexus, to tell an edit from no change. */
-  hashes?: Record<string, string>;
+  /**
+   * What this device knows of each note it has synced, by the note's path in this vault. The note's id is made here, at
+   * random, the first time the note is synced, and stays with the note through every rename and move (a move changes
+   * the path inside the encrypted record, never the id).
+   */
+  notes: Record<string, KnownNote>;
   /** Notes deleted here that Nexus has not been told about yet (offline or signed out at the time). */
-  pendingDeletes?: string[];
-  /** Notes Nexus has that the vault could not write; each is tried again on the next sync. */
+  pendingDeletes?: PendingDelete[];
+  /** The ids of notes Nexus has that this device could not take: the vault could not write them, or they did not open. Each is tried again on the next sync. */
   pendingPulls?: string[];
   /** The name this device is known by, in a sign-in and in the name of a clash copy. */
   deviceName?: string;
   /** Made once on this device: tells it apart from another of the same kind in Nexus's list of signed-in devices. */
   deviceId?: string;
+}
+
+/** One note this device has synced. */
+export interface KnownNote {
+  /** The note's id: random, base64url, made on the first sync of the note and never changed. */
+  id: string;
+  /** The version of the note this device last matched. 0 for a note whose id is made but whose first save has not been confirmed. */
+  version: number;
+  /** A fingerprint of the note's text as it was at that version, to tell an edit from no change. */
+  hash: string;
+  /** The path the note had in the encrypted record at that version: a note renamed here since is a note to send again. */
+  savedPath: string;
+}
+
+/** A note deleted here, and the version it was at, which is what Nexus needs to delete it. */
+export interface PendingDelete {
+  id: string;
+  version: number;
 }
 
 export interface VaultPort {
@@ -71,6 +94,8 @@ export interface SyncDeps {
   /** The device's name, as it is written in a clash copy's name. */
   device: string;
   now: () => Date;
+  /** Where the vault's key comes from. While it holds none, the engine sends and reads nothing and the status line says the vault is locked. */
+  unlock: Unlock;
   /** Called when the status line changed, so a screen showing it can show the new words. */
   onStatus?: () => void;
 }
@@ -91,6 +116,8 @@ export interface SyncEngine {
   cameToFront(): Promise<void>;
   /** The one line the settings tab and the status bar show. */
   status(): string;
+  /** Searches the vault's notes on this device: nothing is asked of Nexus, which cannot read a note. */
+  search(query: string, limit?: number): SearchHit[];
 }
 
 export interface SignInDeps {
