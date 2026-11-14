@@ -323,8 +323,8 @@ This is a summary so that the rules in section 6 have something to refer to.
   nothing built on it ran: not the note cipher, not the sealed approval, and not
   its Argon2id. The probe's own pure JavaScript Argon2id still gave the right
   key in that test. The planned fix is a second, pure JavaScript engine for the
-  same operations, used when WebAssembly is missing. Until it exists, Nexus does
-  not work on a device with WebAssembly off. This was seen with the probe's test
+  same operations, used when WebAssembly is missing. Until it exists, the
+  encrypting version of Nexus will not work on a device with WebAssembly off. This was seen with the probe's test
   setup; running the probe on a phone with Lockdown Mode on is still to do.
 
 ## 6. Design rules, and the failures they come from
