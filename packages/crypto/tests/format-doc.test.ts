@@ -12,8 +12,8 @@ const doc = readFileSync(new URL("../../../docs/FORMAT.md", import.meta.url), "u
 const docWithoutLineBreaks = doc.replace(/\n/g, "");
 
 describe("docs/FORMAT.md says what the code does", () => {
-  it("names every error code", () => {
-    for (const code of ERROR_CODES) expect(doc, code).toContain(`\`${code}\``);
+  it("lists every error code as a row of the errors table", () => {
+    for (const code of ERROR_CODES) expect(doc, code).toContain(`| \`${code}\` |`);
   });
 
   it("holds the pinned worked examples byte for byte", () => {
