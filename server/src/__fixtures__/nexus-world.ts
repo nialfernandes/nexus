@@ -3,7 +3,7 @@
 //
 // Nothing here knows how Nexus is built. Every test asks the Worker a question over HTTP and reads the answer, so the
 // logic behind the routes is free to be shaped as it likes (ports, a SQL plug, a clock). What the tests do fix is the
-// wire contract below, because the routes and their answers are what agents, sync clients and the Obsidian plugin will call.
+// wire contract below, because the routes and their answers are what the devices that sync notes will call.
 //
 // WHERE THINGS COME FROM
 //   - The database: an in-memory SQLite (node:sqlite) wearing the shape of a D1 binding (d1-sqlite.ts), with the real
@@ -14,46 +14,41 @@
 //     the cookie the real plug reads (`nexus_owner`). A stranger is a cookie with the wrong secret. Nothing is planted
 //     in a table: sign-in reads no table.
 //   - The identities `agents` and `recorder` are made the way an operator makes them: the owner calls POST identity
-//     with their rights, through the real route. The migrations seed nothing.
+//     through the real route. The migrations seed nothing.
+//   - The notes are the encrypted blobs in device-blobs.ts, made by the real @nexus/crypto. The server never opens them.
 //   - The static page (the approval page) comes from public/ through a stand-in for Cloudflare's asset server
 //     (assets.ts), which the Worker is handed as ASSETS.
 //
 // THE WIRE CONTRACT (every answer is JSON; a refusal is `{ error: "<plain words>" }`)
 //
-//   Every route is under /apps/nexus/api. A note's path is carried in the body or the query string, never in the
-//   URL path: a URL parser folds `../` away before any route sees it, and a path with slashes fights route patterns.
+//   Every route is under /nexus/api (and, for one release, /apps/nexus/api: see prefixes.test.ts). A note is named by
+//   its id, which the device chose at random: 1 to 128 letters, digits, hyphens or underscores. It is never a path.
+//   A blob and a wrap are standard base64 of bytes the server cannot read.
 //
-//   POST /save      { path, text, base?, resolves? }
-//       200 { result: "saved" | "merged", path, version }
-//       409 { result: "clash", path, latest: { version, text }, incoming: { version, text } }
-//       400 a path outside the vault, a missing path or text, a base that is not a whole number
-//   GET  /note      ?path=P[&version=N]
-//       200 { path, version, text, writer, at, hash, clash }       (latest, or the version asked for)
+//   POST /save      { id, base, kid, blob }
+//       200 { result: "saved", id, version }          `base` is the version the save starts from, 0 for a new note
+//       409 { error, current }                        the note is at version `current` (0 when there is no such note)
+//       400 a missing or wrong field, or a field that is not one of these four   413 a blob over the limit
+//   GET  /note      ?id=I[&version=N]
+//       200 { id, version, kind, kid, blob, hash, writer, at }     (latest, or the version asked for)
 //       404 no such note or version, and the latest of a deleted note
-//   GET  /history   ?path=P
-//       200 { path, versions: [ { version, kind, writer, at, hash, merged, clash } ] }   (oldest first)
-//   GET  /list      [?folder=F]
-//       200 { notes: [ { path, version, at, clash } ] }            (every live note under F, or all of them)
-//   GET  /search    ?q=TEXT
-//       200 { results: [ { path, version } ] }                     (live notes whose latest text holds TEXT)
+//   GET  /history   ?id=I
+//       200 { id, versions: [ { version, kind, kid, writer, at, hash } ] }   (oldest first, no blobs)
+//   GET  /list
+//       200 { notes: [ { id, version, at, kid, hash } ] }          (every live note)
 //   GET  /changes   [?after=CURSOR][&limit=N]
-//       200 { changes: [ { path, version, kind, writer, at, hash, merged, clash, text, from? } ], next }
-//   POST /move      { from, to }
-//       200 { result: "moved", path: to, version }
-//       404 no such note   409 `to` is a live note
-//   POST /delete    { path }
-//       200 { result: "deleted", path, version }
-//       404 no such note
+//       200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }    (a delete has no blob)
+//   POST /delete    { id, base }
+//       200 { result: "deleted", id, version }
+//       404 no such note   409 { error, current } the note is at another version
+//   GET  /wraps
+//       200 { wraps: [ { kid, kind, wrap, writer, at } ] }
 //
-//   `kind` is "save", "move" or "delete". `merged` and `clash` are true or false. `at` is unix milliseconds.
-//   `writer` is the name of the identity that wrote the version ("owner", "agents", "recorder", ...). `hash` is a short
-//   text. A version number counts every version of the note, clash versions and the move and delete versions
-//   included, from 1.
-//   `clash` on a note read or a list entry says the note is flagged; on a history entry it says that version is a
-//   clash version. A resolving save names the note's current version as `base` and the clash version as `resolves`.
-//   A change's `from` is the old path, on a move.
-//   Without the owner's sign-in or an identity's bearer token every route answers 401 (not a redirect, not a 404). Who
-//   may touch which folder, and how a token is got, is in identity-world.ts.
+//   `kind` is "save" or "delete". `hash` is SHA-256 of the blob, 64 lower case hex characters. `at` is unix
+//   milliseconds. `writer` is the name of the identity that wrote the version ("owner", "agents", "recorder", ...).
+//   A version number counts every version of the note, a delete included, from 1.
+//   Without the owner's sign-in or an identity's bearer token every route answers 401 (not a redirect, not a 404). How a
+//   token is got, and the routes only the owner may call, are in identity-world.ts.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -75,7 +70,7 @@ export const OWNER_SECRET = "owner-secret-used-by-the-tests-only".padEnd(64, "x"
 /** A session cookie for someone who does not hold the owner's secret. */
 const STRANGER_COOKIE = `nexus_owner=${"b".repeat(64)}`;
 
-export const API = "/apps/nexus/api";
+export const API = "/nexus/api";
 
 export interface Answer {
   status: number;
@@ -112,8 +107,8 @@ export const nexusDb = (): D1Database | undefined => current?.NEXUS_DB;
 
 /** What an operator makes first: the identities the tests use, called through the real route as the owner. */
 const STARTING_IDENTITIES = [
-  { name: "agents", kind: "agent", rights: [{ path: "", access: "write" }, { path: "Private/", access: "none" }] },
-  { name: "recorder", kind: "app", rights: [{ path: "Podcasts/Transcripts/", access: "write" }] },
+  { name: "agents", kind: "agent" },
+  { name: "recorder", kind: "app" },
 ];
 
 /** A fresh database with the migrations applied, and a Worker's variables pointing at it. `settings` change or take away what the Worker is told. */
@@ -173,34 +168,37 @@ const query = (params: Record<string, string | number | undefined>): string => {
   return text ? `?${text}` : "";
 };
 
+/** A note as a device sends it: an id and the base64 of its encrypted blob (device-blobs.ts holds some). */
+export interface Sent { id: string; blob: string }
+
+/** The key number every blob in device-blobs.ts is under. */
+const DEFAULT_KID = 1;
+
 /** The routes, called as the person holding `cookie`. */
 export function vault(cookie: string | null, env?: Record<string, unknown>) {
   const get = (route: string, params: Record<string, string | number | undefined>) =>
     send("GET", `${API}/${route}${query(params)}`, cookie, undefined, env);
   const post = (route: string, body: unknown) => send("POST", `${API}/${route}`, cookie, body, env);
   return {
-    save: (path: string, text: string, options: { base?: number; resolves?: number } = {}) =>
-      post("save", { path, text, ...options }),
-    note: (path: string, version?: number) => get("note", { path, version }),
-    history: (path: string) => get("history", { path }),
-    list: (folder?: string) => get("list", { folder }),
-    search: (q: string) => get("search", { q }),
+    save: (note: Sent, base: number, kid = DEFAULT_KID) => post("save", { id: note.id, base, kid, blob: note.blob }),
+    note: (id: string, version?: number) => get("note", { id, version }),
+    history: (id: string) => get("history", { id }),
+    list: () => get("list", {}),
     changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
-    move: (from: string, to: string) => post("move", { from, to }),
-    remove: (path: string) => post("delete", { path }),
+    remove: (id: string, base: number) => post("delete", { id, base }),
+    wraps: () => get("wraps", {}),
   };
 }
 
 /** Every route once, with the smallest request that reaches it, for the tests that hold them all to one rule. */
 export const EVERY_ROUTE: ReadonlyArray<{ name: string; method: "GET" | "POST"; path: string; body?: unknown }> = [
-  { name: "save", method: "POST", path: `${API}/save`, body: { path: "Gate/x.md", text: "x\n" } },
-  { name: "note", method: "GET", path: `${API}/note?path=${encodeURIComponent("Gate/x.md")}` },
-  { name: "history", method: "GET", path: `${API}/history?path=${encodeURIComponent("Gate/x.md")}` },
+  { name: "save", method: "POST", path: `${API}/save`, body: { id: "gate-1", base: 0, kid: 1, blob: "AAAA" } },
+  { name: "note", method: "GET", path: `${API}/note?id=gate-1` },
+  { name: "history", method: "GET", path: `${API}/history?id=gate-1` },
   { name: "list", method: "GET", path: `${API}/list` },
-  { name: "search", method: "GET", path: `${API}/search?q=x` },
   { name: "changes", method: "GET", path: `${API}/changes` },
-  { name: "move", method: "POST", path: `${API}/move`, body: { from: "Gate/x.md", to: "Gate/y.md" } },
-  { name: "delete", method: "POST", path: `${API}/delete`, body: { path: "Gate/x.md" } },
+  { name: "delete", method: "POST", path: `${API}/delete`, body: { id: "gate-1", base: 1 } },
+  { name: "wraps", method: "GET", path: `${API}/wraps` },
 ];
 
 /**

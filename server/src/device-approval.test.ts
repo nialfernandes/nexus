@@ -5,6 +5,7 @@
 // __fixtures__/identity-world.ts for the shape of every answer). The page the owner sees is approval-page.test.ts.
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { ORIGIN, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
 import { device, manage, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
 
@@ -43,7 +44,7 @@ describe("a device starts a sign-in", () => {
 
     const answer = await started("lab-m");
     expect(answer.code).toMatch(/^[A-Za-z0-9-]{4,16}$/);
-    expect(answer.link).toBe(`${ORIGIN}/apps/nexus/approve?code=${encodeURIComponent(answer.code)}`);
+    expect(answer.link).toBe(`${ORIGIN}/nexus/approve?code=${encodeURIComponent(answer.code)}`);
     expect(answer.secret.length).toBeGreaterThanOrEqual(32);
     expect(answer.secret, "the code is on a phone's screen; the secret must not be the code").not.toBe(answer.code);
     expect(answer.expiresAt).toBe(now + TEN_MINUTES);
@@ -89,8 +90,8 @@ describe("the owner allows a sign-in and the device is handed its token once", (
     expect(typeof polled.token).toBe("string");
     expect(polled.token.length).toBeGreaterThanOrEqual(32);
 
-    expect(bodyOf(await vaultAs({ bearer: polled.token }).save("Device/first.md", "from a device\n"))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note("Device/first.md"))).toMatchObject({ writer: "agents" });
+    expect(bodyOf(await vaultAs({ bearer: polled.token }).save(GARDEN_V1, 0))).toMatchObject({ result: "saved" });
+    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: "agents" });
     expect(await tokensLabelled("lab-m")).toHaveLength(1);
   });
 

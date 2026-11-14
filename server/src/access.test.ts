@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseJsonc } from "./__fixtures__/jsonc";
+import { GARDEN_V1, GARDEN_V2, PODCAST_V1 } from "./__fixtures__/device-blobs";
 import { EVERY_ROUTE, appEnv, bodyOf, expectRefusal, nexusMigrations, send, setUpNexus, signInOwner, signInStranger, vault } from "./__fixtures__/nexus-world";
 
 const wrangler = readFileSync(join(import.meta.dirname, "../wrangler.jsonc"), "utf8");
@@ -45,16 +46,15 @@ describe("without the owner's sign-in every route answers 401", () => {
   });
 
   it("changes nothing for them: the owner's note is as it was, and a stranger's save left no note behind", async () => {
-    bodyOf(await vault(owner).save("Gate/x.md", "x\n"));
-    expect(bodyOf(await vault(owner).note("Gate/x.md"))).toMatchObject({ version: 1, text: "x\n" });
+    bodyOf(await vault(owner).save(GARDEN_V1, 0));
+    expect(bodyOf(await vault(owner).note(GARDEN_V1.id))).toMatchObject({ version: 1, blob: GARDEN_V1.blob });
 
-    expect((await vault(null).save("Gate/x.md", "overwritten\n", { base: 1 })).status).toBe(401);
-    expect((await vault(stranger).save("Gate/new.md", "sneaked in\n")).status).toBe(401);
-    expect((await vault(stranger).remove("Gate/x.md")).status).toBe(401);
-    expect((await vault(null).move("Gate/x.md", "Gate/y.md")).status).toBe(401);
+    expect((await vault(null).save(GARDEN_V2, 1)).status).toBe(401);
+    expect((await vault(stranger).save(PODCAST_V1, 0)).status).toBe(401);
+    expect((await vault(stranger).remove(GARDEN_V1.id, 1)).status).toBe(401);
 
-    expect(bodyOf(await vault(owner).note("Gate/x.md"))).toMatchObject({ version: 1, text: "x\n" });
-    expectRefusal(await vault(owner).note("Gate/new.md"), 404, "the note a stranger tried to make");
+    expect(bodyOf(await vault(owner).note(GARDEN_V1.id))).toMatchObject({ version: 1, blob: GARDEN_V1.blob });
+    expectRefusal(await vault(owner).note(PODCAST_V1.id), 404, "the note a stranger tried to make");
   });
 
   it("answers before it touches the database", async () => {
@@ -71,7 +71,7 @@ describe("without the owner's sign-in every route answers 401", () => {
   });
 
   it("lets the owner in", async () => {
-    for (const route of EVERY_ROUTE.filter((r) => r.name === "list" || r.name === "changes" || r.name === "search")) {
+    for (const route of EVERY_ROUTE.filter((r) => r.name === "list" || r.name === "changes" || r.name === "wraps")) {
       const answer = await send(route.method, route.path, owner, route.body);
       expect(answer.status, route.path).toBe(200);
     }

@@ -103,6 +103,9 @@ const ROUTES: readonly Route[] = [
   { method: "POST", name: "device/deny", who: "owner", run: async (c) => ok(await devices.deny(c.host, (await c.body()).code)) },
 ];
 
+/** The name of every route, so a test can hold each one to a rule and notice a route nobody tested. */
+export const ROUTE_NAMES: readonly string[] = [...new Set(ROUTES.map((r) => r.name))];
+
 const respond = (status: number, json: unknown): Response =>
   new Response(JSON.stringify(json), {
     status,

@@ -1,106 +1,91 @@
-// Reading from Nexus: one note (latest, or a given version), a note's history, a folder's list and a plain text
-// search over the latest versions. Through the Nexus Worker, as the owner (see __fixtures__/nexus-world.ts for the
-// routes and the shape of every answer).
+// Reading from Nexus: one note (latest, or a given version), a note's history and the list of live notes. Through the
+// Nexus Worker, as the owner (see __fixtures__/nexus-world.ts for the routes and the shape of every answer). There is no
+// search and no folder: the server holds blobs it cannot read, so finding a note by its words or its folder is for the
+// device, which holds the key.
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { bodyOf, expectRefusal, setUpNexus, signInOwner, vault, type Answer } from "./__fixtures__/nexus-world";
+import { GARDEN_V1, GARDEN_V2, PODCAST_V1 } from "./__fixtures__/device-blobs";
+import { API, bodyOf, expectRefusal, send, setUpNexus, signInOwner, vault } from "./__fixtures__/nexus-world";
 
 let owner: ReturnType<typeof vault>;
-
-const pathsIn = (answer: Answer): string[] => bodyOf(answer).notes.map((n: { path: string }) => n.path).sort();
-const found = (answer: Answer): string[] => bodyOf(answer).results.map((r: { path: string }) => r.path).sort();
+let cookie: string;
 
 beforeAll(async () => {
   await setUpNexus();
-  owner = vault((await signInOwner()).cookie);
+  cookie = (await signInOwner()).cookie;
+  owner = vault(cookie);
 });
 
 describe("reading one note", () => {
   it("gives the latest version, or the version asked for", async () => {
-    bodyOf(await owner.save("Read/three.md", "v1\n"));
-    bodyOf(await owner.save("Read/three.md", "v2\n", { base: 1 }));
-    bodyOf(await owner.save("Read/three.md", "v3\n", { base: 2 }));
+    bodyOf(await owner.save({ id: "read-three", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "read-three", blob: GARDEN_V2.blob }, 1));
+    bodyOf(await owner.save({ id: "read-three", blob: PODCAST_V1.blob }, 2));
 
-    expect(bodyOf(await owner.note("Read/three.md"))).toMatchObject({ path: "Read/three.md", version: 3, text: "v3\n" });
-    expect(bodyOf(await owner.note("Read/three.md", 1))).toMatchObject({ path: "Read/three.md", version: 1, text: "v1\n" });
-    expect(bodyOf(await owner.note("Read/three.md", 2))).toMatchObject({ path: "Read/three.md", version: 2, text: "v2\n" });
+    expect(bodyOf(await owner.note("read-three"))).toMatchObject({ id: "read-three", version: 3, blob: PODCAST_V1.blob });
+    expect(bodyOf(await owner.note("read-three", 1))).toMatchObject({ id: "read-three", version: 1, blob: GARDEN_V1.blob });
+    expect(bodyOf(await owner.note("read-three", 2))).toMatchObject({ id: "read-three", version: 2, blob: GARDEN_V2.blob });
+  });
+
+  it("gives every field the contract names, and no others", async () => {
+    bodyOf(await owner.save({ id: "read-fields", blob: GARDEN_V1.blob }, 0, 3));
+    const read = bodyOf(await owner.note("read-fields"));
+    expect(Object.keys(read).sort()).toEqual(["at", "blob", "hash", "id", "kid", "kind", "version", "writer"]);
   });
 
   it("answers 404 with a reason for a note or a version that is not there", async () => {
-    bodyOf(await owner.save("Read/real.md", "here\n"));
-    expectRefusal(await owner.note("Read/not real.md"), 404, "a note that is not there");
-    expectRefusal(await owner.note("Read/real.md", 9), 404, "a version that is not there");
-    expectRefusal(await owner.history("Read/not real.md"), 404, "the history of a note that is not there");
+    bodyOf(await owner.save({ id: "read-real", blob: GARDEN_V1.blob }, 0));
+    expectRefusal(await owner.note("read-not-real"), 404, "a note that is not there");
+    expectRefusal(await owner.note("read-real", 9), 404, "a version that is not there");
+    expectRefusal(await owner.history("read-not-real"), 404, "the history of a note that is not there");
+  });
+
+  it("refuses a version that is not a whole number from 1", async () => {
+    bodyOf(await owner.save({ id: "read-version", blob: GARDEN_V1.blob }, 0));
+    for (const asked of ["one", "0", "1.5", "-1"]) {
+      expectRefusal(await send("GET", `${API}/note?id=read-version&version=${asked}`, cookie), 400, `a version of ${asked}`);
+    }
   });
 });
 
-describe("a folder's list", () => {
-  it("holds the live notes under the folder, each with its latest number, its time and its clash flag", async () => {
-    bodyOf(await owner.save("Listing/Ideas/a.md", "a\n"));
-    bodyOf(await owner.save("Listing/Ideas/b.md", "b1\n"));
-    bodyOf(await owner.save("Listing/Ideas/b.md", "b2\n", { base: 1 }));
-    bodyOf(await owner.save("Listing/Work/c.md", "c\n"));
-
-    const ideas = await owner.list("Listing/Ideas");
-    expect(pathsIn(ideas)).toEqual(["Listing/Ideas/a.md", "Listing/Ideas/b.md"]);
-    const b = bodyOf(ideas).notes.find((n: { path: string }) => n.path === "Listing/Ideas/b.md");
-    expect(b).toMatchObject({ version: 2, clash: false });
-    expect(typeof b.at).toBe("number");
-
-    expect(pathsIn(await owner.list("Listing/Work"))).toEqual(["Listing/Work/c.md"]);
-  });
-
-  it("is a folder and not a name that starts the same way, and keeps the case of a path", async () => {
-    bodyOf(await owner.save("Folders/Ideas/in.md", "in\n"));
-    bodyOf(await owner.save("Folders/Ideas2/near.md", "near\n"));
-    bodyOf(await owner.save("Folders/ideas/lower.md", "lower\n"));
-    bodyOf(await owner.save("Folders/Ideas/Case.md", "upper case\n"));
-    bodyOf(await owner.save("Folders/Ideas/case.md", "lower case\n"));
-
-    expect(pathsIn(await owner.list("Folders/Ideas"))).toEqual(["Folders/Ideas/Case.md", "Folders/Ideas/case.md", "Folders/Ideas/in.md"]);
-    expect(pathsIn(await owner.list("Folders/ideas"))).toEqual(["Folders/ideas/lower.md"]);
-    // Two paths that differ only in case are two notes.
-    expect(bodyOf(await owner.note("Folders/Ideas/Case.md")).text).toBe("upper case\n");
-    expect(bodyOf(await owner.note("Folders/Ideas/case.md")).text).toBe("lower case\n");
-  });
-
-  it("with no folder holds every live note", async () => {
-    bodyOf(await owner.save("Whole vault/x.md", "x\n"));
-    bodyOf(await owner.save("Whole vault/deep/er/y.md", "y\n"));
-    const all = pathsIn(await owner.list());
-    expect(all).toContain("Whole vault/x.md");
-    expect(all).toContain("Whole vault/deep/er/y.md");
+describe("a note's history", () => {
+  it("is every version, oldest first, with its kind, key number, writer, time and hash, and no blob", async () => {
+    bodyOf(await owner.save({ id: "hist-1", blob: GARDEN_V1.blob }, 0, 2));
+    bodyOf(await owner.save({ id: "hist-1", blob: GARDEN_V2.blob }, 1, 3));
+    const history = bodyOf(await owner.history("hist-1"));
+    expect(history.versions.map((v: { version: number; kid: number }) => [v.version, v.kid])).toEqual([[1, 2], [2, 3]]);
+    for (const v of history.versions) {
+      expect(Object.keys(v).sort()).toEqual(["at", "hash", "kid", "kind", "version", "writer"]);
+    }
   });
 });
 
-describe("a plain text search over the latest versions", () => {
-  it("finds a note by a word in its latest text and returns its path and latest number", async () => {
-    bodyOf(await owner.save("Search/found.md", "a note about a giraffe\n"));
-    bodyOf(await owner.save("Search/other.md", "a note about a zebra\n"));
-    expect(bodyOf(await owner.search("giraffe")).results).toEqual([expect.objectContaining({ path: "Search/found.md", version: 1 })]);
+describe("the list of notes", () => {
+  it("holds the live notes by id, each with its latest number, its time, its key number and its hash", async () => {
+    bodyOf(await owner.save({ id: "list-a", blob: GARDEN_V1.blob }, 0, 4));
+    bodyOf(await owner.save({ id: "list-b", blob: PODCAST_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "list-b", blob: GARDEN_V2.blob }, 1));
+
+    const notes = bodyOf(await owner.list()).notes as Array<{ id: string; version: number; at: number; kid: number; hash: string }>;
+    const a = notes.find((n) => n.id === "list-a");
+    const b = notes.find((n) => n.id === "list-b");
+    expect(a).toMatchObject({ version: 1, kid: 4 });
+    expect(b).toMatchObject({ version: 2, kid: 1 });
+    expect(typeof a?.at).toBe("number");
+    expect(Object.keys(a ?? {}).sort()).toEqual(["at", "hash", "id", "kid", "version"]);
+    expect(b?.hash, "the hash of the latest version, not the first").toBe(bodyOf(await owner.note("list-b", 2)).hash);
   });
 
-  it("looks only at the latest version: a word that an edit removed no longer finds the note", async () => {
-    bodyOf(await owner.save("Search/edited.md", "first draft says okapi\n"));
-    bodyOf(await owner.save("Search/edited.md", "second draft says tapir\n", { base: 1 }));
-    expect(found(await owner.search("okapi"))).toEqual([]);
-    expect(found(await owner.search("tapir"))).toEqual(["Search/edited.md"]);
+  it("is in order of id, and has no blob in it", async () => {
+    const notes = bodyOf(await owner.list()).notes as Array<Record<string, unknown>>;
+    const ids = notes.map((n) => n.id as string);
+    expect(ids).toEqual([...ids].sort());
+    for (const n of notes) expect(n).not.toHaveProperty("blob");
   });
 
-  it("does not look inside a clash version, which is not the note's text", async () => {
-    bodyOf(await owner.save("Search/clashing.md", "one\ntwo\nthree\n"));
-    bodyOf(await owner.save("Search/clashing.md", "one\nTWO\nthree\n", { base: 1 }));
-    expect(bodyOf(await owner.save("Search/clashing.md", "one\nwombat\nthree\n", { base: 1 }), 409).result).toBe("clash");
-    expect(found(await owner.search("wombat"))).toEqual([]);
-    expect(found(await owner.search("TWO"))).toEqual(["Search/clashing.md"]);
-  });
-
-  it("takes the words as plain text: a percent sign or an underscore is not a wildcard", async () => {
-    bodyOf(await owner.save("Search/percent.md", "growth of 100% this year\n"));
-    bodyOf(await owner.save("Search/digits.md", "1000 things and 1_000 more\n"));
-    bodyOf(await owner.save("Search/underscore.md", "snake_case name\n"));
-    bodyOf(await owner.save("Search/plain.md", "snakeXcase name\n"));
-    expect(found(await owner.search("100%"))).toEqual(["Search/percent.md"]);
-    expect(found(await owner.search("snake_case"))).toEqual(["Search/underscore.md"]);
+  it("has no folder to ask for: a folder in the query changes nothing, and there is no search route", async () => {
+    const all = bodyOf(await owner.list()).notes;
+    expect(bodyOf(await send("GET", `${API}/list?folder=Ideas`, cookie)).notes).toEqual(all);
+    expectRefusal(await send("GET", `${API}/search?q=garden`, cookie), 404, "the old search route");
   });
 });

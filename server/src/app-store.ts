@@ -33,6 +33,9 @@ export function appStore(host: NexusHost, identity: string): AppStore {
     list: async () => (await operations.list(host, await as())).json,
     changes: async (after, limit) => (await operations.changes(host, await as(), after, limit)).json,
     remove: async (id, base) => (await operations.remove(host, await as(), { id, base })).json,
-    wraps: async () => (await operations.wraps(host)).json,
+    wraps: async () => {
+      await as();
+      return (await operations.wraps(host)).json;
+    },
   };
 }

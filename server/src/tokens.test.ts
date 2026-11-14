@@ -1,9 +1,10 @@
 // Tokens: an agent or a device calls Nexus with a bearer token. A token is a long random string, kept only as a
 // hash and shown once, tied to one identity with a label, stamped with the time it was last used, and revocable
 // at once. The owner's own sign-in keeps working as `owner`. Through the Nexus Worker; a token is got the way a device
-// gets one (see __fixtures__/identity-world.ts for the three calls, the rights model and the shape of every answer).
+// gets one (see __fixtures__/identity-world.ts for the three calls, what an identity may do and the shape of every answer).
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { GARDEN_V1, PODCAST_V1 } from "./__fixtures__/device-blobs";
 import { bodyOf, expectRefusal, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
 import { everythingStored, issueToken, manage, vaultAs, type Who } from "./__fixtures__/identity-world";
 
@@ -76,14 +77,14 @@ describe("a bearer token is how an agent or a device is let in", () => {
     const { token } = await issueToken(ownerCookie, "agents", "lab-in");
     const agent: Who = { bearer: token };
     expect((await vaultAs(agent).list()).status).toBe(200);
-    expect(bodyOf(await vaultAs(agent).save("Tokens/by-token.md", "hello\n"))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note("Tokens/by-token.md"))).toMatchObject({ writer: "agents" });
+    expect(bodyOf(await vaultAs(agent).save(GARDEN_V1, 0))).toMatchObject({ result: "saved" });
+    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: "agents" });
   });
 
-  it("lets a token made for owner write anywhere, as owner", async () => {
+  it("lets a token made for owner write, as owner", async () => {
     const phone: Who = { bearer: (await issueToken(ownerCookie, "owner", "the owner's phone")).token };
-    expect(bodyOf(await vaultAs(phone).save("Private/from-phone.md", "typed on the phone\n"))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note("Private/from-phone.md"))).toMatchObject({ writer: "owner" });
+    expect(bodyOf(await vaultAs(phone).save(PODCAST_V1, 0))).toMatchObject({ result: "saved" });
+    expect(bodyOf(await vaultAs(owner).note(PODCAST_V1.id))).toMatchObject({ writer: "owner" });
   });
 
   it("answers 401 to a token nobody made, an empty one, and a scheme that is not Bearer", async () => {
@@ -94,9 +95,10 @@ describe("a bearer token is how an agent or a device is let in", () => {
     expectRefusal(await vaultAs({ authorization: token }).list(), 401, "a real token with no scheme");
 
     // And a turned-away save keeps nothing.
-    expect((await vaultAs({ bearer: "still-not-a-token-0123456789abcdef0123456789" }).save("Tokens/never.md", "x\n")).status).toBe(401);
-    expect((await vaultAs({ authorization: `Basic ${token}` }).save("Tokens/never.md", "x\n")).status).toBe(401);
-    expectRefusal(await vaultAs(owner).note("Tokens/never.md"), 404, "the note a turned-away token tried to make");
+    const never = { id: "never-1", blob: GARDEN_V1.blob };
+    expect((await vaultAs({ bearer: "still-not-a-token-0123456789abcdef0123456789" }).save(never, 0)).status).toBe(401);
+    expect((await vaultAs({ authorization: `Basic ${token}` }).save(never, 0)).status).toBe(401);
+    expectRefusal(await vaultAs(owner).note(never.id), 404, "the note a turned-away token tried to make");
   });
 });
 
@@ -140,8 +142,9 @@ describe("a revoked token is turned away at once", () => {
     expect(bodyOf(await manage(owner).revoke(entry.id))).toMatchObject({ result: "revoked", id: entry.id });
 
     expectRefusal(await vaultAs({ bearer: lost.token }).list(), 401, "the revoked token");
-    expect((await vaultAs({ bearer: lost.token }).save("Tokens/after-revoke.md", "x\n")).status).toBe(401);
+    const after = { id: "after-revoke", blob: GARDEN_V1.blob };
+    expect((await vaultAs({ bearer: lost.token }).save(after, 0)).status).toBe(401);
     expect((await vaultAs({ bearer: kept.token }).list()).status, "the identity's other token").toBe(200);
-    expectRefusal(await vaultAs(owner).note("Tokens/after-revoke.md"), 404, "the note the revoked token tried to make");
+    expectRefusal(await vaultAs(owner).note(after.id), 404, "the note the revoked token tried to make");
   });
 });

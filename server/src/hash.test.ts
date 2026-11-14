@@ -1,24 +1,31 @@
-// The short hash kept with every version is FNV-1a over the text's UTF-8 bytes. These are the published test
-// values for the 64-bit form, so a change to the arithmetic is caught here and not in a version's hash years on.
+// The fingerprint kept with every version is SHA-256 of the encrypted blob, as 64 lower case hex characters. These are
+// the published test values of FIPS 180-4 (also in RFC 6234), so a change to what is hashed or how it is written is
+// caught here and not in a stored fingerprint years on. The hash is worked out by the host (the Cloudflare plug's
+// secrets), through blobHash.
 
 import { describe, expect, it } from "vitest";
-import { shortHash } from "./hash";
+import { blobHash } from "./hash";
+import { workerSecrets } from "./plugs/cloudflare/secrets";
 
-describe("shortHash", () => {
-  it("matches the published FNV-1a 64-bit values", () => {
-    expect(shortHash("")).toBe("cbf29ce484222325");
-    expect(shortHash("a")).toBe("af63dc4c8601ec8c");
-    expect(shortHash("foobar")).toBe("85944171f73967e8");
+const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+describe("blobHash", () => {
+  it("matches the published SHA-256 values", async () => {
+    expect(await blobHash(workerSecrets, bytes(""))).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    expect(await blobHash(workerSecrets, bytes("abc"))).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    expect(await blobHash(workerSecrets, bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")))
+      .toBe("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
   });
 
-  it("is 16 hex characters for any text, accents and emoji included", () => {
-    for (const text of ["", "x", "Café 日本語 🎙️\n", "a line\n".repeat(5000)]) expect(shortHash(text)).toMatch(/^[0-9a-f]{16}$/);
+  it("is 64 lower case hex characters for any bytes, every byte value included", async () => {
+    const every = Uint8Array.from({ length: 256 }, (_, n) => n);
+    expect(await blobHash(workerSecrets, every)).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("tells one text from another, down to a single character or a line ending", () => {
-    expect(shortHash("one\n")).not.toBe(shortHash("one"));
-    expect(shortHash("one\r\n")).not.toBe(shortHash("one\n"));
-    // The same letter as one character and as a letter plus an accent: two texts, so two hashes.
-    expect(shortHash("\u00e9")).not.toBe(shortHash("e\u0301"));
+  it("tells one blob from another, down to a single bit", async () => {
+    const one = Uint8Array.from([1, 2, 3, 4]);
+    const other = Uint8Array.from([1, 2, 3, 5]);
+    expect(await blobHash(workerSecrets, one)).toBe(await blobHash(workerSecrets, Uint8Array.from([1, 2, 3, 4])));
+    expect(await blobHash(workerSecrets, one)).not.toBe(await blobHash(workerSecrets, other));
   });
 });

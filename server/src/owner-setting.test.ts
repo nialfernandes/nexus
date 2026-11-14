@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OWNER_COOKIE } from "./plugs/cloudflare/signin";
 import { API, EVERY_ROUTE, OWNER_SECRET, bodyOf, expectRefusal, nexusEnv, send } from "./__fixtures__/nexus-world";
+import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { device, manage, sendAs, vaultAs } from "./__fixtures__/identity-world";
 
 afterEach(() => vi.restoreAllMocks());
@@ -29,17 +30,16 @@ describe("with no owner set, which is the default", () => {
   it("is not the address's job to be the owner: no address set means the address a request came to", async () => {
     const env = await nexusEnv({ NEXUS_ADDRESS: undefined });
     const started = bodyOf(await sendAs("POST", `${API}/device/start`, null, { identity: "owner", label: "no address" }, env));
-    expect(started.link.startsWith("https://nexus.example.test/apps/nexus/approve?code=")).toBe(true);
+    expect(started.link.startsWith("https://nexus.example.test/nexus/approve?code=")).toBe(true);
   });
 });
 
 describe("with an owner set", () => {
-  it("is that name, whatever it is: the cookie signs in as it, what it saves is written by it, and its rights cannot be set", async () => {
+  it("is that name, whatever it is: the cookie signs in as it, what it saves is written by it, and its name cannot be made again", async () => {
     const env = await nexusEnv({ NEXUS_OWNER: "alice" });
     const alice = { cookie: ownersCookie };
-    expect(bodyOf(await vaultAs(alice, env).save("Notes/a.md", "a\n"))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await sendAs("GET", `${API}/note?path=Notes%2Fa.md`, alice, undefined, env))).toMatchObject({ writer: "alice" });
-    expectRefusal(await manage(alice, env).setRights("alice", []), 400, "narrowing the owner");
+    expect(bodyOf(await vaultAs(alice, env).save(GARDEN_V1, 0))).toMatchObject({ result: "saved" });
+    expect(bodyOf(await sendAs("GET", `${API}/note?id=${GARDEN_V1.id}`, alice, undefined, env))).toMatchObject({ writer: "alice" });
     expectRefusal(await manage(alice, env).createIdentity("alice", "person"), 409, "making the owner's name again");
   });
 
@@ -88,7 +88,7 @@ describe("the address", () => {
   it("is what the approval link is built on when it is set, and a path on it is left off", async () => {
     const env = await nexusEnv({ NEXUS_ADDRESS: "https://nexus.example.org/ignored/path" });
     const started = bodyOf(await sendAs("POST", `${API}/device/start`, null, { identity: "owner", label: "set address" }, env));
-    expect(started.link).toBe(`https://nexus.example.org/apps/nexus/approve?code=${encodeURIComponent(started.code)}`);
+    expect(started.link).toBe(`https://nexus.example.org/nexus/approve?code=${encodeURIComponent(started.code)}`);
   });
 
   it("does not change where the Worker answers: the routes are the same on any address", async () => {
@@ -122,12 +122,12 @@ describe("the owner's first sign-in for a device", () => {
 describe("the Worker's own addresses", () => {
   it("answers 404 in plain words to an address that is not Nexus's, and a page that needs the owner is not sent to anyone else", async () => {
     const env = await nexusEnv();
-    for (const path of ["/", "/apps/nexus", "/apps/other", "/favicon.ico"]) {
+    for (const path of ["/", "/nexus", "/nexus/", "/nexus/other", "/apps/nexus", "/apps/other", "/favicon.ico"]) {
       const answer = await send("GET", path, ownersCookie, undefined, env);
       expect(answer.status, path).toBe(404);
       expect(answer.body, path).toBeNull();
     }
-    expect((await send("GET", "/apps/nexus/approve", null, undefined, env)).status).toBe(401);
-    expect((await send("POST", "/apps/nexus/approve", ownersCookie, {}, env)).status, "only a GET opens the page").toBe(404);
+    expect((await send("GET", "/nexus/approve", null, undefined, env)).status).toBe(401);
+    expect((await send("POST", "/nexus/approve", ownersCookie, {}, env)).status, "only a GET opens the page").toBe(404);
   });
 });
