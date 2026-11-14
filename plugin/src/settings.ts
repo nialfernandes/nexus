@@ -11,7 +11,7 @@ import { isSetUp } from "./state";
 import type { PluginData } from "./types";
 
 /** What the address field shows, greyed, while it is empty: the shape of an address, not a real one. */
-const ADDRESS_EXAMPLE = "https://nexus.example.com/api";
+const ADDRESS_EXAMPLE = "https://nexus.example.com/apps/nexus/api";
 
 /** What the person sees while a sign-in waits for them to allow it. */
 interface Waiting {
