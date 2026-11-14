@@ -2,7 +2,7 @@
   "name": "nexus-server",
   "version": "0.1.0",
   "private": true,
-  "description": "The Nexus sync server: notes and every version of them, kept in a SQL database, behind a small HTTP API. Runs on Cloudflare today and is written to run on any host.",
+  "description": "The Nexus sync server: every version of every note, kept as the encrypted blob a device made, in a SQL database, behind a small HTTP API. It cannot read a note. Runs on Cloudflare today and is written to run on any host.",
   "license": "MIT",
   "type": "module",
   "engines": {

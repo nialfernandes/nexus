@@ -71,8 +71,8 @@ export interface NexusSignIn {
  * What the person who runs this Nexus has chosen. Each setting is optional, and left out means none.
  *
  *   owner    The name of the identity that alone may manage identities, tokens and the key wraps and answer a
- *            device's sign-in. None means Nexus has no owner, so no browser session
- *            is let in and nobody can approve a device: Nexus stays closed until an owner is named.
+ *            device's sign-in. None means Nexus has no owner, so no browser session is let in and nobody can
+ *            approve a device: Nexus stays closed until an owner is named.
  *   address  The public address of this Nexus (such as https://nexus.example.org), used to build the link a device
  *            is handed to open the approval page. None means the address the request itself arrived on.
  */
