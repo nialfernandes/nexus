@@ -9,13 +9,16 @@
 > text, and whoever runs it can read them. The encrypted server has not been built.
 > Until it has, do not use Nexus for notes you want to keep private.
 
-Nexus keeps a person's notes in sync across their devices and across the
-assistants they work with, so the notes can act as a second brain that every tool
-sees the same way. Notes are plain Markdown files in an Obsidian vault. A small
-server stores each note's versions and passes changes between devices. The server
-is designed to run on any host: the first host supported is Cloudflare, and the
-plan is to add others, such as a Kubernetes cluster or a single machine at home.
-Nexus is still being built, and its parts are arriving in stages.
+Nexus is end-to-end encrypted notes and sync that works with any notes app. It
+keeps a person's notes in sync across their devices and across the assistants they
+work with, so the notes can act as a second brain that every tool sees the same
+way. Notes are plain Markdown text. You reach them through whichever way in suits
+you: the [Obsidian plugin](plugin/) is one, a web page served by the server is
+another, and a notes app of Nexus's own may follow. A small server stores each
+note's versions and passes changes between devices. The server is designed to run
+on any host: the first host supported is Cloudflare, and the plan is to add
+others, such as a Kubernetes cluster or a single machine at home. Nexus is still
+being built, and its parts are arriving in stages.
 
 The design encrypts every note on your own device before it is sent, name and
 folder included, so the server holds only scrambled data and cannot read your
