@@ -4,7 +4,8 @@ A small test plugin for Obsidian. It checks, on the device you run it on, that
 the encryption Nexus plans to use actually works there, and how long it takes.
 
 It is not part of the sync and it does not sync anything. It reads none of your
-notes, makes no network requests and sends nothing anywhere. It writes one small
+notes and sends nothing anywhere: its own code makes no network requests, and the
+encryption library's WebAssembly is inside `main.js`. It writes one small
 file (`data.json` in its own plugin folder) holding the last run's results, so a
 run that the app cut short can still be reported.
 
