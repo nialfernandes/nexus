@@ -5,7 +5,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  EDIT_PAUSE, SYNC_EVERY, bodyOf, emptyNexus, fakeTimers, forbidFetch, loadSync, nexusTexts, openWorld, quiet, syncedDevice, type World,
+  EDIT_PAUSE, SYNC_EVERY, emptyNexus, fakeTimers, forbidFetch, loadSync, nexusTexts, openWorld, quiet, sentNote, syncedDevice, type World,
 } from "./world";
 
 let world: World;
@@ -45,9 +45,9 @@ describe("the pause before an edit goes up", () => {
     expect(device.log.to("POST save"), "typing again starts the pause again").toEqual([]);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(device.log.to("POST save").map((c) => c.body), "then one save, with the text as it is now and the stored version").toEqual([
-      { path: "Ideas/t.md", text: "second\n", base: 1 },
-    ]);
+    const saves = device.log.to("POST save");
+    expect(saves, "then one save").toHaveLength(1);
+    expect(await sentNote(world, saves[0]), "with the text as it is now and the stored version").toMatchObject({ path: "Ideas/t.md", text: "second\n", base: 1 });
     await quiet(device.log);
     expect(await nexusTexts(world)).toEqual({ "Ideas/t.md": "second\n" });
   });
@@ -63,10 +63,12 @@ describe("the pause before an edit goes up", () => {
     device.engine.edited("Ideas/b.md");
 
     await vi.advanceTimersByTimeAsync(EDIT_PAUSE - 1000);
-    expect(device.log.to("POST save").map((c) => c.body.path), "a's pause is over, b's is not").toEqual(["Ideas/a.md"]);
+    const sentPaths = async () => (await Promise.all(device.log.to("POST save").map((s) => sentNote(world, s)))).map((n) => n.path);
+    expect(await sentPaths(), "a's pause is over, b's is not").toEqual(["Ideas/a.md"]);
     await quiet(device.log);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(device.log.to("POST save").map((c) => c.body.path)).toEqual(["Ideas/a.md", "Ideas/b.md"]);
+    await quiet(device.log);
+    expect(await sentPaths()).toEqual(["Ideas/a.md", "Ideas/b.md"]);
     await quiet(device.log);
   });
 });
@@ -93,7 +95,7 @@ describe("when the changes come down", () => {
     const atThirty = asked();
     expect(atThirty, "again at 30 seconds").toBeGreaterThan(atStart);
 
-    bodyOf(await world.agents.save("Ideas/from-elsewhere.md", "hello\n"));
+    await world.elsewhere.create("Ideas/from-elsewhere.md", "hello\n");
     await vi.advanceTimersByTimeAsync(SYNC_EVERY);
     await quiet(device.log);
     const atSixty = asked();

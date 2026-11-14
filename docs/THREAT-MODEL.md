@@ -5,10 +5,11 @@ version 1: who it defends against, what the server can and cannot see, and what
 it does not try to defend against. No outside security firm has reviewed the
 design or the code. Until one has, treat every statement here as a goal that
 the code is trying to meet, not as something anyone has proved. Do not rely on
-Nexus for anything you cannot afford to lose. The server in this repository now
-stores only the blobs a device sends and never reads a note, but no device
-encrypts yet (the Obsidian plugin has not been updated to), so nothing is
-protected until one does.
+Nexus for anything you cannot afford to lose. The server in this repository
+stores only the blobs a device sends and never reads a note, and the Obsidian
+plugin encrypts every note on the device before it sends it. But the screens that
+make the vault key and unlock the vault are not built yet, so the plugin has no key
+and syncs nothing, and nothing is protected in use until they are.
 
 The exact byte layout of the encrypted data is in [FORMAT.md](FORMAT.md). This
 document says what that format is for.
@@ -24,13 +25,14 @@ when it matters.
 ## 1. Can the server operator read my notes?
 
 **Today, it depends on the device.** The server in this repository holds only the
-blobs a device sends and never reads a note, but no device encrypts yet. The
-server turns away a blob that does not begin the way an encrypted note does (the
-format's version, the key number, and at least the smallest length), so a device
-that forgot to encrypt is told so; it looks at nothing past that header, so it
-cannot tell a blob with the right header that is not really encrypted. The answer below, **No**,
-is what you get once every device you use encrypts, and it is not true of anything
-you can run now.
+blobs a device sends and never reads a note. The Obsidian plugin encrypts every
+note before it sends it, but it cannot yet be given a key (the screens for that are
+not built), so it syncs nothing. The server turns away a blob that does not begin the
+way an encrypted note does (the format's version, the key number, and at least the
+smallest length), so a device that forgot to encrypt is told so; it looks at nothing
+past that header, so it cannot tell a blob with the right header that is not really
+encrypted. The answer below, **No**, is what you get once every device you use
+encrypts, and it is not true of anything you can run in use now.
 
 **With a device that encrypts: No.** Each note is scrambled (encrypted) on
 your device with a key that stays on your devices, before it is sent anywhere.
@@ -194,9 +196,11 @@ Someone who can watch or interfere with traffic between a device and the server.
 
 ### 3.4 A lost or stolen device
 
-- **Locked, with disk encryption:** where you use the Obsidian plugin, the key is
-  held in Obsidian's local secret storage, which its own guide describes as local
-  storage and does not promise is encrypted on disk [S63]. Another way in keeps
+- **Locked, with disk encryption:** where you use the Obsidian plugin, the plan is
+  to hold the key in Obsidian's local secret storage, which its own guide describes as local
+  storage and does not promise is encrypted on disk [S63]. The plugin as it is now holds
+  the key in memory only, while the vault is unlocked, and writes it nowhere; the screens
+  that unlock it are not built yet. Another way in keeps
   the key wherever that app keeps secrets, and this document does not vouch for
   that place. The real defence is the device's own lock screen and disk encryption, which Nexus cannot
   add.

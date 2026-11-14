@@ -7,6 +7,7 @@ import { NexusSettingTab } from "./settings";
 import { STATE_KEY, joinState, sharedHasMore, signInLabel, splitState } from "./state";
 import { createSyncEngine } from "./sync";
 import type { Http, PluginData, SyncEngine, VaultPort } from "./types";
+import { NEVER_UNLOCKED } from "./unlock";
 
 /** A second "came to the front" within this long of the last one is the same coming back (the window and the page both say so). */
 const FRONT_SETTLE_MS = 2_000;
@@ -64,7 +65,7 @@ export default class NexusPlugin extends Plugin {
 
   async onload(): Promise<void> {
     // The data file is inside the vault and travels with it between devices, so it holds the address and nothing else.
-    // The token, the device's id and name, the cursor and the versions are this device's own: Obsidian's local storage.
+    // The token, the device's id and name, the cursor and what is known of each note are this device's own: Obsidian's local storage.
     const shared: unknown = await this.loadData();
     this.state = joinState(shared, this.app.loadLocalStorage(STATE_KEY));
     this.savedAddress = this.state.address;
@@ -82,6 +83,9 @@ export default class NexusPlugin extends Plugin {
         return plugin.deviceName();
       },
       now: () => new Date(),
+      // The setup screens that make and unlock the vault key are a later piece of work. Until they exist nothing is ever unlocked,
+      // so the plugin syncs nothing and the status line says the vault is locked.
+      unlock: NEVER_UNLOCKED,
       onStatus: () => this.showStatus(),
     });
 

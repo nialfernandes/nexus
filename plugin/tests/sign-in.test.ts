@@ -8,7 +8,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { APPROVE_PATH } from "./real-nexus";
 import {
-  DEVICE_NAME, ORIGIN, bodyOf, deviceRoutes, emptyNexus, forbidFetch, loadSignIn, makeDevice, manage, newLog, nexusOver, openWorld, type PluginData, type World,
+  DEVICE_NAME, ORIGIN, bodyOf, deviceRoutes, emptyNexus, forbidFetch, known, loadSignIn, makeDevice, manage, newLog, nexusOver, openWorld, type PluginData, type World,
 } from "./world";
 
 let world: World;
@@ -35,7 +35,7 @@ async function signedOutPlugin() {
   const { signIn } = await loadSignIn();
   const saved: PluginData[] = [];
   const http = nexusOver(newLog(), { online: true });
-  const data: PluginData = { address: world.address, user: world.user, token: null, cursor: null, versions: {} };
+  const data: PluginData = { address: world.address, user: world.user, token: null, cursor: null, notes: {} };
   const shown: Array<{ link: string; code: string }> = [];
   const opened: string[] = [];
   return {
@@ -147,7 +147,7 @@ describe("a token Nexus does not know", () => {
 
   it("leaves the plugin signed out, in plain words, with its token forgotten and the vault untouched", async () => {
     const token = await revokedToken("a token that will be revoked");
-    const device = await makeDevice(world, { files: { "Ideas/a.md": "my edit\n" }, versions: { "Ideas/a.md": 1 }, cursor: "0", token });
+    const device = await makeDevice(world, { files: { "Ideas/a.md": "my edit\n" }, notes: { "Ideas/a.md": known("Ideas/a.md", "the text it matched\n") }, cursor: "0", token });
 
     await expect(device.engine.push("Ideas/a.md")).resolves.toBeUndefined();
 
@@ -157,12 +157,12 @@ describe("a token Nexus does not know", () => {
     expect(device.engine.status(), "never with the token in it").not.toContain(token);
     expect(device.data().token, "the dead token is forgotten").toBeNull();
     expect(device.vault.texts(), "nothing in the vault changed").toEqual({ "Ideas/a.md": "my edit\n" });
-    expect(device.data().versions).toEqual({ "Ideas/a.md": 1 });
+    expect(device.data().notes["Ideas/a.md"].version, "and it still stands on the version it had").toBe(1);
   });
 
   it("sends nothing more until the person signs in again", async () => {
     const token = await revokedToken("a second token that will be revoked");
-    const device = await makeDevice(world, { files: { "Ideas/b.md": "my edit\n" }, versions: { "Ideas/b.md": 1 }, cursor: "0", token });
+    const device = await makeDevice(world, { files: { "Ideas/b.md": "my edit\n" }, notes: { "Ideas/b.md": known("Ideas/b.md", "the text it matched\n") }, cursor: "0", token });
     await device.engine.sync();
     expect(device.engine.status()).toMatch(/signed out/i);
     const sent = device.log.requests().length;

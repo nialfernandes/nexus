@@ -3,7 +3,7 @@
 // Nexus holds, in either direction and whichever way the sync starts. Against the in-memory Nexus (see world.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { EDIT_PAUSE, bodyOf, emptyNexus, fakeTimers, forbidFetch, makeDevice, nexusTexts, openWorld, syncedDevice, type World } from "./world";
+import { EDIT_PAUSE, emptyNexus, fakeTimers, forbidFetch, makeDevice, nexusTexts, openWorld, syncedDevice, type World } from "./world";
 
 let world: World;
 
@@ -43,7 +43,7 @@ describe("only notes", () => {
       expect(everythingSent, `no request carries ${marker}`).not.toContain(marker);
     }
     expect(device.log.reads().filter((p) => p !== "Ideas/a.md"), "and nothing but the note is read").toEqual([]);
-    expect(Object.keys(device.data().versions)).toEqual(["Ideas/a.md"]);
+    expect(Object.keys(device.data().notes)).toEqual(["Ideas/a.md"]);
     expect(device.vault.texts(), "the vault's other files are as they were").toEqual({ "Ideas/a.md": "a note\n", ...NOT_NOTES });
   });
 
@@ -73,11 +73,11 @@ describe("only notes", () => {
   });
 
   it("are all that comes down: a note arrives, a file in .obsidian or an attachment never does", async () => {
-    bodyOf(await world.agents.save("Ideas/ok.md", "a note\n"));
-    bodyOf(await world.agents.save(".obsidian/plugins/evil/main.js", "run this on the phone\n"));
-    bodyOf(await world.agents.save(".obsidian/app.json", "{}\n"));
-    bodyOf(await world.agents.save(".obsidian/snippets/tidy.md", "markdown, but inside .obsidian\n"));
-    bodyOf(await world.agents.save("Attachments/x.png", "pretend bytes\n"));
+    await world.elsewhere.create("Ideas/ok.md", "a note\n");
+    await world.elsewhere.create(".obsidian/plugins/evil/main.js", "run this on the phone\n");
+    const settings = await world.elsewhere.create(".obsidian/app.json", "{}\n");
+    await world.elsewhere.create(".obsidian/snippets/tidy.md", "markdown, but inside .obsidian\n");
+    await world.elsewhere.create("Attachments/x.png", "pretend bytes\n");
 
     const fresh = await makeDevice(world, { files: { "Mine/local.md": "mine\n" } });
     await fresh.engine.sync();
@@ -85,13 +85,14 @@ describe("only notes", () => {
       "Ideas/ok.md": "a note\n",
       "Mine/local.md": "mine\n",
     });
+    expect(fresh.engine.status(), "the files that are not notes are passed over without a word").toMatch(/last synced/i);
 
     const device = await syncedDevice(world, { "Ideas/ok.md": "a note\n", ".obsidian/app.json": '{"theme":"obsidian"}\n' });
-    bodyOf(await world.agents.save(".obsidian/plugins/evil2/main.js", "run this too\n"));
-    bodyOf(await world.agents.save("Attachments/y.png", "more pretend bytes\n"));
-    bodyOf(await world.agents.save("Ideas/later.md", "a later note\n"));
-    bodyOf(await world.agents.save(".obsidian/app.json", "{ }\n", { base: 1 }));
-    bodyOf(await world.agents.remove(".obsidian/app.json"));
+    await world.elsewhere.create(".obsidian/plugins/evil2/main.js", "run this too\n");
+    await world.elsewhere.create("Attachments/y.png", "more pretend bytes\n");
+    await world.elsewhere.create("Ideas/later.md", "a later note\n");
+    await world.elsewhere.update(settings.id, ".obsidian/app.json", "{ }\n");
+    await world.elsewhere.remove(settings.id);
     await device.engine.sync();
 
     expect(device.vault.texts(), "a pull brings down the note and only the note, and removes nothing outside the notes").toEqual({
@@ -100,5 +101,6 @@ describe("only notes", () => {
       "Mine/local.md": "mine\n",
       ".obsidian/app.json": '{"theme":"obsidian"}\n',
     });
+    expect(device.engine.status()).toMatch(/last synced/i);
   });
 });

@@ -9,8 +9,8 @@ for one host. The one plug today is for Cloudflare Workers and D1 (`src/plugs/cl
 
 **Status.** Not audited, like the rest of this repository (see the [top-level README](../README.md) and the
 [threat model](../docs/THREAT-MODEL.md), which says what the server can still see). The Obsidian plugin in `plugin/`
-has not been changed for this server and **does not sync with it until the plugin is updated** to encrypt and to use
-the routes below. Nothing is deployed.
+now encrypts every note and uses the routes below, but the screens that make and unlock the vault key are not built yet, so
+it has no key and **does not sync with this server yet**. Nothing is deployed.
 
 ## What it stores
 
