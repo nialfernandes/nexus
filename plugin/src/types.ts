@@ -46,10 +46,15 @@ export interface KnownNote {
   savedPath: string;
 }
 
-/** A note deleted here, and the version it was at, which is what Nexus needs to delete it. */
+/**
+ * A note deleted here, and the version it was at, which is what Nexus needs to delete it. The path and the fingerprint of its text
+ * are kept (on this device only) so that a note put back, with the same text, before the delete was sent is not deleted.
+ */
 export interface PendingDelete {
   id: string;
   version: number;
+  path?: string;
+  hash?: string;
 }
 
 export interface VaultPort {

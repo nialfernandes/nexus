@@ -85,7 +85,13 @@ const deleteList = (value: unknown): PendingDelete[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     const item = record(entry);
-    return typeof item?.id === "string" && item.id !== "" && typeof item.version === "number" ? [{ id: item.id, version: item.version }] : [];
+    if (typeof item?.id !== "string" || item.id === "" || typeof item.version !== "number") return [];
+    return [{
+      id: item.id,
+      version: item.version,
+      ...(typeof item.path === "string" ? { path: item.path } : {}),
+      ...(typeof item.hash === "string" ? { hash: item.hash } : {}),
+    }];
   });
 };
 

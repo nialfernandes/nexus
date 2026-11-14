@@ -107,6 +107,9 @@ class Locked extends Error {}
  */
 class Refused extends Error {}
 
+/** Thrown when a note cannot be placed yet because a note that is about to move still holds its path. It is put aside without a word and tried again at the end of the sync, after the sends. */
+class Waiting extends Error {}
+
 interface Disk {
   has(path: string): boolean;
   notes(): string[];
@@ -141,6 +144,10 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
   const index = createSearchIndex();
   /** The path of each known note by its id, kept beside data.notes and rebuilt at the start of every pull (see indexIds). */
   const byId = new Map<string, string>();
+  /** Notes put aside quietly in this sync (see Waiting) and tried again before it ends. */
+  const placeLater = new Set<string>();
+  /** The path of a note that was opened this run but is not tracked here (yet), so a message about it can say its name. It is the device's own, read out of a blob, and is never sent anywhere. */
+  const openedAs = new Map<string, string>();
 
   // ── what the engine knows ──────────────────────────────────────────────────
 
@@ -161,6 +168,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
 
   function indexIds(): void {
     byId.clear();
+    openedAs.clear();
     for (const [path, entry] of Object.entries(notes())) byId.set(entry.id, path);
   }
 
@@ -197,7 +205,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
 
   /** What a note is called in a message: its file name when this device knows it, else its id. */
   const labelOf = (id: string): string => {
-    const path = byId.get(id);
+    const path = byId.get(id) ?? openedAs.get(id);
     return path === undefined ? `the note ${id}` : nameOf(path);
   };
 
@@ -550,8 +558,17 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
   async function flushDeletes(): Promise<boolean> {
     const queue = data.pendingDeletes ?? [];
     if (queue.length === 0) return true;
+    const disk = await openDisk();
     for (let at = 0; at < queue.length; at++) {
-      const { id, version } = queue[at];
+      const { id, version, path, hash } = queue[at];
+      // A note that is back (made again, or renamed back) with the text it had is the same note, and is no longer a delete.
+      if (path !== undefined && hash !== undefined && notes()[path] === undefined && disk.has(path)) {
+        const back = await disk.read(path);
+        if (fingerprint(back) === hash) {
+          track(path, id, version, back);
+          continue;
+        }
+      }
       const reply = await send("POST", "delete", { body: { id, base: version } });
       if (!reply) {
         data.pendingDeletes = queue.slice(at);
@@ -572,7 +589,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     index.remove(path);
     if (!entry) return true; // never reached Nexus, or this plugin's own removal
     untrack(path);
-    if (entry.version > 0) (data.pendingDeletes ??= []).push({ id: entry.id, version: entry.version });
+    if (entry.version > 0) (data.pendingDeletes ??= []).push({ id: entry.id, version: entry.version, path, hash: entry.hash });
     await save();
     return flushDeletes();
   }
@@ -585,11 +602,14 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
   }
 
   /** A note Nexus holds that this device has no entry for: written here, matched if the same text is already here, kept both if not. */
-  async function adoptNew(disk: Disk, id: string, version: number, remote: NoteContent): Promise<void> {
+  async function adoptNew(disk: Disk, id: string, version: number, remote: NoteContent, final: boolean): Promise<void> {
     const target = remote.path;
     const holder = notes()[target];
     if (holder && holder.version > 0 && holder.id !== id) {
-      // Another note this device knows already has this path. The text is kept beside it, as a copy that is never sent, and nothing is lost.
+      // Another note this device knows has this path. It may be about to move (an edit of it is waiting to be sent, and Nexus may
+      // have moved it already), so the first time the note waits. If the path is still held after that, the text is kept beside it,
+      // as a copy that is never sent, and nothing is lost.
+      if (!final) throw new Waiting();
       const copy = clashCopyName(target, deps.device, deps.now(), (taken) => disk.has(taken));
       await disk.write(copy, remote.text);
       deps.notify(`Two notes in Nexus have the path ${nameOf(target)}. The second one's text is in ${nameOf(copy)}. Merge them by hand, then delete the copy.`);
@@ -606,23 +626,25 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
   }
 
   /** A note that stands in Nexus: written here when it is new or unchanged here; kept for the push when it has edits Nexus has not seen. */
-  async function applyLive(disk: Disk, id: string, now: Extract<Standing, { live: true }>): Promise<void> {
+  async function applyLive(disk: Disk, id: string, now: Extract<Standing, { live: true }>, final = false): Promise<void> {
     if ((data.pendingDeletes ?? []).some((pending) => pending.id === id)) return; // deleted here and not yet told: it is not brought back
     const path = byId.get(id);
     const entry = path === undefined ? undefined : notes()[path];
     if (path !== undefined && entry && now.version <= entry.version) return; // seen already, or this plugin's own save coming back
 
     const remote = await openNote(keysNow(), id, now.blob);
+    openedAs.set(id, remote.path);
+    if (!isNote(remote.path)) return; // not a note as far as this plugin goes (an attachment, a file in .obsidian): never written here, and nothing to say about it
     if (!isSafeNotePath(remote.path)) throw new Refused(unsafeNote(id));
     if (path === undefined || !entry) {
-      await adoptNew(disk, id, now.version, remote);
+      await adoptNew(disk, id, now.version, remote, final);
       return;
     }
 
     if (!disk.has(path)) {
       // The file is gone from the vault but no delete was seen: Nexus's note is put back, at the path it has now.
       untrack(path);
-      await adoptNew(disk, id, now.version, remote);
+      await adoptNew(disk, id, now.version, remote, final);
       return;
     }
     const local = await disk.read(path);
@@ -630,7 +652,8 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       dirty.add(path); // edits (or a rename) Nexus has not seen: sent with the old base, and merged on this device when Nexus refuses
       return;
     }
-    // Unchanged here: Nexus's version replaces it, and follows it to its new path when it has moved and the new name is free.
+    // Unchanged here: Nexus's version replaces it, and follows it to its new path when it has moved and the new name is free. When the
+    // new name is taken here the note keeps the name it has, and does not send the old one back: two devices must not rename it in turn.
     let at = path;
     if (remote.path !== path && !disk.has(remote.path)) {
       await disk.rename(path, remote.path);
@@ -638,7 +661,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       at = remote.path;
     }
     if (local !== remote.text) await disk.write(at, remote.text);
-    track(at, id, now.version, remote.text, remote.path);
+    track(at, id, now.version, remote.text);
   }
 
   /**
@@ -675,6 +698,11 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       return true;
     } catch (error) {
       if (error instanceof Disconnected || error instanceof Locked) throw error;
+      if (error instanceof Waiting) {
+        placeLater.add(id);
+        addPending(id); // the cursor moves past it, so it is also kept to be tried again on the next sync if this one ends early
+        return false;
+      }
       if (error instanceof Unreadable) {
         stick(id, unreadableNote(id), true);
       } else if (error instanceof Refused) {
@@ -697,7 +725,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     for (const id of waiting) {
       const done = await skipping(id, async () => {
         const remote = await fetchRemote(id);
-        if (remote && remote.kind === "save") await applyLive(disk, id, { live: true, version: remote.version, blob: remote.blob });
+        if (remote && remote.kind === "save") await applyLive(disk, id, { live: true, version: remote.version, blob: remote.blob }, true);
         else await applyGone(disk, id); // a 404: Nexus no longer has it, so nothing comes down (any other answer threw, and the note stayed)
       });
       if (done) {
@@ -710,12 +738,33 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
 
   async function applyStanding(standing: Map<string, Standing>): Promise<void> {
     const disk = await openDisk();
-    for (const [id, now] of standing) {
-      if (now.live) await skipping(id, () => applyLive(disk, id, now));
-    }
+    // Notes this device already has go first, so that one moved away from a path is out of the way when a new note comes to it.
+    const live = [...standing].flatMap(([id, now]) => (now.live ? [[id, now] as const] : []));
+    for (const [id, now] of live) if (byId.has(id)) await skipping(id, () => applyLive(disk, id, now));
+    for (const [id, now] of live) if (!byId.has(id)) await skipping(id, () => applyLive(disk, id, now));
     for (const [id, now] of standing) {
       if (!now.live) await skipping(id, () => applyGone(disk, id));
     }
+  }
+
+  /** Tries again the notes that were put aside to wait for a path (see Waiting), now that the sends are done. A path still held is kept as a copy. */
+  async function placeWaiting(): Promise<void> {
+    if (placeLater.size === 0) return;
+    const ids = [...placeLater];
+    placeLater.clear();
+    indexIds();
+    const disk = await openDisk();
+    for (const id of ids) {
+      const done = await skipping(id, async () => {
+        const remote = await fetchRemote(id);
+        if (remote && remote.kind === "save") await applyLive(disk, id, { live: true, version: remote.version, blob: remote.blob }, true);
+      });
+      if (done) {
+        data.pendingPulls = (data.pendingPulls ?? []).filter((waitingId) => waitingId !== id);
+        stuck.delete(id);
+      }
+    }
+    await save();
   }
 
   async function pull(cursor: string): Promise<boolean> {
@@ -747,7 +796,9 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     data.cursor = feed.next;
     await save();
     await scan();
-    return pushDirty();
+    const sent = await pushDirty();
+    if (sent) await placeWaiting();
+    return sent;
   }
 
   // ── the engine ─────────────────────────────────────────────────────────────
@@ -762,7 +813,9 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     await retryPulls();
     if (!(await pull(data.cursor))) return false;
     if (!scanned) await scan();
-    return pushDirty();
+    const sent = await pushDirty();
+    if (sent) await placeWaiting();
+    return sent;
   }
 
   /** Reads every note into the search index, and drops the ones that have left the vault. The index needs no key and no Nexus. */

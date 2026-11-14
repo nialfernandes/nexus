@@ -105,7 +105,7 @@ describe("a local edit goes up", () => {
     device.network.online = true;
     await device.engine.push("Ideas/lost.md");
     expect(device.data().notes["Ideas/lost.md"]).toMatchObject({ id: idMade.id, version: 1 });
-    expect(Object.keys(bodyOf(await world.owner.list()).notes), "one note in Nexus, not two").toHaveLength(1);
+    expect(bodyOf(await world.owner.list()).notes, "one note in Nexus, not two").toHaveLength(1);
   });
 
   it("finds its own first save already there when the answer was lost, and does not make a second note or a clash", async () => {
@@ -121,7 +121,7 @@ describe("a local edit goes up", () => {
     expect(device.data().notes["Ideas/landed.md"]).toMatchObject({ id, version: 1 });
     expect(device.notices).toEqual([]);
     expect(device.vault.texts()).toEqual({ "Ideas/landed.md": "fresh\n" });
-    expect(Object.keys(bodyOf(await world.owner.list()).notes)).toHaveLength(1);
+    expect(bodyOf(await world.owner.list()).notes).toHaveLength(1);
   });
 
   it("sends the same text twice only once: an edit that changes nothing is not a new version", async () => {
