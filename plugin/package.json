@@ -1,0 +1,21 @@
+{
+  "name": "nexus-obsidian",
+  "version": "0.2.0",
+  "private": true,
+  "description": "The Nexus plugin for Obsidian: keeps every note in a vault in step with Nexus, both ways.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run build && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "obsidian": "1.14.4",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

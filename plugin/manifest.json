@@ -1,0 +1,9 @@
+{
+  "id": "nexus",
+  "name": "Nexus",
+  "version": "0.2.0",
+  "minAppVersion": "1.8.7",
+  "description": "Keeps every note in this vault in step with Nexus, both ways, on desktop and mobile.",
+  "author": "Nexus contributors",
+  "isDesktopOnly": false
+}
