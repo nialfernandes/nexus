@@ -41,3 +41,45 @@ export const RECOVERY_WRAP = "AQJAQUJDREVGR0hJSktMTU5PUFFSU1RVVldrhUO1GMjMrCdexS
 
 /** The password wrap of docs/FORMAT.md section 10, as base64. */
 export const PASSWORD_WRAP = "AQMAAQAAAAAAAwAAAAFgYWJjZGVmZ2hpamtsbW5vQEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXqr9cLKjvVIoDLYRYO0Z6cl9+oIBquukCOataQ1tAWASfO4GOWlMf1lhXflYNjusP";
+
+// The same podcast note as PODCAST_V1, encrypted under other vault keys, for the tests that need a blob whose header names
+// another kid. Made the same way as the blobs above (the same vault id, note id, record and test vault key bytes 00 01 ... 1f),
+// with kid 0, 7 and 4294967295; each was opened again by decryptNote. Each is 301 bytes, the smallest a new blob can be.
+
+/** Under vault key number 0, the smallest kid. */
+export const PODCAST_KID_0 = {
+  id: "n-2",
+  kid: 0,
+  blob: "AQAAAACLtZjGMFoKlYGpQcA1czGwpOKjAS37tzHBNnPyY2nwYt9qwN5TD05J0pE9oIzQLk+JBkXV4AkqcHEodxRI3TEy/dATrO3iKhh78drNfasiKnVccWdIN1kHde3143O5GSNAG9IGfmnspZFVMUh93tcRs86C2VXMPePBekuzY0wcB3TMc6/4ruBpAhKNOfiFp8kak55r/jQkV8rNdghWv2gzoyoG6PMtu0T16bnM0ubECIqslvCAIFVtNXE5bCJ87UPhGu4ElTZHd5AQagHwhzNeC+l81Zk/ksNCibQ7NfwLHdLC5IY0dSppYpUHCGG4KHVl0BzDzIuzWExpEkp9v/4nRlSobNpHP878olZaNg7wm5xACBoOJoJnsi453cdEQFblowUzI8fGmA==",
+};
+
+/** Under vault key number 7. */
+export const PODCAST_KID_7 = {
+  id: "n-2",
+  kid: 7,
+  blob: "AQAAAActzTlL0ca24QNqZnU6VDE9Ieh4gYV8nxBXk/8ACP20N5MZGR5KNaAhSCOnOFvXPmeXJPtqxa3RF8NNw/eie493pYL/QphQ6BqXGBBj7vmppMjXkcdnqJpFE96BQjd55b6vIoeG5qfDs9Kmqs06vviZjnWLQxeHx7mFPLtR+nGP/mYIrWoFz8LFnOV2CBBId6AzHTB3DXuVfG0T6fWko/kw4L98SMBwL4BLcIhP4wDhoJOST+Gmh18Gnv1i9aNsDx17YBf2RBpJtLvKZtR6O95mThI5eJCJpCzUdfF5k8WNz8qsTMnsLEYFzVGJCOhOeYN3JcnhRw6hEh38SzQmLDia/RcxUJk14nasreMdsryCbWhX/PD3qopcvMnSdwWadmVfgwjViAqKJg==",
+};
+
+/** Under vault key number 4294967295, the largest kid. */
+export const PODCAST_KID_MAX = {
+  id: "n-2",
+  kid: 4294967295,
+  blob: "Af////8xUvKWAFgvcmfHDXoVSQc4hLqBbq4XWjX/dh1HR7LycO+8ZDwcR4ur7khfmlx6zwjW28ake4Ka+rIGto3eyiJTuxoHPScxeDE5xwdpjwZsdlnaKjeYO54DiasiH6I/rCmBak4+wLeZdRgVaxDUInu0rdrzlNqS8brdA3qL+qEq4s0Y91sQKjeGXPNVjjmfve9MrvrZCqCwxaw3KjVnxwtZ1ePoedMhNJGN01FgTDtkxDy4swnBrpc835kRwnjHys4OLh3+Na3vRv/zDp/QHcBiLL02fPuH7/Ov4kSTJbLqCyy2kOKb5+FgZ1SnRKu2KVCgRu0SRZHSJnARx+5Vx40V8HmCLMcJQmXbvc7ofIPP52PQF+LbX9dRUA8DXi33NfA29sKWIK9a8w==",
+};
+
+// Recovery wraps made by the real @nexus/crypto, for the tests that keep a wrap under more than one kid, or replace one.
+// Each wraps the same test vault key (00 01 ... 1f) under a second Recovery Key (the bytes 80 81 ... 9f), for vault-1 and
+// the kid in its name, and was opened again by unwrapVaultKeyWithRecoveryKey. RECOVERY_WRAP above is under kid 1 and the
+// first Recovery Key, so RECOVERY_WRAP_KID_1_AGAIN is what the owner keeps after changing the Recovery Key.
+
+/** The Recovery wrap for kid 0. */
+export const RECOVERY_WRAP_KID_0 = "AQIvwq33HKHvaIGxRu+FlHXAAfRzbeHFCbHnaavS1S2+/1sRl9MvBDoKcYA1xWXJlEB4Z38Di8ZNt0Sj4csg3Cjafo4n7IxBeBo=";
+
+/** The Recovery wrap for kid 1 under the second Recovery Key: it replaces RECOVERY_WRAP. */
+export const RECOVERY_WRAP_KID_1_AGAIN = "AQKy7fWecBWMVzoKflt8a7MfPtql00Mx7veBC3Z/SvUPOtvOy21AXGq+vxT2mYQqmA/E8+/0rlRx4SIklaKzwXC7W+rBnXkK4zA=";
+
+/** The Recovery wrap for kid 2. */
+export const RECOVERY_WRAP_KID_2 = "AQIcD8OzTEOPjbdgnjMXkUKmKjIYVE+HsXe4I4bOYQTlpQ/mIgruBpiFBEGd46LF01vCVNeq2rX5Zsz26Bid+aGNaIA9SmvjUc0=";
+
+/** The Recovery wrap for kid 4294967295. */
+export const RECOVERY_WRAP_KID_MAX = "AQKuy7V4eaQ+MMsJWUOCZJn4NIkP4JivX2SDpEwf1d30IsZ1U0uloV9NWKrAB9RY3NG5fCt2qUWuVqdFWvrp7Jo4w2OfRlXYbWM=";

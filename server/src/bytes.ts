@@ -1,5 +1,6 @@
 // Bytes as text. A device sends an encrypted note, or a wrap, as standard base64 (RFC 4648, with the `=` padding) inside
-// JSON. Nexus checks that it is base64 and how long it is, and keeps it as sent. It never looks inside.
+// JSON. Nexus checks that it is base64 and how long it is, and keeps it as sent. It never opens it: all it reads is
+// the header (header.ts).
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

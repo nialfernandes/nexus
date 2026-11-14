@@ -23,12 +23,14 @@
 //
 //   Every route is under /nexus/api (and, for one release, /apps/nexus/api: see prefixes.test.ts). A note is named by
 //   its id, which the device chose at random: 1 to 128 letters, digits, hyphens or underscores. It is never a path.
-//   A blob and a wrap are standard base64 of bytes the server cannot read.
+//   A blob and a wrap are standard base64 of bytes the server cannot read. It checks only their header: a note blob begins with
+//   the version byte 1, then the save's kid, and is at least 301 bytes; a wrap begins with 1 and then 2 (recovery) or 3
+//   (password) and is at least 74 or 102 bytes. A refusal for that is a 400 with a `reason` (blob-header.test.ts).
 //
 //   POST /save      { id, base, kid, blob }
 //       200 { result: "saved", id, version }          `base` is the version the save starts from, 0 for a new note
 //       409 { error, current }                        the note is at version `current` (0 when there is no such note)
-//       400 a missing or wrong field, or a field that is not one of these four   413 a blob over the limit
+//       400 a missing or wrong field, or a field that is not one of these four, or a blob whose header is not an encrypted note's   413 a blob over the limit
 //   GET  /note      ?id=I[&version=N]
 //       200 { id, version, kind, kid, blob, hash, writer, at }     (latest, or the version asked for)
 //       404 no such note or version, and the latest of a deleted note
