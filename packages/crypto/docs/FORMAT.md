@@ -79,7 +79,7 @@ says little about the size of the note.
 
 So every record is padded to **at least 256 bytes** before Padmé is applied: a
 one-line note and a note of two hundred bytes give blobs of the same size, and
-only records of 255 bytes or more show a length, rounded by Padmé.
+only records of 256 bytes or more show a length, rounded by Padmé.
 
 **Padmé** (Nikitin et al., 2018) for a length `L`:
 

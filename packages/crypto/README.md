@@ -29,7 +29,8 @@ const note = await decryptNote(vaultKey, context, blob); // { path, text }
 ```
 
 Every refusal is a `NexusCryptoError` with a `code` (see FORMAT.md, "Errors").
-Wrong key, wrong ids and damaged data all give `decryption-failed`; the cipher
+A blob under another `kid` than expected gives `wrong-kid`. Wrong key, wrong
+note id or vault id, and damaged data all give `decryption-failed`; the cipher
 cannot tell them apart, and nothing is returned.
 
 The rest of the surface:
