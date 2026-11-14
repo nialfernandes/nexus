@@ -22,6 +22,7 @@
 
 import { noteId, bytesOf, kidOf, MAX_BLOB_BYTES, onlyFields, optionalVersion, wholeNumber } from "./fields";
 import { blobHash } from "./hash";
+import { checkNoteBlob } from "./header";
 import type { NexusHost, SqlDb, SqlStatement } from "./ports";
 import { stmt } from "./ports";
 import { Refusal } from "./refusal";
@@ -123,6 +124,7 @@ export async function save(host: NexusHost, caller: Caller, input: SaveInput): P
   const base = wholeNumber(input.base, "base", 0);
   const kid = kidOf(input.kid);
   const { text: blob, bytes } = bytesOf(input.blob, "blob", MAX_BLOB_BYTES);
+  checkNoteBlob(bytes, kid);
   const hash = await blobHash(host.secrets, bytes);
   const writer = caller.name;
   const { sql } = host;

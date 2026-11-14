@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { GARDEN_V1, GARDEN_V2, PODCAST_V1 } from "./__fixtures__/device-blobs";
+import { GARDEN_V1, GARDEN_V2, PODCAST_KID_0, PODCAST_KID_7, PODCAST_KID_MAX, PODCAST_V1 } from "./__fixtures__/device-blobs";
 import { API, bodyOf, expectRefusal, send, setUpNexus, signInOwner, vault } from "./__fixtures__/nexus-world";
 
 let owner: ReturnType<typeof vault>;
@@ -43,13 +43,13 @@ describe("the worked example: a save at version 0, a second one at version 0, an
 describe("a first save and the saves after it", () => {
   it("keeps the blob exactly as sent, with the kid, who saved it, when, and SHA-256 of the blob", async () => {
     const before = Date.now();
-    expect(bodyOf(await owner.save(PODCAST_V1, 0, 7))).toMatchObject({ result: "saved", id: PODCAST_V1.id, version: 1 });
+    expect(bodyOf(await owner.save(PODCAST_KID_7, 0, PODCAST_KID_7.kid))).toMatchObject({ result: "saved", id: PODCAST_KID_7.id, version: 1 });
 
-    const read = bodyOf(await owner.note(PODCAST_V1.id));
-    expect(read).toMatchObject({ id: PODCAST_V1.id, version: 1, kind: "save", kid: 7, blob: PODCAST_V1.blob, writer: "owner" });
+    const read = bodyOf(await owner.note(PODCAST_KID_7.id));
+    expect(read).toMatchObject({ id: PODCAST_KID_7.id, version: 1, kind: "save", kid: 7, blob: PODCAST_KID_7.blob, writer: "owner" });
     expect(read.at).toBeGreaterThanOrEqual(before);
     expect(read.at).toBeLessThanOrEqual(Date.now());
-    expect(read.hash).toBe(sha256OfBlob(PODCAST_V1.blob));
+    expect(read.hash).toBe(sha256OfBlob(PODCAST_KID_7.blob));
     expect(read.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -81,11 +81,12 @@ describe("a first save and the saves after it", () => {
     expect(await hashOf("hash-one")).not.toBe(await hashOf("hash-three"));
   });
 
-  it("keeps blobs of any length up to the limit, down to a single byte and up to the largest the limit allows", async () => {
-    const sizes: Record<string, number> = { "size-one": 1, "size-three": 3, "size-odd": 1001, "size-limit": 1_000_000 };
+  it("keeps blobs of any length up to the limit, down to the smallest blob and up to the largest the limit allows", async () => {
+    const sizes: Record<string, number> = { "size-smallest": 301, "size-odd": 1001, "size-limit": 1_000_000 };
     for (const [id, size] of Object.entries(sizes)) {
+      // Only the header has to be right (blob-header.test.ts): version 1 and kid 1, then bytes the server never reads.
       const bytes = Buffer.alloc(size, 0xa5);
-      bytes[0] = 0;
+      bytes.set([1, 0, 0, 0, 1]);
       bytes[size - 1] = 255;
       const blob = bytes.toString("base64");
       bodyOf(await owner.save({ id, blob }, 0));
@@ -164,8 +165,8 @@ describe("a save that is not a save is refused, and keeps nothing", () => {
     for (const kid of ["1", -1, 1.5, 4294967296, null, undefined]) {
       expectRefusal(await rawSave({ ...body, base: 0, kid }), 400, `a kid of ${JSON.stringify(kid)}`);
     }
-    for (const kid of [0, 1, 4294967295]) {
-      expect((await rawSave({ id: `kid-${kid}`, base: 0, kid, blob: GARDEN_V1.blob })).status, `kid ${kid}`).toBe(200);
+    for (const { kid, blob } of [PODCAST_KID_0, { kid: 1, blob: GARDEN_V1.blob }, PODCAST_KID_MAX]) {
+      expect((await rawSave({ id: `kid-${kid}`, base: 0, kid, blob })).status, `kid ${kid}`).toBe(200);
     }
     expectRefusal(await send("GET", `${API}/note?id=bad-numbers`, cookie), 404, "the note none of them made");
   });
@@ -187,7 +188,10 @@ describe("a save that is not a save is refused, and keeps nothing", () => {
     ] as const) {
       expectRefusal(await rawSave({ ...body, blob }), 400, what);
     }
-    expect((await rawSave({ ...body, blob: "AA==" })).status, "a canonical one-byte blob").toBe(200);
+    // A canonical one-byte blob is base64 as it should be written, so it gets as far as the header check, which refuses it.
+    const short = await rawSave({ ...body, blob: "AA==" });
+    expectRefusal(short, 400, "a canonical one-byte blob");
+    expect(short.body.reason).toBe("not-an-encrypted-blob");
   });
 
   it("is refused with 413 for a blob over the limit, and the largest is kept", async () => {

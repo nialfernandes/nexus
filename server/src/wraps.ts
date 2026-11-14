@@ -7,6 +7,7 @@
 // replace a wrap.
 
 import { bytesOf, kidOf, MAX_WRAP_BYTES, onlyFields } from "./fields";
+import { checkWrap } from "./header";
 import type { NexusHost } from "./ports";
 import { Refusal } from "./refusal";
 import type { Caller } from "./caller";
@@ -35,7 +36,8 @@ export async function setWrap(host: NexusHost, caller: Caller, input: Record<str
   onlyFields(input, ["kid", "kind", "wrap"], "A wrap");
   const kid = kidOf(input.kid);
   const kind = kindOf(input.kind);
-  const { text } = bytesOf(input.wrap, "wrap", MAX_WRAP_BYTES);
+  const { text, bytes } = bytesOf(input.wrap, "wrap", MAX_WRAP_BYTES);
+  checkWrap(bytes, kind);
   await host.sql.run(
     `INSERT INTO nexus_wraps (kid, kind, wrap, writer, saved_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (kid, kind) DO UPDATE SET wrap = excluded.wrap, writer = excluded.writer, saved_at = excluded.saved_at`,
