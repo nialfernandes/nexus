@@ -108,6 +108,12 @@ describe("the probe, run from the built main.js", () => {
     expect(sodium.detail).toContain("64 MiB, 3 passes, 1 lane");
   });
 
+  it("says how long libsodium took to be ready, since it starts loading before the probe runs", () => {
+    const load = byId(report, CHECK.sodiumLoad.id);
+    expect(load.status).toBe("pass");
+    expect(load.detail).toMatch(/was ready \d+(\.\d)? ms after the plugin file was loaded/);
+  });
+
   it("says where it ran", () => {
     expect(report.environment.obsidianVersion).toBe("test");
     expect(report.environment.userAgent).toBe("node-test");

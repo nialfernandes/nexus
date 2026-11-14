@@ -5239,7 +5239,14 @@ var CHECK = {
 };
 
 // src/probe.ts
-libsodium_wrappers_default.ready.catch(() => void 0);
+var moduleStartMs = now();
+var sodiumReadyAfterMs = null;
+libsodium_wrappers_default.ready.then(
+  () => {
+    sodiumReadyAfterMs = now() - moduleStartMs;
+  },
+  () => void 0
+);
 function now() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
@@ -5364,11 +5371,13 @@ async function runProbe(options = {}) {
   await check(CHECK.sodiumLoad, async () => {
     await withTimeLimit(libsodium_wrappers_default.ready, SODIUM_LOAD_LIMIT_MS, "libsodium");
     sodiumLoaded = true;
-    return `libsodium ${libsodium_wrappers_default.SODIUM_VERSION_STRING ?? "(version not reported)"} is ready`;
+    const version = `libsodium ${libsodium_wrappers_default.SODIUM_VERSION_STRING ?? "(version not reported)"}`;
+    if (sodiumReadyAfterMs === null) return `${version} is ready`;
+    return `${version} was ready ${roundMs(sodiumReadyAfterMs)} ms after the plugin file was loaded`;
   });
   await check(CHECK.xchacha, () => {
     needSodium();
-    const note = libsodium_wrappers_default.randombytes_buf(NOTE_BYTES);
+    const note = Uint8Array.from({ length: NOTE_BYTES }, (_2, i2) => i2 * 31 + 7 & 255);
     const key = libsodium_wrappers_default.randombytes_buf(libsodium_wrappers_default.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
     const nonce = libsodium_wrappers_default.randombytes_buf(libsodium_wrappers_default.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const associated = new TextEncoder().encode("probe:note");

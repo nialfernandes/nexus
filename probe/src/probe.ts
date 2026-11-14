@@ -29,11 +29,19 @@ import {
   XCHACHA_KAT,
 } from "./constants";
 
-// libsodium starts loading the moment it is imported. If it cannot (no
-// WebAssembly), the rejection may come before the load check is running, and
-// would be reported as an unhandled rejection. Mark it handled here; the load
-// check still awaits the same promise and sees the failure.
-sodium.ready.catch(() => undefined);
+// libsodium starts loading the moment it is imported, before the probe runs, so
+// note how long it took to be ready, counted from here. If it cannot load (no
+// WebAssembly), the rejection may come before the load check is running and
+// would be reported as an unhandled rejection: this also marks it handled. The
+// load check still awaits the same promise and sees the failure.
+const moduleStartMs = now();
+let sodiumReadyAfterMs: number | null = null;
+sodium.ready.then(
+  () => {
+    sodiumReadyAfterMs = now() - moduleStartMs;
+  },
+  () => undefined,
+);
 
 export type CheckStatus = "pass" | "fail" | "skipped";
 
@@ -250,12 +258,17 @@ export async function runProbe(options: RunProbeOptions = {}): Promise<ProbeRepo
   await check(CHECK.sodiumLoad, async () => {
     await withTimeLimit(sodium.ready, SODIUM_LOAD_LIMIT_MS, "libsodium");
     sodiumLoaded = true;
-    return `libsodium ${sodium.SODIUM_VERSION_STRING ?? "(version not reported)"} is ready`;
+    const version = `libsodium ${sodium.SODIUM_VERSION_STRING ?? "(version not reported)"}`;
+    if (sodiumReadyAfterMs === null) return `${version} is ready`;
+    return `${version} was ready ${roundMs(sodiumReadyAfterMs)} ms after the plugin file was loaded`;
   });
 
   await check(CHECK.xchacha, () => {
     needSodium();
-    const note = sodium.randombytes_buf(NOTE_BYTES);
+    // A fixed pattern, not random bytes: filling 100 KiB from libsodium's random
+    // source costs far more than the cipher, and the cipher's speed does not
+    // depend on what the bytes are.
+    const note = Uint8Array.from({ length: NOTE_BYTES }, (_, i) => (i * 31 + 7) & 0xff);
     const key = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
     const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const associated = new TextEncoder().encode("probe:note");
