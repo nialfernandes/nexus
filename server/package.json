@@ -1,0 +1,21 @@
+{
+  "name": "nexus-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Nexus sync server: notes and every version of them, kept in a SQL database, behind a small HTTP API. Runs on Cloudflare today and is written to run on any host.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260925.2",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
