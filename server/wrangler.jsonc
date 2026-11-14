@@ -24,7 +24,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  // The settings, each optional (src/ports.ts says what none means for each). The owner's secret is NOT set here:
+  // The settings, each optional (src/ports.ts says what leaving each out means). The owner's secret is NOT set here:
   // it is a Worker secret, set with `npx wrangler secret put NEXUS_OWNER_SECRET`.
   //   NEXUS_OWNER    the name of the owner's identity, such as "owner". Left out, Nexus has no owner and stays closed.
   //   NEXUS_ADDRESS  the public address, such as "https://nexus.example.org". Left out, the address a request came to.

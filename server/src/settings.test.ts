@@ -1,6 +1,7 @@
 // The settings the person running Nexus chooses, as the Cloudflare plug reads them from the Worker's variables: the
-// owner's name, the public address and the size of a page of the changes feed. Each is optional and left out means none. A value that is there but cannot be
-// used is an error that says which variable is wrong, never a quiet none.
+// owner's name, the public address and the size of a page of the changes feed. Each is optional: left out, the owner and
+// the address are none, and the page size is its default. A value that is there but cannot be used is an error that
+// says which variable is wrong, never a quiet none.
 
 import { describe, expect, it } from "vitest";
 import { settingsFromEnv } from "./plugs/cloudflare/settings";

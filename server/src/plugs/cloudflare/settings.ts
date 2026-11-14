@@ -1,5 +1,5 @@
 // The settings plug: reads what the person running Nexus chose from the Worker's variables. Each one is optional and
-// left out means none (ports.ts says what none means for each). A value that is there but cannot be used is an
+// left out means none, or for the page size its default (ports.ts says what leaving each out means). A value that is there but cannot be used is an
 // error, not a quiet none: a typo in the owner's name must not leave Nexus closed (or open) without anyone knowing.
 //
 //   NEXUS_OWNER    the owner's identity name: lower case letters, digits and hyphens, such as `owner`.
