@@ -8,6 +8,9 @@
 -- is never changed or removed: the whole text, who saved it, when, a short hash, and the path the note had at
 -- that version. A move keeps the note's id, so its history comes with it.
 --
+-- This is the plain text schema as it was first made. Migration 0003 later dropped nexus_notes and nexus_versions and made
+-- them again to hold encrypted blobs, with no path and no text: read it for the schema as it is now.
+--
 -- The SQL is the common ground of SQLite and Postgres. The statements are split at the semicolon when the tests
 -- build the tables, so this file holds no semicolon inside a comment, a literal or a trigger.
 
