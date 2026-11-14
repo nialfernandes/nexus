@@ -4,6 +4,10 @@
 > encryption design or of its code. Do not rely on it for anything you cannot
 > afford to lose until it has. What it is meant to protect against, and what it is
 > not, is written down in the [threat model](docs/THREAT-MODEL.md).
+>
+> **Not for real notes yet.** The server that exists today stores notes as plain
+> text, and whoever runs it can read them. The encrypted server has not been built.
+> Until it has, do not use Nexus for notes you want to keep private.
 
 Nexus keeps a person's notes in sync across their devices and across the
 assistants they work with, so the notes can act as a second brain that every tool

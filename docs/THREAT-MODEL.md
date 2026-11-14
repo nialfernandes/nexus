@@ -5,7 +5,9 @@ version 1: who it defends against, what the server can and cannot see, and what
 it does not try to defend against. No outside security firm has reviewed the
 design or the code. Until one has, treat every statement here as a goal that
 the code is trying to meet, not as something anyone has proved. Do not rely on
-Nexus for anything you cannot afford to lose.
+Nexus for anything you cannot afford to lose. The encrypted server is not built
+yet: the server in this repository today stores notes as plain text, and whoever
+runs it can read them.
 
 The exact byte layout of the encrypted data is in [FORMAT.md](FORMAT.md). This
 document says what that format is for.
@@ -82,6 +84,12 @@ a rounded size using a scheme called Padmé. The authors of that scheme show it
 limits what size reveals to a very small amount for a file of any size, at a cost
 of at most about 12% extra bytes, falling as files get larger [S77]. Notes are
 small, so the cost is tiny.
+
+Every record (the note's name and text, before encryption) is first padded to at
+least 256 bytes, and Padmé is applied after that ([FORMAT.md](FORMAT.md), section
+5). So a record under 256 bytes, such as a short note with its name, shows no
+length at all: every such note gives a blob of the same size. Only records of 256
+bytes or more show a length, and then only the rounded one.
 
 **What other products leave visible,** for comparison. Cryptomator leaves
 timestamps, the number of files and file sizes visible [S65]. Obsidian Sync
@@ -307,6 +315,18 @@ This is a summary so that the rules in section 6 have something to refer to.
   changes feed, history and the check that stops two saves overwriting each
   other.
 
+### Platform notes
+
+- **Lockdown Mode (Apple devices) turns WebAssembly off, and libsodium.js does not
+  load without it.** libsodium.js is meant to fall back to JavaScript [S48], but
+  in our probe's test with WebAssembly removed, libsodium did not load, so
+  nothing built on it ran: not the note cipher, not the sealed approval, and not
+  its Argon2id. The probe's own pure JavaScript Argon2id still gave the right
+  key in that test. The planned fix is a second, pure JavaScript engine for the
+  same operations, used when WebAssembly is missing. Until it exists, Nexus does
+  not work on a device with WebAssembly off. This was seen with the probe's test
+  setup; running the probe on a phone with Lockdown Mode on is still to do.
+
 ## 6. Design rules, and the failures they come from
 
 1. **No password-derived key on the server.** A copy of the key locked by a
@@ -339,11 +359,15 @@ This is a summary so that the rules in section 6 have something to refer to.
 9. **One audited library, plus a second as a cross-check.** libsodium
    (`libsodium-wrappers-sumo`) is the one library the product uses. In the tests
    only, `@noble/ciphers` and `@noble/hashes` are an independent second
-   implementation, and every ciphertext, key wrap and Argon2id output is checked
-   against them. The tests also use known-answer vectors from RFC 9106 for Argon2
-   [S34] and from the XChaCha20 draft [S35], and a failing case for each bad
-   input: wrong key, wrong note id, wrong `kid`, one changed byte, a truncated
-   blob. Each must fail to decrypt.
+   implementation, and every ciphertext and key wrap is checked against them.
+   Argon2id is checked in two steps, not one: libsodium's output must agree with
+   `@noble/hashes` at Nexus's own settings (64 MiB, 3 passes, 1 lane), and
+   `@noble/hashes` must reproduce the test vector in RFC 9106 [S34]. libsodium
+   cannot run that vector itself, because it uses one lane and takes no secret or
+   associated data, so the RFC reaches libsodium only through noble. The tests
+   also use known-answer vectors from the XChaCha20 draft [S35], and a failing
+   case for each bad input: wrong key, wrong note id, wrong `kid`, one changed
+   byte, a truncated blob. Each must fail to decrypt.
 10. **Nothing long-lived on the server is locked by a key a quantum computer
     would break** (3.1, 3.3).
 11. **Versions are pinned and listed** (section 7).
@@ -370,8 +394,12 @@ Two things to be plain about:
   [S36], and libsodium and noble-ciphers implement it the same way [S39][S43].
   If a finished standard matters more to you, AES-256-GCM is the fallback.
 - **Argon2id has no second audited implementation.** The noble library excludes
-  Argon2 from its audit [S44], so Argon2id output is checked against the RFC's
-  vectors [S34] and against noble's output, which is a check and not an audit.
+  Argon2 from its audit [S44]. What we do instead is two checks. libsodium and
+  `@noble/hashes` give the same output at Nexus's own settings (64 MiB, 3 passes,
+  1 lane), and noble gives the answer in the RFC 9106 test vector [S34].
+  libsodium cannot run that vector (it uses one lane and takes no secret or
+  associated data), so it is not checked against the RFC directly. This is a
+  check and not an audit.
 
 ## 8. What Nexus claims
 
