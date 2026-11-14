@@ -512,15 +512,15 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       }
       const key = notes()[path]?.id ?? path;
       if (error instanceof Unreadable) {
-        // The note's latest blob does not open, so there is nothing to merge into: the note here stays as it is.
+        // The note's latest blob does not open, so there is nothing to merge into: the note here stays as it is, and it is read
+        // again at the start of the next sync (if the blob is whole by then, the edit is merged and goes up).
         stick(error.id, unreadableNote(error.id), true);
         addPending(error.id);
-        dirty.add(path);
         return true;
       }
       if (error instanceof Refused) {
-        stick(key, error.message, true); // Nexus would not hand the note over: it goes again next sync
-        dirty.add(path);
+        stick(key, error.message, true); // Nexus would not hand the note over: it is read again at the start of the next sync
+        addPending(notes()[path]?.id ?? key);
         return true;
       }
       console.error("Nexus plugin:", error);

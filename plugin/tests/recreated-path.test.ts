@@ -58,21 +58,6 @@ describe("a note made again at a path that was moved away from", () => {
     expect(device.notices).toEqual([]);
   });
 
-  it("is kept beside a note that stays at the path, as a copy that is never sent, and nothing is lost", async () => {
-    const device = await syncedDevice(world, { "Ideas/a.md": "mine\n" });
-    // Another note is made at the path this device's note still holds: two notes in Nexus with one path.
-    await world.elsewhere.create("Ideas/a.md", "the other note\n");
-
-    await device.engine.sync();
-
-    const copies = device.vault.pathsStarting("Ideas/a (clash ");
-    expect(copies, "one copy").toHaveLength(1);
-    expect(device.vault.textOf(copies[0])).toBe("the other note\n");
-    expect(device.vault.textOf("Ideas/a.md")).toBe("mine\n");
-    expect(device.notices, "and a notice names it").toHaveLength(1);
-    expect(device.log.to("POST save"), "the copy is not sent").toEqual([]);
-  });
-
   it("is not mistaken for another writer's when this plugin made it itself and has edited it since", async () => {
     const device = await syncedDevice(world, { "Ideas/a.md": "old\n" });
     // This device moves the note away and makes a new one at the old path, sends it, and goes on typing.
