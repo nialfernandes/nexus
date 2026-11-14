@@ -102,16 +102,15 @@ describe("changing what was entered", () => {
     ...joinState({ address: ADDRESS, user: "demo" }, null, () => "id"),
     token: "nx_TOKEN",
     cursor: "7",
-    versions: { "Ideas/a.md": 2 },
-    hashes: { "Ideas/a.md": "h" },
-    pendingDeletes: ["gone.md"],
-    pendingPulls: ["locked.md"],
+    notes: { "Ideas/a.md": { id: "a-id", version: 2, hash: "h", savedPath: "Ideas/a.md" } },
+    pendingDeletes: [{ id: "gone-id", version: 1 }],
+    pendingPulls: ["locked-id"],
   });
 
   it("a different user signs the vault out and starts the sync over", async () => {
     const { plugin, field } = openTab(signedIn());
     await field("User name").typeAndLeave("other");
-    expect(plugin.state).toMatchObject({ user: "other", token: null, cursor: null, versions: {}, hashes: {}, pendingDeletes: [], pendingPulls: [] });
+    expect(plugin.state).toMatchObject({ user: "other", token: null, cursor: null, notes: {}, pendingDeletes: [], pendingPulls: [] });
     expect(plugin.state.address, "the address is kept").toBe(ADDRESS);
     expect(Notice.messages).toEqual(["Nexus user changed. Sign in again."]);
   });
@@ -119,7 +118,7 @@ describe("changing what was entered", () => {
   it("a different address signs the vault out and starts the sync over", async () => {
     const { plugin, field } = openTab(signedIn());
     await field("Nexus address").typeAndLeave("https://other.example.com/api");
-    expect(plugin.state).toMatchObject({ address: "https://other.example.com/api", user: "demo", token: null, cursor: null, versions: {} });
+    expect(plugin.state).toMatchObject({ address: "https://other.example.com/api", user: "demo", token: null, cursor: null, notes: {} });
     expect(Notice.messages).toEqual(["Nexus address changed. Sign in again."]);
   });
 

@@ -36,6 +36,7 @@
 
 import { decryptNote, encryptNote, generateVaultKey } from "@nexus/crypto";
 import { expect, vi } from "vitest";
+import { fingerprint } from "../src/notes";
 import { newNoteId } from "../src/state";
 import type { Http, KnownNote, PluginData, SignInDeps, SyncDeps, SyncEngine, VaultPort } from "../src/types";
 import type { VaultKeys } from "../src/unlock";
@@ -359,6 +360,11 @@ export async function emptyNexus(): Promise<void> {
 export const DEVICE_NAME = "Test iPhone";
 /** The clock every device runs: noon UTC, so its day is the same day in every time zone the tests run in. */
 export const NOW = new Date(Date.UTC(2026, 10, 14, 12, 0, 0));
+
+/** What a device knows of a note it last matched at `version` with `text`: for a test that starts a device partway through. */
+export function known(path: string, text: string, version = 1, id: string = newNoteId()): KnownNote {
+  return { id, version, hash: fingerprint(text), savedPath: path };
+}
 
 export interface DeviceOptions {
   /** The files the vault holds, when it is a new vault. */
