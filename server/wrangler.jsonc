@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nexus",
+  "compatibility_date": "2026-06-01",
+  "main": "src/plugs/cloudflare/worker.ts",
+  // The device approval page: the four files in public/nexus, served by the Worker to the owner only (page.ts).
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  // Nexus's own database: the notes and every version of them. Create it once with
+  //   npx wrangler d1 create nexus
+  // and put the id that command prints in `database_id` below. Migrations live in `migrations/`, and
+  //   npx wrangler d1 migrations apply nexus --remote
+  // applies them. See README.md.
+  "d1_databases": [
+    {
+      "binding": "NEXUS_DB",
+      "database_name": "nexus",
+      "database_id": "REPLACE-WITH-THE-ID-FROM-WRANGLER-D1-CREATE",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // The settings, each optional (src/ports.ts says what none means for each). The owner's secret is NOT set here:
+  // it is a Worker secret, set with `npx wrangler secret put NEXUS_OWNER_SECRET`.
+  //   NEXUS_OWNER    the name of the owner's identity, such as "owner". Left out, Nexus has no owner and stays closed.
+  //   NEXUS_ADDRESS  the public address, such as "https://nexus.example.org". Left out, the address a request came to.
+  "vars": {}
+}
