@@ -142,8 +142,7 @@ npm run typecheck # tsc --noEmit
 ```
 
 Node 22.13 or later is needed: the tests use `node:sqlite`, which prints an "experimental" warning that can be
-ignored. If `npm install` (not `npm ci`) fails with "Cannot read properties of null (reading 'edgesOut')", it is an
-npm fault with optional peer dependencies. The `.npmrc` in this folder avoids it.
+ignored.
 
 The tests run in plain Node. They call the real Worker entry (`src/plugs/cloudflare/worker.ts`), with a stand-in for
 D1 made from an in-memory SQLite database (`src/__fixtures__/d1-sqlite.ts`) that keeps D1's two behaviours Nexus
