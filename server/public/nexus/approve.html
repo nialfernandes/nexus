@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+
+    <!-- The look follows the device, applied before the first paint. -->
+    <script src="/apps/nexus/theme-boot.js"></script>
+
+    <title>Allow a device — Nexus</title>
+
+    <link rel="stylesheet" href="/apps/nexus/approve.css" />
+  </head>
+  <body>
+    <!-- THE DEVICE APPROVAL PAGE. A device asked Nexus for a sign-in and was handed a link to this page with a code on
+         it. approve.js reads the code from the address, asks Nexus what is being asked, and shows the question with
+         Allow and Deny. Each part below is hidden until the script has something true to put in it, and everything a
+         device sent (the label) goes in as text, never as markup. The page is drawn plainly for now. -->
+    <main class="approve">
+      <p class="approve__eyebrow">Nexus</p>
+      <h1 class="approve__question" id="question" hidden></h1>
+      <p class="approve__hint" id="hint" hidden>Only allow it if you just asked for it on that device. The code stops working ten minutes after it was made.</p>
+      <div class="approve__actions" id="actions" hidden>
+        <button type="button" class="approve__button approve__button--allow" id="allow">Allow</button>
+        <button type="button" class="approve__button" id="deny">Deny</button>
+      </div>
+      <p class="approve__status" id="status" role="status" hidden></p>
+      <p class="approve__alert" id="alert" role="alert" hidden></p>
+    </main>
+    <script src="/apps/nexus/approve.js"></script>
+  </body>
+</html>
