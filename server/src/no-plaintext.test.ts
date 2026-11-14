@@ -115,6 +115,10 @@ beforeAll(async () => {
   await call("POST", "save", owner, { id: "legacy-1", base: 0, kid: 1, blob: GARDEN_V1.blob, path: GARDEN_V1.path, text: GARDEN_V1.text });
   await call("POST", "save", owner, { id: GARDEN_V1.path, base: 0, kid: 1, blob: GARDEN_V1.blob });
   await call("POST", "save", owner, { id: "legacy-2", base: 0, kid: 1, blob: Buffer.from(GARDEN_V1.text).toString("base64") + "!" });
+  // A device that forgot to encrypt, and sends the note's own text as a well-formed blob, or as a wrap: refused by the header, and kept nowhere.
+  await call("POST", "save", owner, { id: "legacy-3", base: 0, kid: 1, blob: Buffer.from(GARDEN_V1.text.repeat(8)).toString("base64") });
+  await call("POST", "save", owner, { id: "legacy-4", base: 0, kid: 1, blob: Buffer.from(JSON.stringify({ path: GARDEN_V1.path, text: GARDEN_V1.text })).toString("base64") });
+  await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: Buffer.from(GARDEN_V1.text).toString("base64") });
   await call("POST", "delete", owner, { path: GARDEN_V1.path });
   await call("POST", "identity", owner, { name: "wide", kind: "agent", rights: [{ path: `${GARDEN_V1.path.split("/")[0]}/`, access: "read" }] });
   await call("GET", `note?id=${encodeURIComponent(GARDEN_V1.path)}`, owner);
@@ -176,6 +180,11 @@ describe("no path, name, folder or text is anywhere", () => {
   it("is in no answer to a request that has a path or a text in it: nothing is repeated back", () => {
     const refusals = answers.filter((a) => a.startsWith("400 "));
     expect(refusals.length, "the old-shape and path-as-id calls were refused").toBeGreaterThanOrEqual(8);
-    for (const refusal of refusals) expect(refusal).toMatch(/^400 \{"error":"[^"]*"\}$/);
+    for (const refusal of refusals) expect(refusal).toMatch(/^400 \{"error":"[^"]*"(,"reason":"[a-z-]+")?\}$/);
+  });
+
+  it("is refused by its header when a device sends a note's own text as the blob or the wrap, and the refusal names only the reason", () => {
+    const byHeader = answers.filter((a) => a.startsWith("400 ") && a.includes('"reason"'));
+    expect(byHeader.map((a) => /"reason":"([a-z-]+)"/.exec(a)?.[1])).toEqual(["not-an-encrypted-blob", "not-an-encrypted-blob", "not-an-encrypted-wrap"]);
   });
 });

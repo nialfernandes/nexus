@@ -4,7 +4,7 @@
 // device, which holds the key.
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { GARDEN_V1, GARDEN_V2, PODCAST_V1 } from "./__fixtures__/device-blobs";
+import { GARDEN_V1, GARDEN_V2, PODCAST_KID_7, PODCAST_V1 } from "./__fixtures__/device-blobs";
 import { API, bodyOf, expectRefusal, send, setUpNexus, signInOwner, vault } from "./__fixtures__/nexus-world";
 
 let owner: ReturnType<typeof vault>;
@@ -28,7 +28,7 @@ describe("reading one note", () => {
   });
 
   it("gives every field the contract names, and no others", async () => {
-    bodyOf(await owner.save({ id: "read-fields", blob: GARDEN_V1.blob }, 0, 3));
+    bodyOf(await owner.save({ id: "read-fields", blob: GARDEN_V1.blob }, 0));
     const read = bodyOf(await owner.note("read-fields"));
     expect(Object.keys(read).sort()).toEqual(["at", "blob", "hash", "id", "kid", "kind", "version", "writer"]);
   });
@@ -50,10 +50,11 @@ describe("reading one note", () => {
 
 describe("a note's history", () => {
   it("is every version, oldest first, with its kind, key number, writer, time and hash, and no blob", async () => {
-    bodyOf(await owner.save({ id: "hist-1", blob: GARDEN_V1.blob }, 0, 2));
-    bodyOf(await owner.save({ id: "hist-1", blob: GARDEN_V2.blob }, 1, 3));
+    // The second version is under another vault key, as a note is after the key is changed.
+    bodyOf(await owner.save({ id: "hist-1", blob: GARDEN_V1.blob }, 0));
+    bodyOf(await owner.save({ id: "hist-1", blob: PODCAST_KID_7.blob }, 1, PODCAST_KID_7.kid));
     const history = bodyOf(await owner.history("hist-1"));
-    expect(history.versions.map((v: { version: number; kid: number }) => [v.version, v.kid])).toEqual([[1, 2], [2, 3]]);
+    expect(history.versions.map((v: { version: number; kid: number }) => [v.version, v.kid])).toEqual([[1, 1], [2, 7]]);
     for (const v of history.versions) {
       expect(Object.keys(v).sort()).toEqual(["at", "hash", "kid", "kind", "version", "writer"]);
     }
@@ -62,14 +63,14 @@ describe("a note's history", () => {
 
 describe("the list of notes", () => {
   it("holds the live notes by id, each with its latest number, its time, its key number and its hash", async () => {
-    bodyOf(await owner.save({ id: "list-a", blob: GARDEN_V1.blob }, 0, 4));
+    bodyOf(await owner.save({ id: "list-a", blob: PODCAST_KID_7.blob }, 0, PODCAST_KID_7.kid));
     bodyOf(await owner.save({ id: "list-b", blob: PODCAST_V1.blob }, 0));
     bodyOf(await owner.save({ id: "list-b", blob: GARDEN_V2.blob }, 1));
 
     const notes = bodyOf(await owner.list()).notes as Array<{ id: string; version: number; at: number; kid: number; hash: string }>;
     const a = notes.find((n) => n.id === "list-a");
     const b = notes.find((n) => n.id === "list-b");
-    expect(a).toMatchObject({ version: 1, kid: 4 });
+    expect(a).toMatchObject({ version: 1, kid: 7 });
     expect(b).toMatchObject({ version: 2, kid: 1 });
     expect(typeof a?.at).toBe("number");
     expect(Object.keys(a ?? {}).sort()).toEqual(["at", "hash", "id", "kid", "version"]);

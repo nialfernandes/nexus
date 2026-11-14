@@ -43,6 +43,14 @@ Sign-in tokens, device labels and identity names are kept, since the server need
   saves again** from `current`. The server never merges: it cannot read a note. The merge is
   [packages/merge](../packages/merge), the code the server used to run, for the device to use. Two saves at the same
   moment cannot both win: one is saved and the other is refused.
+- **A save has to look like an encrypted note, by its first bytes.** The server reads the length and the first five bytes of
+  a blob and nothing after them ([docs/FORMAT.md](../docs/FORMAT.md) section 6): the first byte is the format's version
+  (1), the next four, big-endian, are the save's `kid`, and the blob is at least 301 bytes (the version, kid, nonce, tag and
+  a record padded to 256 bytes). A wrap is checked by its own header (section 7): the version, a second byte that says it is
+  the kind of wrap it is saved as (2 for `recovery`, 3 for `password`), and at least 74 or 102 bytes. Anything else is `400`
+  with a `reason` beside the words in `error`, and nothing is kept. This stops a device that forgot to encrypt from
+  leaving a note in plain text here. It is not proof of encryption: a header followed by random bytes is accepted, since
+  the server never opens a blob.
 - A **changes feed** lets a device catch up from a cursor. A history and a list say what the server holds, without blobs.
 - A delete is a version too, and a save that starts from the delete's version brings the note back.
 - Callers are **identities** (a person, an agent or an app). There are **no folder rights**: the folders are inside the
@@ -58,20 +66,21 @@ the server's own merge and its clash versions, the "target path exists" check, a
 ## The routes
 
 All routes are under `/nexus/api`. A route takes JSON (a request that is not declared `application/json` is refused) and
-answers JSON; a refusal is `{ "error": "<plain words>" }` and nothing is cached. A blob or wrap is standard base64 with its
+answers JSON; a refusal is `{ "error": "<plain words>" }` and nothing is cached. A refusal because of a header also has a `reason`:
+`not-an-encrypted-blob`, `blob-too-short` or `kid-mismatch` for a save; `not-an-encrypted-wrap`, `kind-mismatch` or `wrap-too-short` for a wrap. A blob or wrap is standard base64 with its
 `=` padding. A body with a field a route does not list is refused `400`, so a client that still sends a path or a text is
 told so and nothing of it is kept. The full contract is at the top of `src/routes.ts` and `src/__fixtures__/nexus-world.ts`.
 
 | Route | Who | What |
 | --- | --- | --- |
-| `POST /save` `{ id, base, kid, blob }` | any identity | `200 { result: "saved", id, version }`; `409 { error, current }` if the note is at another version (`current` is 0 when there is no such note); `413` over 1,000,000 bytes |
+| `POST /save` `{ id, base, kid, blob }` | any identity | `200 { result: "saved", id, version }`; `409 { error, current }` if the note is at another version (`current` is 0 when there is no such note); `400` with a `reason` when the blob does not begin as an encrypted note does; `413` over 1,000,000 bytes |
 | `GET /note?id=I[&version=N]` | any | `200 { id, version, kind, kid, blob, hash, writer, at }` |
 | `GET /history?id=I` | any | `200 { id, versions: [ { version, kind, kid, writer, at, hash } ] }` |
 | `GET /list` | any | `200 { notes: [ { id, version, at, kid, hash } ] }`, the live notes |
 | `GET /changes[?after=C][&limit=N]` | any | `200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`, a delete has no blob |
 | `POST /delete` `{ id, base }` | any | `200 { result: "deleted", id, version }`; `404`; `409 { error, current }` |
 | `GET /wraps` | any | `200 { wraps: [ { kid, kind, wrap, writer, at } ] }` |
-| `POST /wrap` `{ kid, kind, wrap }` | owner | Keeps a wrap, replacing the one of that kind for that `kid` |
+| `POST /wrap` `{ kid, kind, wrap }` | owner | Keeps a wrap, replacing the one of that kind for that `kid`; `400` with a `reason` when the wrap does not begin as that kind of wrap does |
 | `POST /wrap/delete` `{ kid, kind }` | owner | Removes a wrap |
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |

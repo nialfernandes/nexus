@@ -27,7 +27,10 @@ when it matters.
 **Today, it depends on the device.** The server in this repository holds only the
 blobs a device sends and never reads a note. The Obsidian plugin encrypts every
 note before it sends it, but it cannot yet be given a key (the screens for that are
-not built), so it syncs nothing. The server cannot tell whether what it is sent is
+not built), so it syncs nothing. The server turns away a blob that does not begin the
+way an encrypted note does (the format's version, the key number, and at least the
+smallest length), so a device that forgot to encrypt is told so; it looks at nothing
+past that header, so it cannot tell a blob with the right header that is not really
 encrypted. The answer below, **No**, is what you get once every device you use
 encrypts, and it is not true of anything you can run in use now.
 

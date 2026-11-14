@@ -5,7 +5,9 @@
 // identity may do and the shape of every answer).
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { GARDEN_V1, PASSWORD_WRAP, PODCAST_V1, RECOVERY_WRAP } from "./__fixtures__/device-blobs";
+import {
+  GARDEN_V1, PASSWORD_WRAP, PODCAST_V1, RECOVERY_WRAP, RECOVERY_WRAP_KID_0, RECOVERY_WRAP_KID_1_AGAIN, RECOVERY_WRAP_KID_2, RECOVERY_WRAP_KID_MAX,
+} from "./__fixtures__/device-blobs";
 import { API, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
 import { issueToken, manage, sendAs, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
 
@@ -133,13 +135,13 @@ describe("the vault key's wraps", () => {
     expect(typeof listed[0].at).toBe("number");
 
     // The same kid and kind replaces the wrap: a second kid sits beside it.
-    bodyOf(await manage(owner).setWrap(1, "password", RECOVERY_WRAP));
-    bodyOf(await manage(owner).setWrap(2, "recovery", RECOVERY_WRAP));
+    bodyOf(await manage(owner).setWrap(1, "recovery", RECOVERY_WRAP_KID_1_AGAIN));
+    bodyOf(await manage(owner).setWrap(2, "recovery", RECOVERY_WRAP_KID_2));
     const after = bodyOf(await vaultAs(owner).wraps()).wraps;
     expect(after.map((w: { kid: number; kind: string; wrap: string }) => [w.kid, w.kind, w.wrap])).toEqual([
-      [1, "password", RECOVERY_WRAP],
-      [1, "recovery", RECOVERY_WRAP],
-      [2, "recovery", RECOVERY_WRAP],
+      [1, "password", PASSWORD_WRAP],
+      [1, "recovery", RECOVERY_WRAP_KID_1_AGAIN],
+      [2, "recovery", RECOVERY_WRAP_KID_2],
     ]);
 
     expect(bodyOf(await manage(owner).removeWrap(1, "password"))).toEqual({ result: "removed", kid: 1, kind: "password" });
@@ -162,8 +164,8 @@ describe("the vault key's wraps", () => {
   });
 
   it("can hold the kid 0 and the largest kid", async () => {
-    bodyOf(await manage(owner).setWrap(0, "recovery", RECOVERY_WRAP));
-    bodyOf(await manage(owner).setWrap(4294967295, "recovery", RECOVERY_WRAP));
+    bodyOf(await manage(owner).setWrap(0, "recovery", RECOVERY_WRAP_KID_0));
+    bodyOf(await manage(owner).setWrap(4294967295, "recovery", RECOVERY_WRAP_KID_MAX));
     expect(bodyOf(await vaultAs(owner).wraps()).wraps.map((w: { kid: number }) => w.kid)).toEqual([0, 4294967295]);
     bodyOf(await manage(owner).removeWrap(0, "recovery"));
     bodyOf(await manage(owner).removeWrap(4294967295, "recovery"));
