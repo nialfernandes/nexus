@@ -9,7 +9,8 @@
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run build && npm run test"
+    "check": "npm run packages && npm run typecheck && npm run build && npm run test",
+    "packages": "npm ci --prefix ../packages/crypto && npm run build --prefix ../packages/crypto && npm ci --prefix ../packages/merge"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
@@ -17,5 +18,9 @@
     "obsidian": "1.14.4",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "@nexus/crypto": "file:../packages/crypto",
+    "@nexus/merge": "file:../packages/merge"
   }
 }

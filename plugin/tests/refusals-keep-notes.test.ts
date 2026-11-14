@@ -1,11 +1,12 @@
 // A note is removed from the vault only when Nexus says it is gone: a 404 for that exact note, or a delete version for it
 // in the changes feed. Any other answer to a read of the note (a refusal, a fault in Nexus, a lost sign-in, no network)
-// leaves the note as it is, is named in the status line in plain words, and is tried again on the next sync.
+// leaves the note as it is, is named in the status line in plain words, and is tried again on the next sync. That holds for the
+// read that brings a waiting note down and for the read that a merge of an edit needs.
 // Nexus is the in-memory stand-in (see world.ts); only the answer to one read of one note is replaced, to make it refuse.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  bodyOf, emptyNexus, forbidFetch, loadSync, openWorld, syncedDevice, type Device, type Http, type SyncEngine, type World,
+  emptyNexus, forbidFetch, loadSync, openWorld, syncedDevice, type Device, type Http, type SyncEngine, type World,
 } from "./world";
 
 let world: World;
@@ -70,12 +71,12 @@ async function engineWith(device: Device, refusal: { now: Refusal | null }): Pro
  */
 async function noteWaitingToComeDown(): Promise<Device> {
   const device = await syncedDevice(world, { [PATH]: "one\n" });
-  bodyOf(await world.agents.save(PATH, "two\n", { base: 1 }));
+  await world.elsewhere.update(device.data().notes[PATH].id, PATH, "two\n");
   const unlock = lock(device, PATH);
   await device.engine.sync();
   unlock();
   expect(device.vault.textOf(PATH), "before the retry the vault still has the older text").toBe("one\n");
-  expect(device.deps.data.pendingPulls, "and the note waits to be brought down").toEqual([PATH]);
+  expect(device.deps.data.pendingPulls, "and the note waits to be brought down, by its id").toEqual([device.data().notes[PATH].id]);
   return device;
 }
 
@@ -86,7 +87,7 @@ describe("a read of a note that Nexus does not answer with the note", () => {
     { name: "a 500", refusal: { status: 500 }, says: /nexus had a problem/i },
     { name: "a 429", refusal: { status: 429 }, says: /nexus had a problem/i },
     { name: "a 401", refusal: { status: 401 }, says: /signed out/i },
-    { name: "a 403", refusal: { status: 403 }, says: /not allowed.*Ideas\/a\.md/i },
+    { name: "a 403", refusal: { status: 403 }, says: /nexus would not give a\.md/i },
     { name: "a 400", refusal: { status: 400 }, says: /nexus would not give a\.md/i },
     { name: "no network", refusal: "offline", says: /offline/i },
   ];
@@ -101,8 +102,8 @@ describe("a read of a note that Nexus does not answer with the note", () => {
     expect(device.vault.textOf(PATH), "the note is still in the vault with its text unchanged").toBe("one\n");
     expect(removals(device), "nothing was removed").toEqual([]);
     expect(engine.status(), "the status line names what happened").toMatch(says);
-    expect(device.deps.data.pendingPulls, "the note is kept on the list to be tried again").toEqual([PATH]);
-    expect(device.deps.data.versions[PATH], "and is still tracked, so it is not mistaken for a new note").toBe(1);
+    expect(device.deps.data.pendingPulls, "the note is kept on the list to be tried again").toEqual([device.data().notes[PATH].id]);
+    expect(device.deps.data.notes[PATH].version, "and is still tracked, so it is not mistaken for a new note").toBe(1);
 
     // Nexus answers again (and the person signs in again, after a 401): the next sync brings the note down.
     refusal.now = null;
@@ -115,34 +116,35 @@ describe("a read of a note that Nexus does not answer with the note", () => {
     expect(engine.status()).toMatch(/last synced/i);
   });
 
-  it("a 403 on a note that came down in the feed is named and tried again, not skipped for good", async () => {
-    const device = await syncedDevice(world);
-    bodyOf(await world.agents.save("Ideas/x.md", "x\n"));
-    await device.engine.sync();
-    expect(device.vault.textOf("Ideas/x.md")).toBe("x\n");
-    // The note is gone from the vault (it was deleted while Obsidian was closed), then another writer moves it in Nexus.
-    await device.vault.remove("Ideas/x.md");
-    bodyOf(await world.agents.move("Ideas/x.md", "Ideas/y.md"));
-    const refusal: { now: Refusal | null } = { now: { status: 403 } };
+  it.each([
+    { name: "a 403", refusal: { status: 403 } as Refusal, says: /nexus would not give a\.md/i },
+    { name: "a 500", refusal: { status: 500 } as Refusal, says: /nexus had a problem/i },
+    { name: "no network", refusal: "offline" as Refusal, says: /offline/i },
+  ])("$name on the read that a merge needs keeps the edit, says so, and merges on the next sync", async ({ refusal: answer, says }) => {
+    const device = await syncedDevice(world, { [PATH]: "one\ntwo\n" });
+    await world.elsewhere.update(device.data().notes[PATH].id, PATH, "ONE\ntwo\n");
+    device.vault.type(PATH, "one\nTWO\n"); // an edit that Nexus refuses because the note has moved on
+    const refusal: { now: Refusal | null } = { now: answer };
     const engine = await engineWith(device, refusal);
 
-    await engine.sync();
+    await engine.push(PATH);
 
-    expect(device.vault.has("Ideas/y.md")).toBe(false);
-    expect(engine.status(), "the status line names the note Nexus would not hand over").toMatch(/not allowed.*Ideas\/y\.md/i);
-    expect(device.deps.data.pendingPulls).toEqual(["Ideas/y.md"]);
+    expect(device.vault.textOf(PATH), "the edit is still in the vault, untouched").toBe("one\nTWO\n");
+    expect(engine.status()).toMatch(says);
+    expect(removals(device)).toEqual([]);
 
     refusal.now = null;
     await engine.sync();
-    expect(device.vault.textOf("Ideas/y.md"), "once Nexus hands it over, it comes down").toBe("x\n");
+    expect(device.vault.textOf(PATH), "once Nexus answers, the two edits are merged").toBe("ONE\nTWO\n");
     expect(engine.status()).toMatch(/last synced/i);
+    expect(device.notices.filter((notice) => /both versions/i.test(notice)), "and nothing was kept as a clash").toEqual([]);
   });
 });
 
 describe("a note Nexus says is gone", () => {
   it("is removed on the retry when Nexus answers 404 for that note", async () => {
     const device = await noteWaitingToComeDown();
-    bodyOf(await world.agents.remove(PATH));
+    await world.elsewhere.remove(device.data().notes[PATH].id);
 
     await device.engine.sync();
 
@@ -155,12 +157,12 @@ describe("a note Nexus says is gone", () => {
 
   it("is removed when the changes feed carries a delete version for it", async () => {
     const device = await syncedDevice(world, { [PATH]: "one\n" });
-    bodyOf(await world.agents.remove(PATH));
+    await world.elsewhere.remove(device.data().notes[PATH].id);
 
     await device.engine.sync();
 
     expect(device.vault.has(PATH)).toBe(false);
     expect(removals(device)).toEqual([{ kind: "remove", path: PATH }]);
-    expect(device.deps.data.versions[PATH]).toBeUndefined();
+    expect(device.deps.data.notes[PATH]).toBeUndefined();
   });
 });

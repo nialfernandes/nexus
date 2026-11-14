@@ -18,6 +18,9 @@ const options = {
   format: "cjs",
   platform: "browser",
   target: "es2020",
+  // The encryption library (libsodium, inside @nexus/crypto's build) reads `import.meta.url` in a try block; a plugin file has no
+  // module address, so it is given an empty one, as the probe does.
+  define: { "import.meta.url": '""' },
   external: ["obsidian", "@codemirror/*", "@lezer/*"],
   logLevel: "info",
   sourcemap: watching ? "inline" : false,

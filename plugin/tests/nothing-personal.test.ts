@@ -12,15 +12,20 @@ import { describe, expect, it } from 'vitest';
 const PLUGIN = fileURLToPath(new URL('..', import.meta.url));
 const NAME = new RegExp(['ni', 'al'].join(''), 'i');
 
-/** Folders that are not the plugin's own files: what npm installed, and the build's output. */
+/**
+ * What is not the plugin's own writing: what npm installed, and the build's output. `main.js` is the bundle, which holds the
+ * encryption library's WebAssembly written out as base64 text, and a search for a name in any case finds letters of it by chance.
+ * The source it is built from is searched, and the bundle is held to what it asks for by bundle.test.ts.
+ */
 const SKIPPED_FOLDERS = new Set(['node_modules']);
+const SKIPPED_FILES = new Set(['main.js']);
 
 /** Every file under `folder`, as a path from the plugin's folder. */
 function filesUnder(folder: string): string[] {
   return readdirSync(folder).flatMap((entry) => {
     const full = path.join(folder, entry);
     if (statSync(full).isDirectory()) return SKIPPED_FOLDERS.has(entry) ? [] : filesUnder(full);
-    return [path.relative(PLUGIN, full)];
+    return SKIPPED_FILES.has(entry) && path.dirname(full) === PLUGIN.replace(/\/$/, '') ? [] : [path.relative(PLUGIN, full)];
   });
 }
 
@@ -32,6 +37,7 @@ describe('the plugin folder', () => {
       expect(files, `${expected} is searched`).toContain(expected);
     }
     expect(files.some((file) => file.startsWith('node_modules'))).toBe(false);
+    expect(files, 'the built bundle is not searched: it holds the encryption library as base64').not.toContain('main.js');
   });
 
   it('holds no name of a person or of a site, in any file, any case', () => {

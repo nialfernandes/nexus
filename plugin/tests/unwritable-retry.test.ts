@@ -2,7 +2,7 @@
 // status line naming it meanwhile. Against the in-memory Nexus (see world.ts).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { bodyOf, emptyNexus, forbidFetch, makeDevice, openWorld, syncedDevice, type Device, type World } from "./world";
+import { emptyNexus, forbidFetch, makeDevice, openWorld, syncedDevice, type Device, type World } from "./world";
 
 let world: World;
 
@@ -36,7 +36,7 @@ describe("a remote note the vault could not write", () => {
   it("comes down on a later sync once the vault can write it, with nothing new in Nexus, and leaves the status line", async () => {
     const device = await syncedDevice(world);
     const unlock = lock(device, "Locked/x.md");
-    bodyOf(await world.agents.save("Locked/x.md", "waits\n"));
+    const locked = await world.elsewhere.create("Locked/x.md", "waits\n");
 
     await device.engine.sync();
     expect(device.vault.has("Locked/x.md")).toBe(false);
@@ -52,19 +52,19 @@ describe("a remote note the vault could not write", () => {
     await device.engine.sync();
     expect(device.vault.textOf("Locked/x.md"), "it came down on the next sync").toBe("waits\n");
     expect(device.engine.status(), "and the status line is clear").toMatch(/last synced/i);
-    expect(device.data().versions["Locked/x.md"]).toBe(1);
+    expect(device.data().notes["Locked/x.md"]).toMatchObject({ id: locked.id, version: 1 });
     expect(device.data().pendingPulls ?? []).toEqual([]);
   });
 
   it("is still tried again after Obsidian is restarted, with nothing new in Nexus", async () => {
     const device = await syncedDevice(world);
     const unlock = lock(device, "Locked/x.md");
-    bodyOf(await world.agents.save("Locked/x.md", "first\n"));
+    await world.elsewhere.create("Locked/x.md", "first\n");
     await device.engine.sync();
     expect(device.vault.has("Locked/x.md")).toBe(false);
     unlock(); // the file can be written by the time Obsidian is opened again
 
-    const restarted = await makeDevice(world, { vault: device.vault, from: device.data() });
+    const restarted = await makeDevice(world, { vault: device.vault, from: device.data(), unlock: device.unlock });
     await restarted.engine.sync();
 
     expect(restarted.vault.textOf("Locked/x.md"), "it was kept in the plugin's own state, so a restart does not forget it").toBe("first\n");
@@ -73,9 +73,9 @@ describe("a remote note the vault could not write", () => {
   it("is dropped quietly when Nexus no longer has the note", async () => {
     const device = await syncedDevice(world);
     lock(device, "Locked/x.md");
-    bodyOf(await world.agents.save("Locked/x.md", "waits\n"));
+    const locked = await world.elsewhere.create("Locked/x.md", "waits\n");
     await device.engine.sync();
-    bodyOf(await world.agents.remove("Locked/x.md"));
+    await world.elsewhere.remove(locked.id);
 
     await device.engine.sync();
 

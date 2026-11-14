@@ -2,7 +2,54 @@
 // These are plain functions, so they are called directly.
 
 import { describe, expect, it } from "vitest";
-import { clashCopyName, dayStamp, fingerprint, isClashCopy, isNote, nameOf } from "../src/notes";
+import { clashCopyName, dayStamp, duplicateNoteName, fingerprint, isClashCopy, isNote, isSafeNotePath, nameOf } from "../src/notes";
+
+describe("duplicateNoteName", () => {
+  const WHEN = new Date(2026, 10, 14, 12);
+
+  it("is the note's own name with the device and the day, in its own folder, and a count when the name is taken", () => {
+    expect(duplicateNoteName("Ideas/a.md", "Mac", WHEN, () => false)).toBe("Ideas/a (duplicate Mac 2026-11-14).md");
+    expect(duplicateNoteName("top.md", "Mac", WHEN, () => false)).toBe("top (duplicate Mac 2026-11-14).md");
+    const taken = new Set(["Ideas/a (duplicate Mac 2026-11-14).md", "Ideas/a (duplicate Mac 2026-11-14 2).md"]);
+    expect(duplicateNoteName("Ideas/a.md", "Mac", WHEN, (path) => taken.has(path))).toBe("Ideas/a (duplicate Mac 2026-11-14 3).md");
+  });
+
+  it("is an ordinary note that is synced, never a clash copy, which stays on the device it was made on", () => {
+    const name = duplicateNoteName("Ideas/a.md", "Mac", WHEN, () => false);
+    expect(isNote(name)).toBe(true);
+    expect(isSafeNotePath(name)).toBe(true);
+    expect(isClashCopy(name)).toBe(false);
+    expect(isNote(clashCopyName("Ideas/a.md", "Mac", WHEN, () => false))).toBe(false);
+  });
+
+  it("is a legal file name even when the device's name is not one", () => {
+    expect(nameOf(duplicateNoteName("Ideas/a.md", 'Mac/Studio: "2" <a|b>? #1 [x] ^y', WHEN, () => false))).not.toMatch(/[\\/:*?"<>|#^[\]]/);
+  });
+});
+
+describe("isSafeNotePath", () => {
+  it("takes a path of plain names that is a note", () => {
+    for (const path of ["Ideas/a.md", "top.md", "Daily/2026-11-15.md", "A folder/Deep/with spaces & ümlauts.md", "日本語/メモ.md"]) {
+      expect(isSafeNotePath(path), path).toBe(true);
+    }
+  });
+
+  it("refuses a path that starts at the root, climbs out of the vault, or has an empty step", () => {
+    for (const path of ["/etc/outside.md", "../outside.md", "Ideas/../../outside.md", "Ideas//double.md", "Ideas/./a.md", "Ideas/"]) {
+      expect(isSafeNotePath(path), path).toBe(false);
+    }
+  });
+
+  it("refuses a backslash and a control character, which some systems read as a folder or end of name", () => {
+    for (const path of ["Ideas\\a.md", "Ideas/a\u0000.md", "Ideas/a\nb.md"]) expect(isSafeNotePath(path), JSON.stringify(path)).toBe(false);
+  });
+
+  it("refuses what is not a note at all: a hidden folder, an attachment, a clash copy", () => {
+    for (const path of [".obsidian/plugins/x/main.js", ".obsidian/snippets/tidy.md", "Ideas/pic.png", "Ideas/a (clash Mac 2026-11-14).md"]) {
+      expect(isSafeNotePath(path), path).toBe(false);
+    }
+  });
+});
 
 describe("isNote", () => {
   it("is a markdown file outside hidden folders", () => {

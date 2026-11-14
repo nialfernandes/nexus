@@ -104,6 +104,15 @@ describe('the Nexus plugin as Obsidian loads it', () => {
     }
   });
 
+  it('carries the encryption and the merge inside it, so one file is all a phone needs', async () => {
+    await build();
+    const code = readFileSync(MAIN, 'utf8');
+    expect(code, "the note cipher of the encryption package (libsodium's XChaCha20-Poly1305)").toContain('crypto_aead_xchacha20poly1305_ietf_encrypt');
+    expect(code, 'the encryption package asks for no random source of Node: it uses the one the app gives').not.toMatch(/require\(\s*["']crypto["']\s*\)/);
+    expect(code, 'the line merge of the merge package').toContain('mergeText');
+    expect(code, 'and no module address, which a plugin file does not have').not.toMatch(/import\.meta/);
+  }, BUILD_TIME);
+
   it('asks for no Node or Electron module: only Obsidian and what Obsidian provides', async () => {
     // The scan first, on text that holds each kind of ask, so that finding nothing below can only mean there is nothing.
     const sample = [
