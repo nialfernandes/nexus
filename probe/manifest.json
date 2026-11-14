@@ -1,0 +1,9 @@
+{
+  "id": "nexus-probe",
+  "name": "Nexus probe",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Test plugin. Checks on this device that the encryption Nexus plans to use runs, and shows how long it takes.",
+  "author": "Nexus contributors",
+  "isDesktopOnly": false
+}

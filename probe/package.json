@@ -1,0 +1,26 @@
+{
+  "name": "nexus-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A test plugin that checks the encryption Nexus plans to use runs on this device.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run build && npm run test"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "libsodium-wrappers-sumo": "0.8.4"
+  },
+  "devDependencies": {
+    "@noble/ciphers": "2.4.0",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "obsidian": "1.14.4",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
