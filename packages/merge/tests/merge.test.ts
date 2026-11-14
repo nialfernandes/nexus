@@ -1,8 +1,8 @@
-// The three-way line merge on its own: which edits it keeps together and which it calls a clash. The saves that
-// meet it through the Worker are in saves.test.ts; this holds the shapes of edit those do not reach.
+// The three-way line merge on its own: which edits it keeps together and which it calls a clash. A device runs it
+// when the server refuses a save because the note moved on (the server cannot read a note, so it never merges).
 
 import { describe, expect, it } from "vitest";
-import { mergeText, splitLines } from "./merge";
+import { mergeText, splitLines } from "../src/merge";
 
 describe("splitLines", () => {
   it("keeps each line's ending, and a last line that has none", () => {
