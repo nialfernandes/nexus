@@ -28,7 +28,7 @@ describe("docs/FORMAT.md says what the code does", () => {
     expect(doc).toContain(`"${RECOVERY_CHECK_LABEL}"`);
     expect(doc).toContain(RECOVERY_ALPHABET);
     expect(doc).toContain(`${MAX_ID_BYTES} UTF-8 bytes`);
-    expect(doc).toContain(`\`m = ${PASSWORD_KDF.memoryKiB}\``.replace("`m = ", "`m = "));
+    expect(doc).toContain(`\`m = ${PASSWORD_KDF.memoryKiB}\``);
     expect(doc).toMatch(new RegExp(`\`m\` from ${PASSWORD_KDF_LIMITS.memoryKiB.min} to ${PASSWORD_KDF_LIMITS.memoryKiB.max}`));
     expect(doc).toMatch(new RegExp(`\`t\` from ${PASSWORD_KDF_LIMITS.iterations.min} to ${PASSWORD_KDF_LIMITS.iterations.max}`));
   });
