@@ -5,9 +5,10 @@ version 1: who it defends against, what the server can and cannot see, and what
 it does not try to defend against. No outside security firm has reviewed the
 design or the code. Until one has, treat every statement here as a goal that
 the code is trying to meet, not as something anyone has proved. Do not rely on
-Nexus for anything you cannot afford to lose. The encrypted server is not built
-yet: the server in this repository today stores notes as plain text, and whoever
-runs it can read them.
+Nexus for anything you cannot afford to lose. The server in this repository now
+stores only the blobs a device sends and never reads a note, but no device
+encrypts yet (the Obsidian plugin has not been updated to), so nothing is
+protected until one does.
 
 The exact byte layout of the encrypted data is in [FORMAT.md](FORMAT.md). This
 document says what that format is for.
@@ -22,12 +23,13 @@ when it matters.
 
 ## 1. Can the server operator read my notes?
 
-**Today, yes.** The server in this repository stores notes as plain text, and
-whoever runs it can read them. The encrypted server is not built yet. The answer
-below, **No**, is what the design gives once the encrypted server lands, and it
-is not true of anything you can run now.
+**Today, it depends on the device.** The server in this repository holds only the
+blobs a device sends and never reads a note, but no device encrypts yet, and the
+server cannot tell whether what it is sent is encrypted. The answer below, **No**,
+is what you get once every device you use encrypts, and it is not true of anything
+you can run now.
 
-**Once the encrypted server lands: No.** Each note is scrambled (encrypted) on
+**With a device that encrypts: No.** Each note is scrambled (encrypted) on
 your device with a key that stays on your devices, before it is sent anywhere.
 The server stores the scrambled result. The key never reaches the server in a form the server can use. Whoever
 runs your server, whether that is a hosting company, a stranger or you, holds
@@ -42,8 +44,8 @@ too, and so can the assistant's company. Section 3.6 explains the limits we put
 around this. If you never approve a cloud assistant, this exception never
 applies to you.
 
-**What the operator does see** (with the encrypted server; today it sees the
-notes too):
+**What the operator does see** (when every device encrypts; a device that does
+not encrypt sends the server its notes as they are):
 
 - That your vault exists, how many notes it has, and how many versions each has.
 - A random id for each note.
@@ -53,7 +55,7 @@ notes too):
 - That a version is a deletion.
 - Network details such as your IP address, as with any server.
 
-**What the operator does not see, once the encrypted server lands:** the text of your notes, their names, the
+**What the operator does not see, when every device encrypts:** the text of your notes, their names, the
 folders they are in, links, tags, or anything else inside the text.
 
 **What the operator can still do,** even though it cannot read: it can refuse to
