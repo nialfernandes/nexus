@@ -35,8 +35,9 @@ export async function generateDeviceKeyPair(): Promise<DeviceKeyPair> {
 /**
  * Seals the vault key to one device's public key, so only that device can open
  * it. What is sealed is: version, kind, kid, the vault id (with its length) and
- * the key. A sealed box does not say who made it, so the approval screen must
- * show both sides a code taken from the public key; see docs/FORMAT.md.
+ * the key. A sealed box does not say who made it: an approval alone is not
+ * authenticated, and must be checked by the matching code the device approval
+ * flow shows on both screens (section 7.3 of docs/FORMAT.md).
  */
 export async function sealApproval(
   devicePublicKey: Uint8Array,

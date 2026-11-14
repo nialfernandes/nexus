@@ -13,8 +13,9 @@ one runtime dependency is [libsodium.js](https://github.com/jedisct1/libsodium.j
 must provide `globalThis.crypto.getRandomValues`, which libsodium uses for
 random bytes.
 
-The byte layout of everything it writes is in [docs/FORMAT.md](docs/FORMAT.md).
-It is written so another implementation can be made from it.
+The byte layout of everything it writes is in
+[docs/FORMAT.md](../../docs/FORMAT.md) at the repository root. It is written so
+another implementation can be made from it.
 
 ## Use
 
@@ -28,7 +29,7 @@ const blob = await encryptNote(vaultKey, context, { path: "Daily/2026-11-15.md",
 const note = await decryptNote(vaultKey, context, blob); // { path, text }
 ```
 
-Every refusal is a `NexusCryptoError` with a `code` (see FORMAT.md, "Errors").
+Every refusal is a `NexusCryptoError` with a `code` (see docs/FORMAT.md, "Errors").
 A blob under another `kid` than expected gives `wrong-kid`. Wrong key, wrong
 note id or vault id, and damaged data all give `decryption-failed`; the cipher
 cannot tell them apart, and nothing is returned.

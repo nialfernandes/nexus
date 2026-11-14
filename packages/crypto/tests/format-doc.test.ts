@@ -8,7 +8,7 @@ import { MIN_NOTE_BLOB_BYTES } from "../src/note.js";
 import { PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "../src/wraps.js";
 import { NOTE_BLOB_HEX, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX } from "./fixtures.js";
 
-const doc = readFileSync(new URL("../docs/FORMAT.md", import.meta.url), "utf8");
+const doc = readFileSync(new URL("../../../docs/FORMAT.md", import.meta.url), "utf8");
 const docWithoutLineBreaks = doc.replace(/\n/g, "");
 
 describe("docs/FORMAT.md says what the code does", () => {

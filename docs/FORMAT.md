@@ -17,7 +17,7 @@ describes the design; it is not a statement that the design is safe.
 | **Password** (optional) | text the person chooses | A second way to unlock the vault key |
 | **Device key pair** | an X25519 key pair made on a device or agent | Receives the vault key once, when the device is approved |
 
-The package has no input or output of its own. It never reads a file, opens a
+The package (`packages/crypto`) has no input or output of its own. It never reads a file, opens a
 connection, looks at a clock or stores a key; callers pass bytes in and get
 bytes out. Random bytes come from libsodium, which in turn uses the platform's
 `getRandomValues`.
@@ -282,7 +282,7 @@ Password wrap (102 bytes; `00010000` = 65536 KiB, `00000003` = 3 passes, `000000
 The Recovery Key as written: `40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-CDSR-74X3-PF1X-7RZG-2M48`
 
 An implementation is correct if it makes these exact bytes from these inputs and
-opens them again. `tests/noble-cross-check.test.ts` builds all three a second
+opens them again. `packages/crypto/tests/noble-cross-check.test.ts` builds all three a second
 way, with `@noble/ciphers` and `@noble/hashes` written from this document, and
 checks that the bytes are the same.
 
