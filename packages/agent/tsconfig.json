@@ -4,7 +4,6 @@
     "lib": ["ES2022", "DOM"],
     "types": [],
     "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true
   },
   "include": ["src/*.ts"]
