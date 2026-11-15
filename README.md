@@ -58,6 +58,12 @@ plugin that ships its own built files, with its own `npm ci` and `npm run check`
 Found a flaw? Please report it privately and do not open a public issue. How to do
 that, and what is and is not in scope, is in [SECURITY.md](SECURITY.md).
 
+Dependency updates come as reviewed pull requests. Each week GitHub proposes a new
+version of the CI actions (with the new full commit hash, so they stay pinned) and
+one grouped pull request for the npm packages, the encryption libraries included
+(`.github/dependabot.yml`). The same check that every pull request runs is run on
+each of them, and none is merged until a person has read it.
+
 ## Licence
 
 Nexus is open source under the MIT licence. See [LICENSE](LICENSE).
