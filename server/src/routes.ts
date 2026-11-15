@@ -30,8 +30,7 @@
 // not a Bearer one are all 401, before any route runs. Only the two device routes a device itself calls (start and
 // poll) need no credential: a device has none yet.
 //
-// Every route lives under /nexus/api, and for one release also under /apps/nexus/api, answered by the same handlers
-// (addresses.ts). A note is named by its id, which rides in the body or the query string. Every answer is JSON, a
+// Every route lives under /nexus/api (addresses.ts). A note is named by its id, which rides in the body or the query string. Every answer is JSON, a
 // refusal is `{ error: "<plain words>" }` (a stale save adds `current`), and nothing is cached.
 //
 // Nothing here names a Cloudflare type: the Worker (plugs/cloudflare/worker.ts) hands each request to `runNexus`
@@ -134,7 +133,7 @@ async function identify(request: Request, host: NexusHost): Promise<Caller | nul
   return session === null ? null : identities.loadCaller(host, session.identity);
 }
 
-/** Answers one request to /nexus/api/* (or the old /apps/nexus/api/*). Sign-in first (except for the two calls a device makes), then the route; nothing here throws. */
+/** Answers one request to /nexus/api/*. Sign-in first (except for the two calls a device makes), then the route; nothing here throws. */
 export async function runNexus(request: Request, host: NexusHost): Promise<Response> {
   try {
     const url = new URL(request.url);

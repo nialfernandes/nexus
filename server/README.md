@@ -101,12 +101,11 @@ each blob as it is sent, as base64 text (a blob of the largest size a note may b
 characters); a delete is sent with no blob and counts for none, and the few hundred bytes of JSON around each blob are not counted. So a page can be shorter than `limit` without the feed
 being at its end: a device keeps asking from `next` until a page comes back empty (the same cursor comes back).
 
-## Addresses: `/nexus`, and `/apps/nexus` for one release
+## Addresses: `/nexus`
 
-Everything is under `/nexus`: the API at `/nexus/api/...` and the device approval page at `/nexus/approve`. The old prefix
-`/apps/nexus` **keeps answering for one release, with the same handlers** (`/apps/nexus/api/...` and
-`/apps/nexus/approve`), so a device that has not been updated still reaches the server. It will then be removed. A link
-a device is handed is always on `/nexus`. `src/addresses.ts` is the one place either prefix is written.
+Everything is under `/nexus`: the API at `/nexus/api/...` and the device approval page at `/nexus/approve`. Nothing else
+answers: the older `/apps/nexus` prefix has been removed, and an address under it is a 404 like any other that is not
+Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
 On Cloudflare the page's four files sit in the assets under `public/nexus`, the same address the Worker serves them at, so
 `wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand them to anyone
@@ -164,7 +163,7 @@ package.
 
 Serve Nexus over HTTPS only. The owner's secret and every token travel in request headers.
 
-The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` (and the old `/apps/nexus/api/*`) to Nexus, gives the
+The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` to Nexus, gives the
 owner the device approval page (`public/nexus/`, served through the `ASSETS` binding), and answers 404 to everything
 else. The four files of the page are static and identical for everyone and hold nothing private, and `run_worker_first`
 (above) makes the Worker the only way to them.

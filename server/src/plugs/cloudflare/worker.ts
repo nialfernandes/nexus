@@ -1,4 +1,4 @@
-// The Worker: what Cloudflare runs. It sends /nexus/api/* (and, for one release, the old /apps/nexus/api/*) to Nexus, and
+// The Worker: what Cloudflare runs. It sends /nexus/api/* to Nexus, and
 // gives the owner the device approval page; every other address is not Nexus's and is a plain 404.
 //
 // Nexus answers an unknown caller 401 itself (a program that calls an API has to be told it is not allowed, and a

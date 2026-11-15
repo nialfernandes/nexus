@@ -21,7 +21,7 @@
 //
 // THE WIRE CONTRACT (every answer is JSON; a refusal is `{ error: "<plain words>" }`)
 //
-//   Every route is under /nexus/api (and, for one release, /apps/nexus/api: see prefixes.test.ts). A note is named by
+//   Every route is under /nexus/api (and nothing answers under the old /apps/nexus: see prefixes.test.ts). A note is named by
 //   its id, which the device chose at random: 1 to 128 letters, digits, hyphens or underscores. It is never a path.
 //   A blob and a wrap are standard base64 of bytes the server cannot read. It checks only their header: a note blob begins with
 //   the version byte 1, then the save's kid, and is at least 301 bytes; a wrap begins with 1 and then 2 (recovery) or 3
