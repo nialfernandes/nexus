@@ -9,8 +9,9 @@
 > every note on your own device before it is sent, name and folder included, and
 > only opens notes on your device, so your Nexus server holds scrambled data. But
 > the screens that make the vault key, show you the Recovery Key and unlock the
-> vault are not built yet. Until they are, the plugin has no key and syncs nothing:
-> its status line says the vault is locked. It is not ready for real notes.
+> vault are not built yet. The logic behind them is built and tested, but nothing in
+> the plugin starts it, so for now the plugin has no key and syncs nothing: its
+> status line says the vault is locked. It is not ready for real notes.
 
 An Obsidian plugin that keeps every note in a vault in step with a Nexus server,
 both ways, on desktop and on mobile. You run the server yourself and tell the
@@ -117,18 +118,46 @@ and `styles.css` (this plugin has none).
 
 The sync engine never makes or stores a key. It asks the unlock port
 (`src/unlock.ts`) for the vault key, the vault id and the key number each time it
-has to encrypt or open a note. The setup screens will fill that port in a later piece
-of work; until then the plugin is given a port that never holds a key, so it sends
-nothing and reads nothing. The key is held in memory only while unlocked, and nothing
-in this plugin writes it to disk. The vault id comes through the same port. It is not secret: the setup
-screens will make it once, when the vault is made, keep it in this plugin's data file and beside the wraps on your
-server, and hand it to a new device when you approve it. Every device of a vault has to use the same one,
-because each note's encryption is bound to it. This plugin does none of that storing yet.
+has to encrypt or open a note. The port is the key holder (`src/key-holder.ts`): one
+object that starts locked. The key is held in memory only while unlocked, and nothing
+in this plugin writes it to disk. Locking the vault, or the plugin unloading, drops
+the key and overwrites its bytes with zeros, and so does signing out, and so does changing the
+Nexus address or the user name, because the key belonged to the other vault.
+
+The setup controller (`src/vault-setup.ts`) is what puts the key in the holder. It
+is a plain state machine with no look and no screen of its own: a screen reads its
+state and calls one event when the person does something. The comment at the top of
+the file names every state and every event in plain words. It covers:
+
+- **First run, with no vault on your server.** It makes the vault key, the vault id
+  and the Recovery Key, and shows the Recovery Key. The person types back the last
+  group of four characters (three tries). Only then does it send the Recovery wrap, with the
+  vault id, and unlock. Three wrong tries send nothing and keep nothing.
+- **A vault exists and this device has the Recovery Key.** It reads the vault id and
+  the Recovery wrap from Nexus, opens the wrap with the key typed, and unlocks. A key
+  that is wrong, or not whole, is refused with a plain message and nothing is kept.
+- **A new device, approved from another.** The two-code exchange below, as states:
+  waiting, type the matching code, unlocked or refused.
+- **This device approves another device,** with the key code typed here.
+- **This device approves an agent.** The person pastes the agent's public key, and
+  the controller seals the vault key to it and shows the approval, for the person to save beside the agent's
+  private key. It is the same text `nexus-agent approve-agent` prints, so either can be used, and it is never sent through Nexus.
+- **Locked or unlocked,** the status the plugin already shows.
+
+Every key step is the shared one in `packages/agent` (`@nexus/agent/setup`), the code the
+`nexus-agent` commands `create-vault` and `approve-agent` also call, or the approval engine's
+(`src/approval.ts`); there is no second copy of any of them in this plugin.
+
+The vault id comes through the same port. It is not secret: the setup makes it once, when
+the vault is made, and sends it with the first wrap, so it is kept beside the wraps on your server. A device that
+unlocks with the Recovery Key reads it there, and a new device is handed it in its approval. Every device of a vault
+has to use the same one, because each note's encryption is bound to it. This plugin keeps it nowhere else, so the data
+file still holds only the address and the user name.
 
 ## Giving a new device the vault key
 
-The engine for this is built (`src/approval.ts`); its screens are not, so nothing in the plugin's own
-screens starts it yet. A device that holds the vault key can approve a new one, so that the new device
+The engine for this is `src/approval.ts`, and the setup controller drives it as states; its screens are
+not built, so nothing in the plugin's own screens starts it yet. A device that holds the vault key can approve a new one, so that the new device
 unlocks the vault with no Recovery Key typed.
 
 - The new device makes a key pair of its own for the attempt, keeps the private half in memory only,
@@ -140,7 +169,9 @@ unlocks the vault with no Recovery Key typed.
   The approving device shows a **matching code**.
 - The new device works out the matching code from both devices' keys and what it was handed. It uses nothing
   it was handed, not the token and not the key, until the person types the approving device's code on
-  it and it is the same. An approval a server made or swapped gives a different code and is refused.
+  it and it is the same. An approval a server made or swapped gives a different code and is refused. The
+  approval itself (`src/approval.ts`) allows three wrong matching codes and then closes, key and all, so the setup
+  controller and any other caller get the same limit.
 
 The derivation of both codes is in [docs/FORMAT.md](../docs/FORMAT.md) section 7.4. The vault key goes to the
 unlock port and nowhere else; nothing here writes a key or an approval to disk.

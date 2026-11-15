@@ -3,11 +3,12 @@
 // Obsidian's own APIs are used (nothing from Node or Electron), so it runs on a phone as well as on a desktop.
 
 import { Notice, Platform, Plugin, TFile, requestUrl, type App } from "obsidian";
+import { KeyHolder } from "./key-holder";
 import { NexusSettingTab } from "./settings";
 import { STATE_KEY, joinState, sharedHasMore, signInLabel, splitState } from "./state";
 import { createSyncEngine } from "./sync";
 import type { Http, PluginData, SyncEngine, VaultPort } from "./types";
-import { NEVER_UNLOCKED } from "./unlock";
+import { VaultSetup } from "./vault-setup";
 
 /** A second "came to the front" within this long of the last one is the same coming back (the window and the page both say so). */
 const FRONT_SETTLE_MS = 2_000;
@@ -53,6 +54,10 @@ export default class NexusPlugin extends Plugin {
   /** Everything the plugin keeps. Only the address is saved in the data file; the rest is this device's own (see state.ts). */
   state: PluginData = joinState(null, null);
   engine!: SyncEngine;
+  /** Holds the vault key while the vault is unlocked, in memory only: the engine's `unlock` port, and where the setup puts the key. Starts locked. */
+  readonly keyHolder = new KeyHolder((unlocked) => this.keyChanged(unlocked));
+  /** Sets up, unlocks, approves and locks the vault: the state machine the setup screens will drive. */
+  setup!: VaultSetup;
   /** Obsidian's `requestUrl`, narrowed to what the engine and the sign-in use. */
   readonly http: Http = (request) => requestUrl(request);
 
@@ -62,6 +67,8 @@ export default class NexusPlugin extends Plugin {
   /** The address as the data file holds it, so the file is only written when the address changes. */
   private savedAddress = "";
   private lastFront = 0;
+  /** The address and user the key held belongs to: a vault is the one a server holds for a user, so a change of either lets go of the key. */
+  private keyedFor = "";
 
   async onload(): Promise<void> {
     // The data file is inside the vault and travels with it between devices, so it holds the address and nothing else.
@@ -69,6 +76,7 @@ export default class NexusPlugin extends Plugin {
     const shared: unknown = await this.loadData();
     this.state = joinState(shared, this.app.loadLocalStorage(STATE_KEY));
     this.savedAddress = this.state.address;
+    this.keyedFor = this.serverKey();
     this.app.saveLocalStorage(STATE_KEY, splitState(this.state).device);
     if (sharedHasMore(shared)) await this.saveData(splitState(this.state).shared); // a token left in the file is taken out of it
 
@@ -83,10 +91,18 @@ export default class NexusPlugin extends Plugin {
         return plugin.deviceName();
       },
       now: () => new Date(),
-      // The setup screens that make and unlock the vault key are a later piece of work. Until they exist nothing is ever unlocked,
-      // so the plugin syncs nothing and the status line says the vault is locked.
-      unlock: NEVER_UNLOCKED,
+      // The key holder starts locked, so the plugin syncs nothing and the status line says the vault is locked until the setup unlocks it.
+      unlock: this.keyHolder,
       onStatus: () => this.showStatus(),
+    });
+    this.setup = new VaultSetup({
+      http: this.http,
+      data: this.state,
+      persist: () => this.save(),
+      device: () => this.signInLabel(),
+      keys: this.keyHolder,
+      open: (link) => void window.open(link),
+      wait: (ms) => new Promise<void>((resolve) => window.setTimeout(resolve, ms)),
     });
 
     this.settingTab = new NexusSettingTab(this.app, this);
@@ -111,6 +127,9 @@ export default class NexusPlugin extends Plugin {
 
   onunload(): void {
     this.engine?.stop();
+    // The key is dropped (overwritten) and nothing the setup was doing goes on.
+    this.setup?.unload();
+    this.keyHolder.lock();
   }
 
   /** What kind of device this is, from what Obsidian says about the platform. */
@@ -137,11 +156,28 @@ export default class NexusPlugin extends Plugin {
   save(): Promise<void> {
     const { shared, device } = splitState(this.state);
     this.app.saveLocalStorage(STATE_KEY, device);
+    // A new address or a new user is another vault: the key held was this one's, so it is dropped and the vault is locked.
+    if (this.serverKey() !== this.keyedFor) {
+      this.keyedFor = this.serverKey();
+      this.setup?.lock();
+    }
+    // Signing out (the settings button, or a token Nexus no longer knows) locks the vault too: a signed-out device holds no key.
+    if (this.state.token === null && this.keyHolder.isUnlocked) this.setup?.lock();
     if (shared.address !== this.savedAddress) {
       this.savedAddress = shared.address;
       this.saving = this.saving.then(() => this.saveData(shared)).catch((error) => console.error("Nexus plugin: could not save its data:", error));
     }
     return this.saving;
+  }
+
+  private serverKey(): string {
+    return `${this.state.address}\n${this.state.user}`;
+  }
+
+  /** The vault was locked or unlocked: the status line says so, and an unlock syncs at once (edits made while it was locked go up). */
+  private keyChanged(unlocked: boolean): void {
+    this.showStatus();
+    if (unlocked) void this.engine.sync();
   }
 
   /** Called when the status line changed: the status bar and the open settings tab show the new words. */
