@@ -204,6 +204,21 @@ describe("locking", () => {
     expect(b.saved.some((d) => d.token !== null), "no token was kept").toBe(false);
   });
 
+  it("stops a sign-in that is waiting for another device: it asks Nexus nothing more, and nothing is kept", async () => {
+    const b = await setupDevice(world, { token: null });
+    let pauses = 0;
+    b.whenWaiting = async () => {
+      pauses++;
+      at(b, "waiting-for-device");
+      b.setup.lock();
+    };
+    await b.setup.askAnotherDevice();
+    expect(pauses, "it paused once, was locked, and did not go on").toBe(1);
+    expect(b.setup.state).toEqual({ step: "locked" });
+    expect(b.log.to("POST device/poll"), "it never asked whether the sign-in was answered").toEqual([]);
+    expect(b.deps.data.token).toBeNull();
+  });
+
   it("is cancelled by unload, which also stops telling anyone what changed", async () => {
     const { device } = await firstRun(world);
     const told = vi.fn();
