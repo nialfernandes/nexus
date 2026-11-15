@@ -4,9 +4,9 @@
 
 import { generateDeviceKeyPair, generateVaultKey, sealApproval } from "@nexus/crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { blobFor, makeDevice, nexusNotes, nexusTexts, TestUnlock } from "../../../plugin/tests/world";
+import { blobFor, bodyOf, makeDevice, nexusNotes, nexusTexts, TestUnlock } from "../../../plugin/tests/world";
 import { encodeBase64 } from "../src/base64";
-import { AgentVault } from "../src/index";
+import { AgentVault, type FetchLike } from "../src/index";
 import { ADDRESS, agentCredentials, fetchOverNexus, openWorld, setUpVault, type AgentCredentials, type Seen, type World } from "./world";
 
 let world: World;
@@ -215,6 +215,125 @@ describe("a note made, updated and read by its id", () => {
       await expect(vault.readNote(id), id).rejects.toMatchObject({ code: "unreadable" });
       await expect(vault.updateNote(id, 1, "x"), id).rejects.toMatchObject({ code: "unreadable" });
     }
+    vault.close();
+  });
+});
+
+describe("a note made again after its answer was lost", () => {
+  const PATH = "Agent/First.md";
+  const ID = "ep-123";
+
+  /** A `fetch` that sends the first save to Nexus, so Nexus keeps it, and then drops the answer, as a timeout or a Worker cut off mid-request does. */
+  const losingTheFirstAnswer = (inner: FetchLike): { fetch: FetchLike; lost: () => number } => {
+    let lost = 0;
+    const fetch: FetchLike = async (url, init) => {
+      const answer = await inner(url, init);
+      if (init.method === "POST" && url.endsWith("/save") && lost === 0) {
+        lost++;
+        throw new Error("the connection was cut");
+      }
+      return answer;
+    };
+    return { fetch, lost: () => lost };
+  };
+
+  const connectLosing = async () => {
+    const world = fetchOverNexus();
+    const losing = losingTheFirstAnswer(world.fetch);
+    const vault = await AgentVault.connect({ address: ADDRESS, token: credentials.token, privateKey: credentials.privateKey, approval: credentials.approval, fetch: losing.fetch });
+    return { vault, seen: world.seen, lost: losing.lost };
+  };
+
+  it("makes the note at the id it is given, with one save", async () => {
+    const { vault, seen } = await connect();
+    expect(await vault.createNote(PATH, "# First\n", { id: ID })).toEqual({ id: ID, path: PATH, version: 1 });
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET heads -> 200", "POST save -> 200"]);
+    expect(seen[2]!.body).toMatchObject({ id: ID, base: 0 });
+    expect(await nexusNotes(world)).toEqual({ [ID]: { path: PATH, text: "# First\n", version: 1 } });
+    vault.close();
+  });
+
+  it("answers the note that is there, version 1, when the same id and text are made again after the answer was lost, and saves nothing", async () => {
+    const { vault, seen, lost } = await connectLosing();
+    await expect(vault.createNote(PATH, "# First\n", { id: ID })).rejects.toMatchObject({ name: "AgentError", code: "unreachable" });
+    expect(lost(), "the answer was dropped after Nexus had kept the note").toBe(1);
+    expect(await nexusNotes(world)).toEqual({ [ID]: { path: PATH, text: "# First\n", version: 1 } });
+
+    const before = seen.length;
+    expect(await vault.createNote(PATH, "# First\n", { id: ID })).toEqual({ id: ID, path: PATH, version: 1 });
+    expect(asked(seen.slice(before)), "the save is answered 409, the note is read once, and nothing is saved").toEqual(["POST save -> 409", "GET note -> 200"]);
+
+    expect(await nexusNotes(world), "one note, still at version 1").toEqual({ [ID]: { path: PATH, text: "# First\n", version: 1 } });
+    const device = await makeDevice(world, { unlock: new TestUnlock(world.keys) });
+    await device.engine.sync();
+    expect(device.vault.textOf(PATH)).toBe("# First\n");
+    expect((await device.vault.files()).filter((file) => file.endsWith(".md"))).toEqual([PATH]);
+
+    // The answer can be used as any other: the note is updated from the version it tells.
+    expect(await vault.updateNote(ID, 1, "# First\n\nMore.\n")).toEqual({ result: "saved", id: ID, path: PATH, version: 2 });
+    vault.close();
+  });
+
+  it("refuses the same id with another text, plainly, and changes nothing", async () => {
+    const { vault, seen } = await connect();
+    await vault.createNote(PATH, "# First\n", { id: ID });
+    const before = seen.length;
+    const refused = await vault.createNote(PATH, "# Something else\n", { id: ID }).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ name: "AgentError", code: "id-taken" });
+    expect((refused as Error).message).toMatch(/already (a|the) note|already there|read it/i);
+    expect((refused as Error).message, "the text is never repeated in a message").not.toContain("Something else");
+    expect(asked(seen.slice(before)).filter((line) => line.includes("-> 200") && line.startsWith("POST"))).toEqual([]);
+    expect(await nexusNotes(world)).toEqual({ [ID]: { path: PATH, text: "# First\n", version: 1 } });
+    vault.close();
+  });
+
+  it("refuses the same id and text at another path, which is another note, and changes nothing", async () => {
+    const { vault } = await connect();
+    await vault.createNote(PATH, "# First\n", { id: ID });
+    await expect(vault.createNote("Agent/Other.md", "# First\n", { id: ID })).rejects.toMatchObject({ code: "id-taken" });
+    expect(await nexusNotes(world)).toEqual({ [ID]: { path: PATH, text: "# First\n", version: 1 } });
+    vault.close();
+  });
+
+  it("answers the version the note is at when it has moved on and still says the same, and refuses when it says something else", async () => {
+    const { vault } = await connect();
+    await vault.createNote(PATH, "# First\n", { id: ID });
+    expect(await vault.updateNote(ID, 1, "# Changed\n")).toMatchObject({ result: "saved", version: 2 });
+    await expect(vault.createNote(PATH, "# First\n", { id: ID }), "the text it was made with is not what is there now").rejects.toMatchObject({ code: "id-taken" });
+    expect(await vault.createNote(PATH, "# Changed\n", { id: ID })).toEqual({ id: ID, path: PATH, version: 2 });
+    expect(await nexusNotes(world)).toEqual({ [ID]: { path: PATH, text: "# Changed\n", version: 2 } });
+    vault.close();
+  });
+
+  it("refuses an id whose note was deleted, and a note it cannot open, and never brings a note back", async () => {
+    await world.elsewhere.create("Ideas/mine.md", "this key opens it\n"); // so `connect` finds a note the key opens
+    const made = await world.elsewhere.create("Ideas/gone.md", "gone\n");
+    await world.elsewhere.remove(made.id);
+    const foreign = { vaultKey: await generateVaultKey(), vaultId: world.keys.vaultId, kid: world.keys.kid };
+    await world.agents.save("foreign-note", await blobFor(foreign, "foreign-note", "Ideas/foreign.md", "sealed with another key\n"), { base: 0, kid: foreign.kid });
+    const { vault } = await connect();
+    await expect(vault.createNote("Ideas/gone.md", "gone\n", { id: made.id })).rejects.toMatchObject({ code: "id-taken" });
+    await expect(vault.createNote("Ideas/foreign.md", "sealed with another key\n", { id: "foreign-note" })).rejects.toMatchObject({ code: "id-taken" });
+    const held = (bodyOf(await world.owner.list()).notes as Array<{ id: string }>).map((note) => note.id);
+    expect(held.sort(), "the deleted note is still deleted, and the foreign one was not touched").toEqual([expect.any(String), "foreign-note"].sort());
+    expect(bodyOf(await world.owner.note("foreign-note")).version).toBe(1);
+    expect((await world.owner.note(made.id)).status, "Nexus still says it was deleted").toBe(404);
+    vault.close();
+  });
+
+  it("refuses an id that is not a note id before anything is sent, and leaves a call with no id as it was: a new random id each time", async () => {
+    const { vault, seen } = await connect();
+    const sent = seen.length;
+    for (const id of ["", "../etc/passwd", "has space", "x".repeat(129), 7 as unknown as string]) {
+      await expect(vault.createNote(PATH, "x", { id }), String(id)).rejects.toMatchObject({ code: "bad-settings" });
+    }
+    expect(seen.length, "those were refused before anything was sent").toBe(sent);
+
+    const first = await vault.createNote("Agent/a.md", "a\n");
+    const second = await vault.createNote("Agent/a.md", "a\n", {});
+    expect(first.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(second.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(second.id, "no id given, so a second note").not.toBe(first.id);
     vault.close();
   });
 });

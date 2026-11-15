@@ -67,6 +67,15 @@ export interface WriteResult {
   duplicate: boolean;
 }
 
+/** What `createNote` may be told besides the path and the text. */
+export interface CreateOptions {
+  /**
+   * The note's id, one the caller can make again from its own data (1 to 128 letters, digits, hyphens or underscores). A repeat of the same
+   * call, with the same path and text, answers the note that is there and saves nothing. Left out, the note gets a new random id.
+   */
+  id?: string;
+}
+
 /** One note as the vault knows it without its text: the id Nexus knows it by, the version it is at, and its path. */
 export interface NoteRef {
   id: string;
@@ -292,13 +301,22 @@ export class AgentVault {
    * does not know whether another note is already at the path: two notes at one path are two ids, and the plugin gives the path to
    * the one with the smaller id and moves the other to a duplicate path (see `write`, which looks first). Keep the id: `readNote`
    * and `updateNote` take it.
+   *
+   * With no id, each call makes a note under a new random id, so a call whose answer was lost and is made again leaves a second copy
+   * under an id nobody kept. A caller that can make its id again from its own data (a hash of its own episode id) gives it as
+   * `options.id`, and then a repeat is safe: when a note with that id is already there with the same path and the same text, it is the
+   * first call's own note, so its id and version are answered and nothing is saved. When the note there differs (another text or path,
+   * or it was deleted, or this key cannot open it) the call is refused as "id-taken" and changes nothing: the caller reads the note
+   * (`readNote`) and updates it (`updateNote`) if that is what it wants.
    */
-  createNote(path: string, text: string): Promise<NoteRef> {
+  createNote(path: string, text: string, options: CreateOptions = {}): Promise<NoteRef> {
     return this.#serially(async () => {
       this.#checkPath(path);
       if (typeof text !== "string") throw new AgentError("bad-settings", "A note's text has to be text.");
-      const id = newNoteId();
+      if (options.id !== undefined) this.#checkId(options.id);
+      const id = options.id ?? newNoteId();
       const reply = await this.#nexus.post("save", { id, base: 0, kid: this.#kid, blob: await this.#seal(id, path, text) });
+      if (reply.status === 409 && options.id !== undefined && typeof reply.json.current === "number") return this.#sameNote(id, path, text);
       if (reply.status !== 200 || reply.json.result !== "saved") throw refusal(reply, "save the note");
       this.#rememberPath(id, reply.json.version, path);
       return { id, path, version: reply.json.version };
@@ -375,8 +393,19 @@ export class AgentVault {
   /** A note id is what Nexus accepts: 1 to 128 letters, digits, hyphens or underscores. Checked here so a wrong one is told plainly and is never sent. */
   #checkId(id: string): void {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
-      throw new AgentError("bad-settings", "A note id is 1 to 128 letters, digits, hyphens or underscores: the id `createNote` told.");
+      throw new AgentError("bad-settings", "A note id is 1 to 128 letters, digits, hyphens or underscores: the id `createNote` told, or the one it was given.");
     }
+  }
+
+  /**
+   * A `createNote` with an id found the id already used. When the note there is at this path with this text it is the caller's own note, made
+   * by an earlier call whose answer was lost: answer it as it is now and save nothing. Anything else is another note under the caller's id.
+   */
+  async #sameNote(id: string, path: string, text: string): Promise<NoteRef> {
+    const there = await this.#fetch(id, undefined);
+    if (there === null || there.entry.path !== path || there.text !== text) throw idTaken();
+    this.#rememberPath(id, there.entry.version, path);
+    return { id, path, version: there.entry.version };
   }
 
   /** The approval is for the vault the server holds: the server keeps the vault id beside the wraps. */
@@ -642,6 +671,7 @@ export class AgentVault {
 const notFound = (path: string): AgentError => new AgentError("not-found", `There is no note at ${path}.`);
 const wrongKey = (): AgentError => new AgentError("wrong-key", "The approval's key opens none of the notes in this vault, so it is not this vault's key. Ask for a new approval.");
 const noNoteWithId = (): AgentError => new AgentError("not-found", "There is no note with that id, or it was deleted.");
+const idTaken = (): AgentError => new AgentError("id-taken", "A note with that id is already there, and it is not the note this call would make (its text or path differs, it was deleted, or this key cannot open it), so nothing was saved. Read it with readNote and update it with updateNote if that is what you want.");
 const unreadable = (what: string): AgentError => new AgentError("unreadable", `The note ${what} could not be opened with this vault's key, or names a path the plugin would refuse.`);
 
 /** A random id for a note, made the first time it is saved: 16 random bytes in url-safe base64, as the plugin makes them. */
