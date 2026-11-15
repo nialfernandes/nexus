@@ -27,7 +27,7 @@ const forbidden: Array<[string, RegExp]> = [
 
 describe("the library's source", () => {
   it("finds the files", () => {
-    expect(library.sort()).toEqual(["base64.ts", "errors.ts", "index.ts", "nexus.ts", "paths.ts", "setup.ts", "vault.ts"]);
+    expect(library.sort()).toEqual(["base64.ts", "errors.ts", "index.ts", "nexus.ts", "paths.ts", "setup.ts", "vault.ts", "wasm-gate.ts"]);
   });
 
   for (const [what, pattern] of forbidden) {

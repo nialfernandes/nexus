@@ -1,6 +1,6 @@
 // What an agent imports: the vault, and the few things that go with it. Runs in Node and in a Cloudflare Worker.
 
-export { AgentVault, type AgentOptions, type WriteResult } from "./vault";
+export { AgentVault, type AgentOptions, type NoteContent, type NoteRef, type UpdateResult, type WriteResult } from "./vault";
 export { AgentError, type AgentErrorCode } from "./errors";
 export type { FetchLike } from "./nexus";
 export { isSafeNotePath } from "./paths";

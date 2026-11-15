@@ -8,7 +8,8 @@ export type AgentErrorCode =
   | "wrong-vault" //   the approval is for another vault than the one the server holds, or the server holds none
   | "wrong-key" //     the approval's key opens none of the vault's notes
   | "unsafe-path" //   the path is not one the plugin would write into a vault
-  | "not-found" //     there is no note at that path
+  | "not-found" //     there is no note at that path, or with that id
+  | "unreadable" //    the note could not be opened with this vault's key, or names a path the plugin would refuse
   | "unreachable" //   Nexus could not be reached
   | "refused" //       Nexus answered with a refusal
   | "changed" //       the note kept changing, or changed while it was being deleted

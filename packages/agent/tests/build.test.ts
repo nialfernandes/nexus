@@ -1,6 +1,7 @@
 // The built library: ONE file that another repository can pin and check by its checksum, that runs with no Node built-in, and that works
-// against the real server code. The build is run for real: `node scripts/build.mjs <outdir>` in a process of its own, the way
-// `npm run build` runs it, and then the file it made is used.
+// against the real server code, and libsodium's WebAssembly as a file beside it for a runtime that will not make code from bytes (a Cloudflare
+// Worker: worker.test.ts runs it in one). The build is run for real: `node scripts/build.mjs <outdir>` in a process of its own, the way
+// `npm run build` runs it, and then the files it made are used.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -10,15 +11,27 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildLibrary, sha256Of } from "../scripts/build.mjs";
+import { buildLibrary, sha256Of, wasmFileFor } from "../scripts/build.mjs";
 import { ADDRESS, agentCredentials, fetchOverNexus, openWorld, setUpVault } from "./world";
 import { nexusTexts } from "../../../plugin/tests/world";
 
 const PATH = "Agent/built.md";
 const TEXT = "written by the built file\n";
 
+/**
+ * The SHA-256 of each file the build makes, pinned. Another repository copies nexus-agent.js and nexus-agent.wasm and pins these; a change
+ * to what they hold, from a source, from @nexus/crypto or from libsodium, is a change to what that repository pinned, so it fails here until
+ * someone has looked at it and written the new values in. The build prints them: `node scripts/build.mjs <outdir>`.
+ */
+const PINNED: Record<string, string> = {
+  "nexus-agent.js": "0000000000000000000000000000000000000000000000000000000000000000",
+  "nexus-agent.wasm": "0000000000000000000000000000000000000000000000000000000000000000",
+  "cli.js": "0000000000000000000000000000000000000000000000000000000000000000",
+};
+
 let directory = "";
 let library = "";
+let wasmFile = "";
 let printed = "";
 let bundle = "";
 
@@ -26,6 +39,7 @@ beforeAll(() => {
   directory = mkdtempSync(join(tmpdir(), "nexus-agent-build-"));
   printed = execFileSync("node", [join(import.meta.dirname, "../scripts/build.mjs"), directory], { encoding: "utf8", cwd: join(import.meta.dirname, "..") });
   library = join(directory, "nexus-agent.js");
+  wasmFile = wasmFileFor(library);
   bundle = readFileSync(library, "utf8");
 }, 120_000);
 
@@ -34,18 +48,31 @@ afterAll(() => {
 });
 
 describe("the build", () => {
-  it("makes the library as one file, and the command beside it", () => {
-    expect(readdirSync(directory).sort()).toEqual(["cli.js", "nexus-agent.js"]);
+  it("makes the library as one file, libsodium's WebAssembly beside it, and the command", () => {
+    expect(readdirSync(directory).sort()).toEqual(["cli.js", "nexus-agent.js", "nexus-agent.wasm"]);
     expect(statSync(library).size, "libsodium's WebAssembly is inside").toBeGreaterThan(100_000);
     expect(bundle).toMatch(/^export \{/m);
   });
 
-  it("prints the file's SHA-256 in the form `sha256sum -c` reads, and it is the file's", async () => {
-    const sum = createHash("sha256").update(readFileSync(library)).digest("hex");
-    expect(printed).toBe(`${sum}  nexus-agent.js\n`);
-    expect(await sha256Of(library)).toBe(sum);
-    // Another repository checks the file it pinned the same way.
+  it("prints the SHA-256 of each file in the form `sha256sum -c` reads, and they are the files'", async () => {
+    const sums = ["nexus-agent.js", "nexus-agent.wasm", "cli.js"].map((name) => `${createHash("sha256").update(readFileSync(join(directory, name))).digest("hex")}  ${name}\n`);
+    expect(printed).toBe(sums.join(""));
+    expect(await sha256Of(library)).toBe(sums[0]!.slice(0, 64));
+    // Another repository checks the files it pinned the same way.
     expect(() => execFileSync("sha256sum", ["-c"], { input: printed, cwd: directory, stdio: ["pipe", "pipe", "pipe"] })).not.toThrow();
+  });
+
+  it("makes the files whose checksums are pinned in this test", () => {
+    const printedSums = Object.fromEntries(printed.trim().split("\n").map((line) => line.split("  ").reverse() as [string, string]));
+    expect(printedSums, "the build printed the pinned files' checksums: if this fails on purpose, the new values are the printed ones").toEqual(PINNED);
+  });
+
+  it("writes the WebAssembly beside the library as a module of its own, and it is the very bytes that are inside the library", () => {
+    const bytes = readFileSync(wasmFile);
+    expect([...bytes.subarray(0, 4)], "the magic number of a WebAssembly module").toEqual([0, 0x61, 0x73, 0x6d]);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    expect(bytes.length).toBeGreaterThan(200_000);
+    expect(bundle, "the library holds the same bytes as base64, for a runtime that can start them").toContain(bytes.toString("base64"));
   });
 
   it("makes the same file every time, so a checksum taken from one build is every build's", async () => {
@@ -53,6 +80,7 @@ describe("the build", () => {
     try {
       await buildLibrary(join(again, "nexus-agent.js"));
       expect(await sha256Of(join(again, "nexus-agent.js"))).toBe(await sha256Of(library));
+      expect(await sha256Of(join(again, "nexus-agent.wasm"))).toBe(await sha256Of(wasmFile));
     } finally {
       rmSync(again, { recursive: true });
     }
@@ -102,7 +130,7 @@ describe("the built file in a Worker-like runtime", () => {
    * what a Cloudflare Worker has: the web platform (crypto.getRandomValues, fetch, TextEncoder, atob, btoa, URL, timers, WebAssembly)
    * and none of Node's: no `require`, `process`, `Buffer` or `module`. Nothing else of the file is changed.
    */
-  function loadInWorkerLikeContext(fetch: unknown) {
+  function loadInWorkerLikeContext(fetch: unknown, wasmFromBytes = true) {
     const exported = /\nexport \{([^}]*)\};?\s*$/.exec(bundle);
     expect(exported, "the file ends with one export list").not.toBeNull();
     const names = exported![1]!.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
@@ -123,7 +151,8 @@ describe("the built file in a Worker-like runtime", () => {
       },
       fetch, TextEncoder, TextDecoder, atob, btoa, URL, URLSearchParams, setTimeout, clearTimeout, console,
     };
-    const context = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: true } });
+    // A Worker refuses to make WebAssembly from bytes and takes a module that was compiled before it started.
+    const context = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: wasmFromBytes } });
     vm.runInContext(script, context, { filename: "nexus-agent.js" });
     return { context, api: (sandbox.__exports as Record<string, any>) ?? vm.runInContext("globalThis.__exports", context) };
   }
@@ -159,5 +188,47 @@ describe("the built file in a Worker-like runtime", () => {
     // A wrong key is refused there too, with the library's own plain error.
     await expect(api.AgentVault.open({ address: ADDRESS, token: credentials.token, privateKey: credentials.publicKey, approval: credentials.approval, fetch }))
       .rejects.toMatchObject({ name: "AgentError", code: "bad-approval" });
+  });
+
+  it("cannot start libsodium there when WebAssembly may not be made from bytes, and no module is given: the rule a Worker has", async () => {
+    const world = await openWorld();
+    await setUpVault(world);
+    const credentials = await agentCredentials(world);
+    const { fetch } = fetchOverNexus();
+    const { context } = loadInWorkerLikeContext(fetch, false);
+    const api = vm.runInContext("globalThis.__exports", context) as Record<string, any>;
+    await expect(api.AgentVault.open({ address: ADDRESS, token: credentials.token, privateKey: credentials.privateKey, approval: credentials.approval, fetch })).rejects.toThrow(/wasm|WebAssembly/i);
+  });
+
+  it("starts there with the .wasm file compiled beforehand and given as `wasm`, and opens an approval and round-trips a note", async () => {
+    const world = await openWorld();
+    await setUpVault(world);
+    const credentials = await agentCredentials(world);
+    const { fetch } = fetchOverNexus();
+    const { context } = loadInWorkerLikeContext(fetch, false);
+    const api = vm.runInContext("globalThis.__exports", context) as Record<string, any>;
+    // Compiled out here, where compiling is allowed, as a Worker's own start-up does with the file it imports.
+    const wasm = new WebAssembly.Module(readFileSync(wasmFile));
+
+    const vault = await api.AgentVault.open({ address: ADDRESS, token: credentials.token, privateKey: credentials.privateKey, approval: credentials.approval, fetch, wasm });
+    await vault.write(PATH, TEXT);
+    expect(await vault.read(PATH)).toBe(TEXT);
+    expect(await nexusTexts(world)).toEqual({ [PATH]: TEXT });
+    vault.close();
+  });
+
+  it("refuses a `wasm` that is not a compiled module, before it starts anything", async () => {
+    const world = await openWorld();
+    await setUpVault(world);
+    const credentials = await agentCredentials(world);
+    const { fetch } = fetchOverNexus();
+    const { context } = loadInWorkerLikeContext(fetch);
+    const api = vm.runInContext("globalThis.__exports", context) as Record<string, any>;
+    await expect(api.AgentVault.open({ ...credentials, fetch, wasm: readFileSync(wasmFile) })).rejects.toMatchObject({ name: "AgentError", code: "bad-settings" });
+    await expect(api.AgentVault.connect({ ...credentials, fetch, wasm: "not a module" })).rejects.toMatchObject({ name: "AgentError", code: "bad-settings" });
+    // The refusals started nothing, so a call with no module still starts from the bytes inside the file.
+    const vault = await api.AgentVault.open({ ...credentials, fetch });
+    expect(vault.vaultId).toBe(world.keys.vaultId);
+    vault.close();
   });
 });
