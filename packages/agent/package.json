@@ -1,0 +1,39 @@
+{
+  "name": "@nexus/agent",
+  "version": "0.1.0",
+  "description": "For an agent that holds its own key: a library that reads and writes the encrypted Nexus vault by note path, and the nexus-agent command a person runs to set the vault up and approve the agent. The library is built to one file that runs in Node and in a Cloudflare Worker.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "main": "./dist/nexus-agent.js",
+  "module": "./dist/nexus-agent.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/nexus-agent.js"
+    }
+  },
+  "bin": {
+    "nexus-agent": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.cli.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@nexus/crypto": "0.1.0",
+    "@nexus/merge": "0.1.0"
+  },
+  "devDependencies": {
+    "@nexus/test-sqlite": "0.1.0",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

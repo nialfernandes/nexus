@@ -236,6 +236,45 @@ Someone who can watch or interfere with traffic between a device and the server.
   the same app, and can read vault files and the locally stored key [S63]. This
   part is this document's own reasoning. Install only plugins you trust.
 
+#### An agent's approval
+
+An agent that holds a key of its own is given the vault key by an **approval**: the
+vault key sealed to the agent's public key. The person makes the agent's key pair
+themself (`nexus-agent keygen`) and saves the private half in their own secrets
+manager. They then run `nexus-agent approve-agent` in their own terminal. It reads the
+Recovery Key from a hidden prompt (never from an argument, never shown), fetches the
+Recovery wrap and the vault id from the server, opens the vault key, seals it to the
+public key the person pasted, and **prints** the approval for the person to save beside
+the agent's private key. This part is this document's own reasoning.
+
+- **The server never sees an agent's approval, so it cannot swap one.** A device
+  approval is different: the new device and the approving device are two screens joined
+  by the server, so the server could slip its own public key to the approving device or
+  hand the new device an approval of its own, and the person has to compare two codes
+  (3.2) to catch it. An agent's approval does not pass through the server. The person
+  carries it from their terminal to the agent's secrets, so there is no one in the middle
+  to deceive and no code to compare. The agent's public key is also not relayed: the
+  person pastes it from the terminal that made it.
+- **A sealed box does not say who made it.** Whoever can change what the agent keeps
+  can replace its approval, and an agent given an approval for a vault key the attacker
+  made would write notes the attacker can read. So the agent's library checks the approval
+  against the server before it writes anything: the vault id inside the approval has to be
+  the vault id the server holds, and, once the vault holds any note, the approval's key has
+  to open at least one of them. That catches a wrong approval, whether by mistake or by a
+  swap made by someone who cannot also change the server's notes. It does **not** stop an
+  attacker who controls both the agent's secrets and the server, who can give the agent
+  notes of their own under their own key; and a vault with no note in it yet cannot show a
+  wrong key, so the first note an agent writes there is the first proof. Keep the agent's
+  secrets as carefully as a password manager's.
+- **Where each secret appears.** The Recovery Key is shown once, on the terminal where
+  `nexus-agent create-vault` runs (and only on a screen, not into a pipe or a file),
+  and typed once at the hidden prompt of `approve-agent`. The vault key is in
+  memory of those commands for as long as it takes to lock or seal it. The agent's
+  private key is shown once by `keygen`. The agent holds it, and its approval, in memory
+  only and never writes them or puts them in an error message.
+- **Revoking an agent** is the sign-in token's revocation (3.4): it stops the agent
+  reading or writing from now on, and does not make it forget a key it already holds.
+
 ### 3.6 A cloud assistant given a grant
 
 A cloud assistant cannot hold a key, so for it to read a note something must

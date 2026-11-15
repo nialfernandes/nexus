@@ -41,6 +41,9 @@ server, and do not try to reach anyone else's notes or data.
 
 - **The server**, in `server/`.
 - **The Obsidian plugin**, in `plugin/`.
+- **The agent library and the `nexus-agent` command**, in `packages/agent`: how an
+  agent that holds its own key opens the vault, and how the vault is set up and an
+  agent approved.
 - **The shared encryption code**, in `packages/crypto`.
 - **The format of the encrypted data**, described in [docs/FORMAT.md](docs/FORMAT.md).
   A weakness in the design of the format counts, as well as a mistake in the
