@@ -1,5 +1,6 @@
-// What Nexus's device routes answer the approval page, and the one place those shapes are written, so that a browser
-// check of the page can answer the page's calls itself from them.
+// What Nexus's device routes answer the approval page, and the one place those shapes and words are written. A browser
+// check of the page could answer the page's calls from them (this package has none); approval-page-actions.test.ts
+// takes the addresses and the words of a refusal from here.
 //
 // approval-page.test.ts holds these to the real handlers: it starts a real sign-in through the Worker and checks that
 // each answer there has exactly the keys, with the kinds of value, written here. The shapes are the contract in

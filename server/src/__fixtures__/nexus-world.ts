@@ -40,6 +40,9 @@
 //       200 { notes: [ { id, version, at, kid, hash } ] }          (every live note)
 //   GET  /changes   [?after=CURSOR][&limit=N]
 //       200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }    (a delete has no blob)
+//           A page ends at N versions or before the version that would take the blobs on it past the size cap (4,000,000
+//           characters of base64 unless set), so it can be short; it holds at least one version, and `next` is the place of
+//           the last one on it (changes-size.test.ts).
 //   POST /delete    { id, base }
 //       200 { result: "deleted", id, version }
 //       404 no such note   409 { error, current } the note is at another version

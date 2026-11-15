@@ -75,10 +75,16 @@ export interface NexusSignIn {
  *            approve a device: Nexus stays closed until an owner is named.
  *   address  The public address of this Nexus (such as https://nexus.example.org), used to build the link a device
  *            is handed to open the approval page. None means the address the request itself arrived on.
+ *   changesPageBytes
+ *            The most blob text one page of the changes feed sends, in bytes (the feed carries every version's whole
+ *            blob, so a page counted only in versions could be hundreds of megabytes). A page always holds at least one
+ *            version, so a single version larger than this is sent alone. Always a number: when the person who runs
+ *            Nexus chose none it is DEFAULT_CHANGES_PAGE_BYTES (store.ts), 4,000,000.
  */
 export interface NexusSettings {
   owner: string | null;
   address: string | null;
+  changesPageBytes: number;
 }
 
 export interface NexusHost {

@@ -216,8 +216,23 @@ export const DEFAULT_CHANGES = 100;
 export const MAX_CHANGES = 500;
 
 /**
+ * How much blob text one page of the changes feed may send, when the person who runs Nexus has not chosen (the
+ * setting `changesPageBytes`, ports.ts). A version carries its whole blob, up to 1,000,000 bytes and 1,333,336
+ * characters of base64, so 500 of them would be most of a gigabyte. 4,000,000 is two of the largest notes, or many
+ * small ones, in a page a phone can take.
+ */
+export const DEFAULT_CHANGES_PAGE_BYTES = 4_000_000;
+
+/**
  * Every version after a cursor, oldest first, and the cursor to carry on from. A cursor is the place of the last
- * version looked at. With nothing new the same cursor comes back, so asking again is always safe.
+ * version sent. With nothing new the same cursor comes back, so asking again is always safe.
+ *
+ * A page ends at `limit` versions or just before the version that would take the blobs it sends past
+ * `changesPageBytes`, whichever is first, so a version is never cut in two and the next page starts at the next
+ * version. A page holds at least one version: one larger than the cap goes alone, or the cursor could never move on.
+ * What is counted is the blob as sent (base64 text); a delete is sent with no blob and counts for none.
+ *
+ * The sizes are read first, without the blobs, so a page that is cut short never reads the blobs it leaves for the next.
  */
 export async function changes(host: NexusHost, _caller: Caller, afterInput: unknown, limitInput: unknown): Promise<{ rows: VersionRow[]; next: string }> {
   let after = 0;
@@ -233,6 +248,22 @@ export async function changes(host: NexusHost, _caller: Caller, afterInput: unkn
     if (!Number.isInteger(limit) || limit < 1) throw new Refusal(400, "The limit has to be a whole number of changes, 1 or more.");
     limit = Math.min(limit, MAX_CHANGES);
   }
-  const rows = await host.sql.all<VersionRow>("SELECT * FROM nexus_versions WHERE seq > ? ORDER BY seq LIMIT ?", [after, limit]);
-  return { rows, next: String(rows.length ? rows[rows.length - 1].seq : after) };
+
+  const sizes = await host.sql.all<{ seq: number; size: number }>(
+    "SELECT seq, CASE WHEN kind = 'save' THEN LENGTH(blob) ELSE 0 END AS size FROM nexus_versions WHERE seq > ? ORDER BY seq LIMIT ?",
+    [after, limit],
+  );
+  const cap = host.settings.changesPageBytes;
+  let count = 0;
+  let bytes = 0;
+  for (const { size } of sizes) {
+    if (count > 0 && bytes + size > cap) break;
+    bytes += size;
+    count += 1;
+  }
+  if (count === 0) return { rows: [], next: String(after) };
+
+  const last = sizes[count - 1].seq;
+  const rows = await host.sql.all<VersionRow>("SELECT * FROM nexus_versions WHERE seq > ? AND seq <= ? ORDER BY seq", [after, last]);
+  return { rows, next: String(last) };
 }
