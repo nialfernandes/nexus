@@ -96,14 +96,15 @@ describe("the vault key", () => {
     expect(device.log.to("POST save"), "nothing went up with a key that was taken away").toEqual([]);
   });
 
-  it("is made and opened by no source file of the plugin: those belong to the setup screens, which are later work", async () => {
+  it("is made, and unwrapped from a Recovery Key or a password, by no source file of the plugin: those belong to the setup screens, which are later work; only the approval engine opens an approval", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const dir = fileURLToPath(new URL("../src/", import.meta.url));
     const written = readdirSync(dir).filter((f) => f.endsWith(".ts")).map((f) => [f, readFileSync(dir + f, "utf8")] as const);
     expect(written.length, "the sources were found").toBeGreaterThan(8);
     for (const [file, source] of written) {
-      expect(source, `${file} neither makes nor unwraps a vault key`).not.toMatch(/generateVaultKey|generateRecoveryKey|parseRecoveryKey|unwrapVaultKeyWithRecoveryKey|openPasswordWrap|openApproval/);
+      expect(source, `${file} neither makes nor unwraps a vault key`).not.toMatch(/generateVaultKey|generateRecoveryKey|parseRecoveryKey|unwrapVaultKeyWithRecoveryKey|openPasswordWrap/);
+      if (file !== "approval.ts") expect(source, `${file} does not open an approval: only approval.ts does, and it holds the key back until the person has checked the code`).not.toMatch(/openApproval/);
     }
   });
 });

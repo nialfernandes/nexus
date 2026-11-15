@@ -135,6 +135,70 @@ describe("signing in", () => {
   });
 });
 
+describe("a sign-in belongs to the address it began against", () => {
+  it("is dropped, with no token kept, when the address is changed while it waits for the person", async () => {
+    const plugin = await signedOutPlugin();
+    let asks = 0;
+    const result = await plugin.signIn(
+      plugin.deps(async () => {
+        if (++asks === 1) bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).approve(plugin.shown[0].code));
+        plugin.data.address = "https://another-nexus.example.test/nexus/api";
+        expect(asks, "it stops as soon as it sees the change").toBeLessThan(3);
+      }),
+    );
+    expect(result).toBe("changed");
+    expect(plugin.data.token, "no token for the server it did not ask").toBeNull();
+    expect(plugin.saved, "nothing was saved").toEqual([]);
+    expect(
+      bodyOf(await manage({ cookie: world.ownerCookie }).tokens()).tokens.filter((t: { label: string }) => t.label === DEVICE_NAME).length,
+      "the owner's server did make the token: it was allowed, and nothing here took it",
+    ).toBeGreaterThan(0);
+  });
+
+  it("is dropped when the address changes while the poll that would hand over the token is on its way", async () => {
+    const plugin = await signedOutPlugin();
+    const inner = plugin.deps(async () => {
+      bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).approve(plugin.shown[0].code));
+    });
+    const result = await plugin.signIn({
+      ...inner,
+      // The person changes the address as the answer comes back: the token is in it, and it is for the old address.
+      http: async (request) => {
+        const answer = await inner.http(request);
+        if (request.url.endsWith("device/poll")) plugin.data.address = "https://another-nexus.example.test/nexus/api";
+        return answer;
+      },
+    });
+    expect(result).toBe("changed");
+    expect(plugin.data.token).toBeNull();
+    expect(plugin.saved).toEqual([]);
+  });
+
+  it("is dropped when the user name changes, for the same reason", async () => {
+    const plugin = await signedOutPlugin();
+    const result = await plugin.signIn(
+      plugin.deps(async () => {
+        bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).approve(plugin.shown[0].code));
+        plugin.data.user = "someone-else";
+      }),
+    );
+    expect(result).toBe("changed");
+    expect(plugin.data.token).toBeNull();
+  });
+
+  it("sends every call of a sign-in to the address it began with", async () => {
+    const plugin = await signedOutPlugin();
+    const urls: string[] = [];
+    const inner = plugin.deps(async () => {
+      bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).approve(plugin.shown[0].code));
+    });
+    const result = await plugin.signIn({ ...inner, http: (request) => (urls.push(request.url), inner.http(request)) });
+    expect(result).toBe("signed-in");
+    expect(urls.length).toBeGreaterThanOrEqual(2);
+    expect(urls.every((url) => url.startsWith(`${world.address}/device/`))).toBe(true);
+  });
+});
+
 describe("a token Nexus does not know", () => {
   /** A token made for this test alone, revoked through the route as the owner. */
   async function revokedToken(label: string): Promise<string> {
