@@ -1,7 +1,8 @@
 // Migration 0003 turns today's tables into the blob shape. The server cannot encrypt, so it cannot convert a plain text
 // vault: the migration drops the tables that hold paths and texts, and the first device that connects afterwards
 // uploads every note again, encrypted. What is not about notes survives: the identities, and the tokens that were given
-// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied, a plain vault written with
+// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied (and 0004, which only adds the
+// device key and the sealed approval to the sign-in tables and which the device approval code needs), a plain vault written with
 // the SQL the old store used, an identity and a token made through the real device approval; then 0003 is applied.
 
 import { beforeAll, describe, expect, it } from "vitest";

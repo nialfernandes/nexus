@@ -42,6 +42,8 @@ The rest of the surface:
 - `createPasswordWrap`, `openPasswordWrap`: the optional Argon2id wrap.
 - `generateDeviceKeyPair`, `sealApproval`, `openApproval`: one-time approvals
   sealed to a device's or agent's X25519 key.
+- `deviceKeyCode`, `approvalCode`, `readApprovalCode`: the two short codes a person
+  compares so a server cannot give a device a key of its own (docs/FORMAT.md section 7.4).
 
 ## Develop
 
