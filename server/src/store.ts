@@ -2,7 +2,7 @@
 // note's latest version is refused.
 //
 // WHAT IS KEPT. The server holds encrypted blobs and nothing else about a note (docs/FORMAT.md). A NOTE is a row with
-// an id the device chose at random (never the path) and the number of its latest version. A VERSION is a row that is
+// an id the device chose (random, or made from a key the device keeps; never the path) and the number of its latest version. A VERSION is a row that is
 // written once: the note's id, its number, the number of the vault key it is under (`kid`), the encrypted blob as
 // base64, SHA-256 of the blob, the writer and the time. The server cannot read a note, so it keeps no path, no name,
 // no folder and no text, cannot search, and cannot merge two edits: the device does that (packages/merge).

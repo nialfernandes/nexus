@@ -25,5 +25,11 @@ export const RECOVERY_KEY_TEXT = "40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-C
 /** The matching code of docs/FORMAT.md section 10: N = 0x10.., A = 0x50.., kid 1, S = 91 bytes from 0x90. */
 export const APPROVAL_CODE_TEXT = "ENBRP-QJF17";
 
+/** The note id of docs/FORMAT.md section 7.6: the vault key is VAULT_KEY (bytes 0x00..0x1f) and the key is NOTE_ID_KEY_TEXT. */
+export const NOTE_ID_KEY_TEXT = "episode-123";
+export const NOTE_ID_FROM_KEY_TEXT = "HXhDeV2moofWUbTG4Kq93w";
+export const NOTE_ID_KEY_HEX = "c875fbaa126ee4a10e7f123500f989a93e62a28407652b4be3de216c2e8d92cf";
+export const NOTE_ID_MAC_HEX = "1d7843795da6a287d651b4c6e0aabddf";
+
 /** The device key code of docs/FORMAT.md section 10: the key is 32 bytes from 0x10. */
 export const DEVICE_KEY_CODE_TEXT = "3X1TB-8BMC4";

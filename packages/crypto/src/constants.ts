@@ -22,6 +22,12 @@ export const Kind = {
 /** The label HKDF is given for the key that wraps the vault key under the Recovery Key. */
 export const RECOVERY_KDF_LABEL = "nexus v1 recovery";
 
+/** The label HKDF is given for the key that makes a note's id from a caller's own key (docs/FORMAT.md section 7.6). */
+export const NOTE_ID_KDF_LABEL = "nexus v1 note id key";
+
+/** How many bytes of the HMAC a note id keeps: 16 bytes are 22 characters of url-safe base64, as long as the plugin's random ids. */
+export const NOTE_ID_BYTES = 16;
+
 /** Mixed into the hash that makes the matching code of a device approval. */
 export const APPROVAL_CODE_LABEL = "nexus v1 approval code";
 

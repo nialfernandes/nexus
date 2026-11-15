@@ -54,6 +54,16 @@ describe("the package README", () => {
     expect(WORDS).toMatch(/Wasm code generation disallowed by embedder/);
   });
 
+  it("says a create can be repeated safely with a key the caller keeps, what is answered, and when it is refused", () => {
+    expect(README).toContain("createNote(path, text, { key })");
+    expect(WORDS).toMatch(/at the same path with the same text/);
+    expect(WORDS).toMatch(/answers it .* and saves nothing/);
+    expect(WORDS).toMatch(/`AgentError` with the code `key-taken`/);
+    expect(WORDS, "the operator sees an id, so the id is not the key").toMatch(/Nexus sees every note's id, so the id is \*\*not\*\* the key: it is 16 bytes of an HMAC of the key, under a key derived from the vault key/);
+    expect(WORDS).toContain("[docs/FORMAT.md](../../docs/FORMAT.md) section 7.6");
+    expect(WORDS).toMatch(/an option other than `key` is refused/);
+  });
+
   it("says how the first look at a vault is made and what it keeps, and that a stale update changes nothing", () => {
     expect(WORDS).toMatch(/GET \/heads/);
     expect(WORDS).toMatch(/keeps only its id, its version and its path: the note's text is not kept/);

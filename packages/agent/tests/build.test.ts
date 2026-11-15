@@ -24,9 +24,9 @@ const TEXT = "written by the built file\n";
  * someone has looked at it and written the new values in. The build prints them: `node scripts/build.mjs <outdir>`.
  */
 const PINNED: Record<string, string> = {
-  "nexus-agent.js": "461b0e39a39183cfe9353fba797e22c19013c29ac594014cc52f3f093cd9f771",
+  "nexus-agent.js": "78f7c46744034851dbc414a1ae9fdbd23fa8ccce1209e8e8a8f1b38b174f8e56",
   "nexus-agent.wasm": "29dd7daf12daec2afdf7b73101e50679bfe9c38861aa1f0de50ae505ccba99bd",
-  "cli.js": "6e84f43e4942a738c77a2ec772f31286c457b4e0aa97d977ef6b2cc28e4f38de",
+  "cli.js": "62a9b279273b9ad8ccc62d7dc36a6654f739e6b011e395cb9144f91754a5551f",
 };
 
 let directory = "";

@@ -14,7 +14,7 @@ it has no key and **does not sync with this server yet**. Nothing is deployed.
 
 ## What it stores
 
-A **note** is a row with an id the device chose at random (never the path) and the number of its latest version. A
+A **note** is a row with an id the device chose (random, or made from a key the device keeps; never the path) and the number of its latest version. A
 **version** is written once and never changed:
 
 | Kept | What it is |

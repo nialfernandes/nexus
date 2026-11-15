@@ -1,4 +1,4 @@
-// A note is named by an id the device chose at random, never by its path. The server takes 1 to 128 letters, digits,
+// A note is named by an id the device chose (random, or made from a key it keeps), never by its path. The server takes 1 to 128 letters, digits,
 // hyphens and underscores (what url-safe base64, hex and a UUID are written in, and the `n-1` of the examples) and
 // refuses anything else, so a path, with its slashes and dots and spaces, cannot be used as an id by mistake.
 // Through the Nexus Worker, as the owner (see __fixtures__/nexus-world.ts for the routes and the shape of every answer).

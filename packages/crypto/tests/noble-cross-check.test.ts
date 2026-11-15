@@ -5,11 +5,13 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { argon2id } from "@noble/hashes/argon2.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
+import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import {
   createPasswordWrap,
   decryptNote,
+  noteIdFromKey,
   encryptNote,
   openPasswordWrap,
   unwrapVaultKeyWithRecoveryKey,
@@ -19,7 +21,7 @@ import { sealNote } from "../src/note.js";
 import { sealPasswordWrap, sealRecoveryWrap } from "../src/wraps.js";
 import { loadSodium } from "../src/sodium.js";
 import {
-  KID, NONCE, NOTE_BLOB_HEX, NOTE_CONTEXT, NOTE_ID, PASSWORD, PASSWORD_WRAP_HEX, RECORD, RECOVERY_KEY,
+  KID, NONCE, NOTE_BLOB_HEX, NOTE_ID_FROM_KEY_TEXT, NOTE_ID_KEY_HEX, NOTE_ID_KEY_TEXT, NOTE_ID_MAC_HEX, NOTE_CONTEXT, NOTE_ID, PASSWORD, PASSWORD_WRAP_HEX, RECORD, RECOVERY_KEY,
   RECOVERY_WRAP_HEX, SALT, VAULT_CONTEXT, VAULT_ID, VAULT_KEY,
 } from "./fixtures.js";
 import { fromHex, toHex } from "./helpers.js";
@@ -147,6 +149,30 @@ describe("password wrap: libsodium writes, noble reads, and the other way round"
     const sodium = await loadSodium();
     const made = sealPasswordWrap(sodium, PASSWORD, VAULT_KEY, VAULT_CONTEXT, { memoryKiB: 65_536, iterations: 3, parallelism: 1 }, SALT, NONCE);
     expect(toHex(made)).toBe(PASSWORD_WRAP_HEX);
+  });
+});
+
+describe("a note id made from a key (FORMAT.md section 7.6): libsodium writes, noble writes, and both are the pinned example", () => {
+  /** Written from the document: HKDF with an empty salt and the label, then HMAC of the key's UTF-8 bytes, 16 bytes, url-safe base64 with no padding. */
+  const nobleId = (vaultKey: Uint8Array, key: string) => {
+    const idKey = hkdf(sha256, vaultKey, undefined, text.encode("nexus v1 note id key"), 32);
+    const mac = hmac(sha256, idKey, text.encode(key)).slice(0, 16);
+    return { idKey, mac, id: btoa(String.fromCharCode(...mac)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") };
+  };
+
+  it("the pinned example is what noble builds, and what libsodium builds", async () => {
+    const built = nobleId(VAULT_KEY, NOTE_ID_KEY_TEXT);
+    expect(toHex(built.idKey)).toBe(NOTE_ID_KEY_HEX);
+    expect(toHex(built.mac)).toBe(NOTE_ID_MAC_HEX);
+    expect(built.id).toBe(NOTE_ID_FROM_KEY_TEXT);
+    expect(await noteIdFromKey(VAULT_KEY, NOTE_ID_KEY_TEXT)).toBe(NOTE_ID_FROM_KEY_TEXT);
+  });
+
+  it("agree for other keys and other vault keys, including a key of 1024 bytes and one with characters beyond ASCII", async () => {
+    for (const key of ["a", "Agent/First.md", "x".repeat(1024), "épisode 🚀 ひらがな"]) {
+      expect(await noteIdFromKey(VAULT_KEY, key), key.slice(0, 12)).toBe(nobleId(VAULT_KEY, key).id);
+      expect(await noteIdFromKey(RECOVERY_KEY, key), key.slice(0, 12)).toBe(nobleId(RECOVERY_KEY, key).id);
+    }
   });
 });
 
