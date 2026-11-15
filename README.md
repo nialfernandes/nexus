@@ -40,7 +40,7 @@ later is needed.
 
 ```
 npm ci            # installs every package, with one lockfile
-npm run check     # builds the encryption package, type-checks every package, builds the plugin, runs every test
+npm run check     # checks the CI actions are pinned to commit hashes, builds the encryption package, type-checks every package, builds the plugin, runs every test
 ```
 
 `npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
