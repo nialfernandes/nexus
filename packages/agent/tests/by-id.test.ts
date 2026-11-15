@@ -315,7 +315,9 @@ describe("a note made again after its answer was lost", () => {
     await expect(vault.createNote("Ideas/gone.md", "gone\n", { id: made.id })).rejects.toMatchObject({ code: "id-taken" });
     await expect(vault.createNote("Ideas/foreign.md", "sealed with another key\n", { id: "foreign-note" })).rejects.toMatchObject({ code: "id-taken" });
     const held = (bodyOf(await world.owner.list()).notes as Array<{ id: string }>).map((note) => note.id);
-    expect(held.sort(), "the deleted note is still deleted, and the foreign one was not touched").toEqual([expect.any(String), "foreign-note"].sort());
+    expect(held, "the deleted note is still deleted, and the foreign one was not touched").toHaveLength(2);
+    expect(held).toContain("foreign-note");
+    expect(held).not.toContain(made.id);
     expect(bodyOf(await world.owner.note("foreign-note")).version).toBe(1);
     expect((await world.owner.note(made.id)).status, "Nexus still says it was deleted").toBe(404);
     vault.close();
