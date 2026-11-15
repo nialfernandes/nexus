@@ -35,6 +35,9 @@ export interface RunReport {
   tried: number;
 }
 
+/** The most things one note is linked to. A note that mentions more than this (a transcript that talks a model into a long list, show notes of hundreds of links) is linked to the first of them. */
+export const MENTIONS_MAX = 100;
+
 const inFolders = (path: string, folders: readonly string[]): boolean =>
   path.endsWith(".md") && !path.startsWith(MENTIONS_FOLDER) && folders.some((folder) => path.startsWith(folder));
 
@@ -72,11 +75,15 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
   const refs = await store.listNotes();
   const notes = new MentionNotes(store, refs);
   let checked = 0;
+  let reads = 0;
 
   for (const ref of notesToLookAt(refs, settings.folders)) {
     if (report.tried >= settings.maxNotes) break;
     if (ref.version > 1 && checked >= settings.maxChecks) break;
+    // However the notes turn out (unreadable, or linked already), a run reads no more than both limits allow between them.
+    if (reads >= settings.maxNotes + settings.maxChecks) break;
     if (ref.version > 1) checked++;
+    reads++;
 
     let note;
     try {
@@ -92,7 +99,9 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
       const spoken = await mentionsSpoken(settings.model, fetchModel, spokenOf(note.text));
       const written = mentionsInShowNotes(showNotesOf(note.text), ownLink(note.text));
       const names: string[] = [];
-      for (const mention of joined([written, spoken])) {
+      const found = joined([written, spoken]);
+      if (found.length > MENTIONS_MAX) log(`${ref.path}: mentions ${found.length} things, so it is linked to the first ${MENTIONS_MAX}`);
+      for (const mention of found.slice(0, MENTIONS_MAX)) {
         const name = await notes.settle(mention);
         if (name !== null && !names.includes(name)) names.push(name);
       }
@@ -113,11 +122,11 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
   return report;
 }
 
-/** A failure in words that hold nothing secret: the model's and the vault's own messages are fixed sentences, anything else is only named. */
+/** A failure in words that hold nothing secret: the model's and the vault's own messages are fixed sentences, anything else is only named by its kind. */
 function reasonOf(error: unknown): string {
   if (error instanceof ModelFailure) return error.message;
   if (error instanceof Error && error.name === "AgentError") return error.message;
-  return "an unexpected error";
+  return `an unexpected ${error instanceof Error ? error.name : "error"}`;
 }
 
 /** What a run did, as lines for a terminal or a Worker's log. */

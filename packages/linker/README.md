@@ -114,6 +114,11 @@ its WebAssembly file.
   as two notes, which a person can join. A page with no title in its address (a short link) is a website named by its address.
 - **A note that fails every run** (a model that cannot read that transcript) is taken on each run and fills one of its places.
   The job keeps no record of failures: it adds nothing to a note it did not link.
+- **One run at a time.** Two runs at once (a slow run still going when the next cron trigger wakes, or a command run beside the
+  Worker) can each make a note for a thing the other has not yet made, and the vault then holds two notes at one path, which the
+  plugin tells apart as it does any two notes made at once. Leave a gap between triggers longer than a run takes.
+- **A note that mentions a great deal** (a transcript that talks the model into a long list, or show notes of hundreds of links) is linked
+  to the first 100 things found, and the run logs that it was cut.
 - **A transcript note edited mid-run** has the Mentions notes the run made kept; the next run uses them and does not make them again.
   If the model words something differently the second time, the first run's note is left with no backlink.
 - The job opens the vault the way the agent library's `open` does, which reads every note once to learn the paths, so a very

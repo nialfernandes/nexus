@@ -171,6 +171,36 @@ describe("how many notes a run takes on", () => {
   });
 });
 
+describe("how much one run reads and one note takes", () => {
+  it("links a note that mentions a great deal to the first hundred things, and says so", async () => {
+    const l = await lab({ LINKER_MODEL_WINDOW_CHARS: "500" });
+    const path = hushPath("Everything");
+    await l.seed(path, transcriptNote({ title: "Everything", spoken: ["a ".repeat(200), "b ".repeat(200)] }));
+    // Sixty people a part is as many as an answer is read for, and the note has two parts.
+    l.model.answer((_, call) => listOf(...Array.from({ length: 70 }, (_, at) => ({ type: "person", title: `Person ${call}-${at}` }))));
+    const { report, logs } = await l.run();
+    expect(l.model.asked).toHaveLength(2);
+    expect(report.linked).toEqual([path]);
+    expect(logs).toEqual([`${path}: mentions 120 things, so it is linked to the first 100`, `${path}: linked to 100 things`]);
+    const texts = await l.texts();
+    expect(Object.keys(texts).filter((one) => one.startsWith(MENTIONS_FOLDER))).toHaveLength(100);
+    expect(texts[path]!.match(/^- \[\[/gm)).toHaveLength(100);
+  });
+
+  it("reads no more notes in a run than its two limits allow between them", async () => {
+    const l = await lab({ LINKER_MAX_NOTES: "1", LINKER_MAX_CHECKS: "1" });
+    // Notes at their first version that say they are linked already: read, found done, and not counted as taken on.
+    for (const name of ["A", "B", "C"]) await l.seed(hushPath(name), "---\nmentions: linked\n---\n");
+    await l.seed(hushPath("D fresh"), transcriptNote({ title: "D fresh", spoken: ["Words."] }));
+    l.model.answer(() => "[]");
+    // Two reads, both of notes that were done: the fresh note is not reached.
+    expect((await l.run()).report.tried).toBe(0);
+    expect(l.model.asked).toHaveLength(0);
+    // With room to read a third and a fourth, it is.
+    expect((await l.run({ LINKER_MAX_CHECKS: "3" })).report.linked).toEqual([hushPath("D fresh")]);
+  });
+});
+
 describe("what is never touched", () => {
   it("is every note outside the folders, every note already linked and every note in Mentions/, and nothing is deleted", async () => {
     const l = await lab();
