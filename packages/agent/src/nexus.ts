@@ -29,15 +29,27 @@ export function cleanAddress(address: unknown): string {
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
+/** The cookie the owner's secret travels in: the owner's own session, which the owner's commands use in place of a token. */
+export const OWNER_COOKIE = "nexus_owner";
+
 export class Nexus {
   readonly #address: string;
   readonly #token: string | null;
+  readonly #ownerSecret: string | null;
   readonly #fetch: FetchLike;
 
-  /** `token` is null for the two calls a device makes before it has one (a sign-in's start and poll). */
-  constructor(address: string, token: string | null, fetcher?: FetchLike) {
+  /**
+   * `token` is null for the two calls a device makes before it has one (a sign-in's start and poll). `ownerSecret` is the owner's
+   * secret: it is sent only as the owner's cookie and never with a token, because Nexus reads a bearer header before a cookie.
+   */
+  constructor(address: string, token: string | null, fetcher?: FetchLike, ownerSecret?: string) {
     this.#address = cleanAddress(address);
     this.#token = token === null ? null : token.trim();
+    // Visible ASCII but for the semicolon, which ends a cookie's value.
+    if (ownerSecret !== undefined && !/^[\x21-\x3a\x3c-\x7e]+$/.test(ownerSecret.trim())) {
+      throw new AgentError("bad-settings", "The owner secret is empty, or holds a character a cookie cannot carry (a space, a semicolon or a non-ASCII character).");
+    }
+    this.#ownerSecret = ownerSecret === undefined ? null : ownerSecret.trim();
     // The runtime's own `fetch` is called as a function of the global scope, which a Worker needs.
     this.#fetch = fetcher ?? ((url, init) => globalThis.fetch(url, init));
   }
@@ -56,6 +68,7 @@ export class Nexus {
   async #send(method: string, route: string, body?: string): Promise<Reply> {
     const headers: Record<string, string> = { accept: "application/json" };
     if (this.#token !== null) headers.authorization = `Bearer ${this.#token}`;
+    else if (this.#ownerSecret !== null) headers.cookie = `${OWNER_COOKIE}=${this.#ownerSecret}`;
     if (body !== undefined) headers["content-type"] = "application/json";
     let answer: { status: number; text(): Promise<string> };
     try {

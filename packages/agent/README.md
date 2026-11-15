@@ -15,41 +15,73 @@ it is sent, with its path inside, so the server never reads one.
 
 ## The steps a person takes
 
-Each step is run by the person, in their own terminal. Nothing here is run by an agent.
+Each step is run by the person, in their own terminal. Nothing here is run by an agent. You need the address Nexus's
+routes sit under (`NEXUS_ADDRESS`), the name of the server's owner (its `NEXUS_OWNER` setting) and the **owner secret** (its
+`NEXUS_OWNER_SECRET`, see "Signing in as the owner" in the [server's README](../../server/README.md)). The owner secret is
+the owner's credential for these commands: put it in `NEXUS_OWNER_SECRET`, or leave it out and the command asks for it at a
+**hidden** prompt (or reads one line of standard input, which is how a secrets manager can feed it). It is sent to Nexus only as
+the owner's cookie, and it is never an argument and never printed.
 
-1. **Sign in as the owner.** `nexus-agent sign-in --identity <the owner's name>` starts the
-   device sign-in every device uses. Open the link it prints, signed in as the owner, check the
-   code, and allow it. The token is printed once: that is the owner's `NEXUS_TOKEN` below.
-2. **Set up the vault** on a server that has none: `nexus-agent create-vault`. It makes the
-   vault key, the vault id and the Recovery Key, and shows the Recovery Key **on this terminal
-   only** (not into a pipe or a file). Write it down in your password manager. It asks you to
-   type the last four characters back before it sends anything. It then keeps the Recovery wrap
-   and the vault id on the server. It refuses a server that already has a wrap, a wrong
-   type-back, and a token that is not the owner's.
-3. **Make the agent's key pair:** `nexus-agent keygen`. It prints the private key and the
-   public key, each on its own labelled line, and a short code for the public key. Save the
-   private key in your secrets manager now: it is shown once.
-4. **Sign the agent in:** `nexus-agent sign-in --identity <the agent's identity> --label <name>`
-   as in step 1, and save the token it prints. (The identity is one the owner made with kind
-   `agent`.)
-5. **Approve the agent:** `nexus-agent approve-agent` asks for the agent's public key (paste the
-   `PUBLIC KEY` line from step 3) and for the Recovery Key at a **hidden** prompt. It fetches
-   the Recovery wrap and the vault id from the server, opens the vault key, seals it to the
-   agent's public key and **prints the approval**. Save it beside the agent's private key. The
-   server never sees it. A wrong or mistyped Recovery Key is refused and nothing is printed.
+1. **Sign in as the owner:** `nexus-agent owner-sign-in --identity <the owner's name>`. It starts a sign-in for the owner,
+   allows it with the owner secret, and prints the owner's token once. You never open the approval page for your own
+   terminal. Save the token: it is the owner's `NEXUS_TOKEN` for the next step.
+2. **Set up the vault** on a server that has none: `nexus-agent create-vault`. It makes the vault key, the vault id and the
+   Recovery Key, and shows the Recovery Key **on this terminal only** (not into a pipe or a file). Write it down in your
+   password manager. It asks you to type the last four characters back before it sends anything. It then keeps the Recovery
+   wrap and the vault id on the server. It refuses a server that already has a wrap, a wrong type-back, and a token that is
+   not the owner's.
+3. **Set up each agent:** `nexus-agent set-up-agent --name scribe`. For a vault that exists, it does the whole of an agent's
+   setup in one run:
+   - it makes the identity `scribe` (kind `agent`; one that already exists is used),
+   - makes the agent's key pair,
+   - signs the agent in and allows it with the owner secret,
+   - asks for the Recovery Key at a **hidden** prompt, opens the vault key with it and seals it to the agent's public key, and
+   - prints the four values the agent needs, each on its own labelled line, once:
 
-A key is never an argument to any command: it would show in the process list and in the shell's
-history. The Recovery Key is typed at a hidden prompt (or piped in on standard input, which
-is how a secrets manager can feed it) and the others come from the environment.
+   ```
+   NEXUS_ADDRESS=https://nexus.example.org/nexus/api
+   NEXUS_TOKEN=nx_...
+   NEXUS_AGENT_PRIVATE_KEY=...
+   NEXUS_AGENT_APPROVAL=...
+   ```
+
+   Save them in your secrets manager now: they are shown once, and Nexus never sees the private key or the approval. A wrong
+   owner secret, a server with no vault and a wrong Recovery Key are each refused before anything is made. Needs no
+   `NEXUS_TOKEN` of yours: the owner secret does it all.
+
+### The same steps one at a time
+
+`set-up-agent` is these commands run in order, and each can be run alone:
+
+- **Make an identity:** `nexus-agent make-identity --name scribe --kind agent` (the kind is `agent`, `person` or `app`).
+- **Make the agent's key pair:** `nexus-agent keygen`. It prints the private key and the public key, each on its own labelled
+  line, and a short code for the public key. Save the private key in your secrets manager now: it is shown once.
+- **Sign a device in as an identity:** `nexus-agent sign-in --identity <name> --label <label>` starts the device sign-in every
+  device uses. Open the link it prints, signed in as the owner, check the code, and allow it. Or allow it from a terminal:
+  `nexus-agent allow <code>` asks Nexus what is asking (the identity and the label), shows it to you, and sends the allow only
+  when you type `yes`. Anything else, or the input ending, allows nothing. `nexus-agent deny <code>` is the same for turning
+  one down. The token is printed once, by `sign-in`.
+- **Approve the agent:** `nexus-agent approve-agent` asks for the agent's public key (paste the `PUBLIC KEY` line from `keygen`)
+  and for the Recovery Key at a **hidden** prompt. It fetches the Recovery wrap and the vault id from the server, opens the
+  vault key, seals it to the agent's public key and **prints the approval**. Save it beside the agent's private key. The server
+  never sees it. A wrong or mistyped Recovery Key is refused and nothing is printed.
+
+A key is never an argument to any command: it would show in the process list and in the shell's history. The Recovery Key is
+typed at a hidden prompt (or piped in on standard input, which is how a secrets manager can feed it), the owner secret is typed
+at a hidden prompt or read from the environment, and the others come from the environment.
+
+The owner's commands refuse a wrong owner secret with a plain message and change nothing. They send nothing but the owner's
+cookie: not a token with it.
 
 ## The environment
 
 | Variable | What it is | Read by |
 | --- | --- | --- |
 | `NEXUS_ADDRESS` | The address Nexus's routes sit under, such as `https://nexus.example.org/nexus/api` (the same address the Obsidian plugin takes) | every command except `keygen` |
-| `NEXUS_TOKEN` | A sign-in token: the owner's for `create-vault` and `approve-agent`, the agent's own for `read`, `write` and `list` | all but `keygen` and `sign-in` |
+| `NEXUS_TOKEN` | A sign-in token: the owner's for `create-vault` and `approve-agent`, the agent's own for `read`, `write` and `list` | `create-vault`, `approve-agent`, `read`, `write`, `list` |
 | `NEXUS_AGENT_PRIVATE_KEY` | The agent's private key, as `keygen` printed it | `read`, `write`, `list` |
 | `NEXUS_AGENT_APPROVAL` | The agent's approval, as `approve-agent` printed it | `read`, `write`, `list` |
+| `NEXUS_OWNER_SECRET` | The owner's secret, the server's own `NEXUS_OWNER_SECRET`. When it is not set the command asks for it at a hidden prompt | `make-identity`, `allow`, `deny`, `owner-sign-in`, `set-up-agent` |
 
 ## The agent's commands
 

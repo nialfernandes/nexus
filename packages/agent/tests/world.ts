@@ -28,7 +28,12 @@ export interface Seen {
   route: string;
   body: any;
   status: number;
+  /** How the call was made, never the credential itself: a bearer token, the owner's cookie, both, or neither. */
+  credential: "bearer" | "cookie" | "both" | "none";
 }
+
+const credentialOf = (authorization: string | undefined, cookie: string | undefined): Seen["credential"] =>
+  authorization !== undefined ? (cookie !== undefined ? "both" : "bearer") : cookie !== undefined ? "cookie" : "none";
 
 /** The agent's `fetch`, over the real server code. `seen` lists every call in order; `before` may do something just before a call goes through. */
 export function fetchOverNexus(options: { before?: (seen: Omit<Seen, "status">) => Promise<void> | void } = {}): { fetch: FetchLike; seen: Seen[] } {
@@ -36,11 +41,13 @@ export function fetchOverNexus(options: { before?: (seen: Omit<Seen, "status">) 
   const fetch: FetchLike = async (url, init) => {
     const parsed = new URL(url);
     const route = parsed.pathname.slice(API.length + 1) + parsed.search;
-    const authorization = init.headers.authorization;
+    const { authorization, cookie } = init.headers;
     const body = init.body === undefined ? undefined : JSON.parse(init.body);
-    await options.before?.({ method: init.method, route, body });
-    const answer = await askNexus(init.method, route, authorization === undefined ? null : { authorization }, body);
-    seen.push({ method: init.method, route, body, status: answer.status });
+    await options.before?.({ method: init.method, route, body, credential: credentialOf(authorization, cookie) });
+    // Nexus reads a bearer header before a cookie, so a call with both is sent as the bearer one (and `seen` says it carried both).
+    const who = authorization !== undefined ? { authorization } : cookie !== undefined ? { cookie } : null;
+    const answer = await askNexus(init.method, route, who, body);
+    seen.push({ method: init.method, route, body, status: answer.status, credential: credentialOf(authorization, cookie) });
     return { status: answer.status, text: async () => answer.text };
   };
   return { fetch, seen };
@@ -101,6 +108,8 @@ export interface RunOptions {
   screen?: boolean;
   /** True when the command's input is a terminal (nothing was piped in). */
   stdinIsTTY?: boolean;
+  /** True for a real terminal's input: keys arrive as typed, with the terminal's echo off while a hidden answer is typed. `rawModes` is filled with each change of it. */
+  terminal?: { rawModes: boolean[] };
   fetch?: FetchLike;
   /** Called each time the command pauses between polls, with what it has printed so far. */
   onWait?: (printed: { stdout: string; stderr: string }) => Promise<void> | void;
@@ -110,7 +119,9 @@ export interface RunOptions {
 export async function run(argv: string[], options: RunOptions = {}): Promise<Ran> {
   const { main } = await import("../src/cli/main");
   const printed = { stdout: "", stderr: "" };
-  const stdin = new PassThrough() as unknown as Io["stdin"] & PassThrough;
+  const terminal = options.terminal === undefined ? undefined : fakeTerminal();
+  const stdin = (terminal?.input ?? new PassThrough()) as unknown as Io["stdin"] & PassThrough;
+  if (terminal !== undefined && options.terminal !== undefined) options.terminal.rawModes = terminal.rawModes;
   if (options.stdinIsTTY === true) (stdin as { isTTY?: boolean }).isTTY = true;
   if (options.stdin !== undefined) stdin.write(options.stdin);
   if (options.reply === undefined) stdin.end();

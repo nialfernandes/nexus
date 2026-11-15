@@ -2,20 +2,31 @@
 // in as `io`, so the command a test runs is the command a person runs.
 
 import { AgentError } from "../errors";
+import { allow, deny } from "./allow";
 import { approveAgent } from "./approve-agent";
 import { createVault } from "./create-vault";
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
 import { keygen } from "./keygen";
+import { makeIdentity } from "./make-identity";
 import { listNotes, readNote, writeNote } from "./notes";
+import { ownerSignIn } from "./owner-sign-in";
+import { setUpAgent } from "./set-up-agent";
 import { signIn } from "./sign-in";
 
 const USAGE = `nexus-agent: set up an encrypted Nexus vault for an agent that holds its own key.
 
 For the person, each step run in your own terminal:
+  owner-sign-in --identity <owner> your own token, made in one step with the owner secret (for create-vault and approve-agent)
+  create-vault                    set up a server that has no vault: shows the Recovery Key here, only here
+  set-up-agent --name <name>      the whole setup of an agent for a vault that exists: identity, key pair, token and approval,
+                                  printed as the four values the agent needs (asks for the Recovery Key, hidden)
+
+The same steps one at a time:
+  make-identity --name <name> --kind agent|person|app   make an identity (the owner secret)
+  allow <code>                    allow a device's sign-in once you have typed yes (the owner secret); deny <code> turns it down
   keygen                          make the agent's key pair (save the private key in your secrets manager)
   sign-in --identity <name>       sign in as an identity: you allow it on the approval page, the token is shown once
-  create-vault                    set up a server that has no vault: shows the Recovery Key here, only here
   approve-agent                   give an agent the vault key: asks for its public key and the Recovery Key (hidden)
 
 For the agent, with credentials from the environment:
@@ -23,8 +34,12 @@ For the agent, with credentials from the environment:
   write <path>                    save the text on standard input as the note
   list                            print the paths of the notes
 
-The environment variables are ${ENV.address}, ${ENV.token}, ${ENV.privateKey} and ${ENV.approval}. A key is never an argument.
+The environment variables are ${ENV.address}, ${ENV.token}, ${ENV.privateKey}, ${ENV.approval} and ${ENV.ownerSecret}. The owner secret is also asked
+for at a hidden prompt, or read from standard input, when it is not set. A key or a secret is never an argument.
 `;
+
+/** The options any command knows. */
+const OPTIONS: readonly string[] = ["identity", "label", "name", "kind"];
 
 /** What each command takes after its name: the flags it knows and how many words it wants. */
 function parse(args: readonly string[]): { flags: Record<string, string>; words: string[] } {
@@ -37,7 +52,10 @@ function parse(args: readonly string[]): { flags: Record<string, string>; words:
       continue;
     }
     const [name, inline] = arg.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
-    if (name !== "identity" && name !== "label") throw new Stop(`Unknown option --${name}. Run nexus-agent --help.`);
+    if (!OPTIONS.includes(name)) {
+      if (/secret|token|key|approval|password/i.test(name)) throw new Stop("A secret is never an argument: it would show in the process list and in the shell's history. Run nexus-agent --help.");
+      throw new Stop(`Unknown option --${name}. Run nexus-agent --help.`);
+    }
     const value = inline ?? args[++at];
     if (value === undefined) throw new Stop(`--${name} needs a value.`);
     flags[name] = value;
@@ -54,8 +72,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
       return command === undefined ? 2 : 0;
     }
     const { flags, words } = parse(rest);
-    const only = (count: number) => {
-      if (words.length > count) throw new Stop(`${command} takes ${count === 0 ? "no words" : count === 1 ? "one path" : `${count} words`} after it. Run nexus-agent --help.`);
+    const only = (count: number, what = "path") => {
+      if (words.length > count) throw new Stop(`${command} takes ${count === 0 ? "no words" : `one ${what}`} after it. Run nexus-agent --help.`);
     };
     switch (command) {
       case "keygen":
@@ -64,6 +82,21 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
       case "sign-in":
         only(0);
         return await signIn(io, { identity: flags.identity, label: flags.label });
+      case "owner-sign-in":
+        only(0);
+        return await ownerSignIn(io, { identity: flags.identity, label: flags.label });
+      case "make-identity":
+        only(0);
+        return await makeIdentity(io, { name: flags.name, kind: flags.kind });
+      case "allow":
+        only(1, "code");
+        return await allow(io, words[0]);
+      case "deny":
+        only(1, "code");
+        return await deny(io, words[0]);
+      case "set-up-agent":
+        only(0);
+        return await setUpAgent(io, { name: flags.name, label: flags.label });
       case "create-vault":
         only(0);
         return await createVault(io);

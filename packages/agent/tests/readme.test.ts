@@ -21,12 +21,22 @@ describe("the package README", () => {
   });
 
   it("names every command", () => {
-    for (const command of ["keygen", "sign-in", "create-vault", "approve-agent", "read", "write", "list"]) expect(README, command).toContain(`nexus-agent ${command}`);
+    for (const command of ["keygen", "sign-in", "create-vault", "approve-agent", "read", "write", "list", "make-identity", "allow", "deny", "owner-sign-in", "set-up-agent"]) expect(README, command).toContain(`nexus-agent ${command}`);
   });
 
   it("says a key is never an argument, and that the Recovery Key is typed at a hidden prompt", () => {
     expect(WORDS).toMatch(/A key is never an argument to any command/);
     expect(WORDS).toMatch(/Recovery Key at a \*\*hidden\*\* prompt/);
+  });
+
+  it("says the owner secret is typed at a hidden prompt or read from the environment, and is never an argument", () => {
+    expect(WORDS).toMatch(/owner secret .*\*\*hidden\*\* prompt/);
+    expect(WORDS).toMatch(/it is never an argument and never printed/);
+  });
+
+  it("names the four values set-up-agent prints, and says they are shown once", () => {
+    for (const name of [ENV.address, ENV.token, ENV.privateKey, ENV.approval]) expect(README, name).toMatch(new RegExp(`^\\s*${name}=`, "m"));
+    expect(WORDS).toMatch(/Save them in your secrets manager now: they are shown once/);
   });
 
   it("prints the checksum line the build prints", () => {
