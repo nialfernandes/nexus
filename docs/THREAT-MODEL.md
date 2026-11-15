@@ -53,8 +53,7 @@ applies to you.
 not encrypt sends the server its notes as they are):
 
 - That your vault exists, how many notes it has, and how many versions each has.
-- An id for each note: a random one, unless the agent that made the note chose it (the agent library lets an agent give its own id,
-  so a create can be repeated safely, and its README tells it to use a hash, never a name or a path).
+- An id for each note: a random one, or, for a note an agent made with a key of its own, so that it can safely make the note again after a lost answer (`createNote(path, text, { key })`), an HMAC of that key under a key derived from the vault key, so it says nothing about the key either (docs/FORMAT.md section 7.6).
 - When each version was saved, and the order of the versions.
 - Which of your devices or agents saved each version.
 - The size of each blob, rounded up (section 2).
@@ -85,7 +84,7 @@ that hide names include Obsidian Sync, Proton Drive and Self-hosted LiveSync
 | Visible to the server | Hidden from the server |
 | --- | --- |
 | That a vault has N notes and how many versions each has | Note text |
-| A random note id for each note | Note names and folder paths |
+| A note id for each note: random, or an HMAC of a key an agent keeps (docs/FORMAT.md section 7.6), never a name or a path | Note names and folder paths |
 | When each version was saved, and the order of versions (the changes feed needs this) | Links, tags and anything else inside the text |
 | Which device or agent wrote each version | The folder structure |
 | The size of each blob, rounded up | What a locked-mode agent read (the server only sees it fetch blobs) |

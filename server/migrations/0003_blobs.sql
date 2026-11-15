@@ -3,7 +3,7 @@
 -- Until now the tables held each note's path and its whole text. From here a device encrypts a note before it sends it
 -- (docs/FORMAT.md), and the server keeps only what it is sent, as it is:
 --
---   nexus_notes     a note is an id the device chose at random (never the path) and the number of its latest version.
+--   nexus_notes     a note is an id the device chose (random, or made from a key the device keeps; never the path) and the number of its latest version.
 --   nexus_versions  a version is written once: the note's id, its number, `seq` (the changes feed's cursor), the kind
 --                   (save or delete), `kid` (the number of the vault key the blob is under), the encrypted blob as base64
 --                   text, SHA-256 of the blob, the writer and the time. A delete version keeps the blob it followed.
