@@ -223,18 +223,8 @@ export const MAX_CHANGES = 500;
  */
 export const DEFAULT_CHANGES_PAGE_BYTES = 4_000_000;
 
-/**
- * Every version after a cursor, oldest first, and the cursor to carry on from. A cursor is the place of the last
- * version sent. With nothing new the same cursor comes back, so asking again is always safe.
- *
- * A page ends at `limit` versions or just before the version that would take the blobs it sends past
- * `changesPageBytes`, whichever is first, so a version is never cut in two and the next page starts at the next
- * version. A page holds at least one version: one larger than the cap goes alone, or the cursor could never move on.
- * What is counted is the blob as sent (base64 text); a delete is sent with no blob and counts for none.
- *
- * The sizes are read first, without the blobs, so a page that is cut short never reads the blobs it leaves for the next.
- */
-export async function changes(host: NexusHost, _caller: Caller, afterInput: unknown, limitInput: unknown): Promise<{ rows: VersionRow[]; next: string }> {
+/** The cursor and the page size of a call to the changes feed or the heads listing, checked. */
+function askedPage(afterInput: unknown, limitInput: unknown): { after: number; limit: number } {
   let after = 0;
   if (afterInput !== undefined && afterInput !== null && afterInput !== "") {
     if (typeof afterInput !== "string" && typeof afterInput !== "number") throw new Refusal(400, "The cursor has to be the one a previous answer gave.");
@@ -248,12 +238,11 @@ export async function changes(host: NexusHost, _caller: Caller, afterInput: unkn
     if (!Number.isInteger(limit) || limit < 1) throw new Refusal(400, "The limit has to be a whole number of changes, 1 or more.");
     limit = Math.min(limit, MAX_CHANGES);
   }
+  return { after, limit };
+}
 
-  const sizes = await host.sql.all<{ seq: number; size: number }>(
-    "SELECT seq, CASE WHEN kind = 'save' THEN LENGTH(blob) ELSE 0 END AS size FROM nexus_versions WHERE seq > ? ORDER BY seq LIMIT ?",
-    [after, limit],
-  );
-  const cap = host.settings.changesPageBytes;
+/** How many of the versions, in order, fit one page: a page holds at least one, and ends before the version that would take its blobs past `cap`. */
+function fitsPage(sizes: Array<{ size: number }>, cap: number): number {
   let count = 0;
   let bytes = 0;
   for (const { size } of sizes) {
@@ -261,9 +250,62 @@ export async function changes(host: NexusHost, _caller: Caller, afterInput: unkn
     bytes += size;
     count += 1;
   }
+  return count;
+}
+
+/**
+ * Every version after a cursor, oldest first, and the cursor to carry on from. A cursor is the place of the last
+ * version sent. With nothing new the same cursor comes back, so asking again is always safe.
+ *
+ * A page ends at `limit` versions or just before the version that would take the blobs it sends past
+ * `changesPageBytes`, whichever is first, so a version is never cut in two and the next page starts at the next
+ * version. A page holds at least one version: one larger than the cap goes alone, or the cursor could never move on.
+ * What is counted is the blob as sent (base64 text); a delete is sent with no blob and counts for none.
+ *
+ * The sizes are read first, without the blobs, so a page that is cut short never reads the blobs it leaves for the next.
+ */
+export async function changes(host: NexusHost, _caller: Caller, afterInput: unknown, limitInput: unknown): Promise<{ rows: VersionRow[]; next: string }> {
+  const { after, limit } = askedPage(afterInput, limitInput);
+  const sizes = await host.sql.all<{ seq: number; size: number }>(
+    "SELECT seq, CASE WHEN kind = 'save' THEN LENGTH(blob) ELSE 0 END AS size FROM nexus_versions WHERE seq > ? ORDER BY seq LIMIT ?",
+    [after, limit],
+  );
+  const count = fitsPage(sizes, host.settings.changesPageBytes);
   if (count === 0) return { rows: [], next: String(after) };
 
   const last = sizes[count - 1].seq;
   const rows = await host.sql.all<VersionRow>("SELECT * FROM nexus_versions WHERE seq > ? AND seq <= ? ORDER BY seq", [after, last]);
+  return { rows, next: String(last) };
+}
+
+/**
+ * The newest version of every note, deleted notes included (as a delete, with no blob), and the cursor to carry on from.
+ * It is for a client that wants to know what the vault holds now and does not need the versions that were replaced: it
+ * sends one blob per note where the changes feed sends one per version.
+ *
+ * It pages as the changes feed does, with the same limit and the same cap on the blobs of a page, and its cursor is the
+ * `seq` of the last newest version sent. Notes come in the order of their newest version, so a note saved again while a
+ * client is reading the pages moves to the end and is met once more, at its new version: no note is missed, and a
+ * client keeps the highest version it was given for each. The newest version of any note is the version with the
+ * highest `seq` at the moment, so when a page comes back empty the cursor is the place of the very last version Nexus
+ * holds, and the changes feed asked from it gives exactly what happened after the listing.
+ */
+export async function heads(host: NexusHost, _caller: Caller, afterInput: unknown, limitInput: unknown): Promise<{ rows: VersionRow[]; next: string }> {
+  const { after, limit } = askedPage(afterInput, limitInput);
+  const sizes = await host.sql.all<{ seq: number; size: number }>(
+    `SELECT v.seq AS seq, CASE WHEN v.kind = 'save' THEN LENGTH(v.blob) ELSE 0 END AS size
+       FROM nexus_versions v JOIN nexus_notes n ON n.id = v.note_id AND n.version = v.version
+      WHERE v.seq > ? ORDER BY v.seq LIMIT ?`,
+    [after, limit],
+  );
+  const count = fitsPage(sizes, host.settings.changesPageBytes);
+  if (count === 0) return { rows: [], next: String(after) };
+
+  const last = sizes[count - 1].seq;
+  const rows = await host.sql.all<VersionRow>(
+    `SELECT v.* FROM nexus_versions v JOIN nexus_notes n ON n.id = v.note_id AND n.version = v.version
+      WHERE v.seq > ? AND v.seq <= ? ORDER BY v.seq`,
+    [after, last],
+  );
   return { rows, next: String(last) };
 }

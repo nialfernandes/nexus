@@ -94,6 +94,8 @@ beforeAll(async () => {
   await call("POST", "delete", owner, { id: PODCAST_V1.id, base: 1 });
   await call("POST", "save", owner, { id: PODCAST_V1.id, base: 2, kid: 1, blob: PODCAST_V1.blob });
   await call("GET", "changes", owner);
+  await call("GET", "heads", agent);
+  await call("GET", "heads", owner);
 
   // The wraps, and the owner's other routes.
   await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: RECOVERY_WRAP, vaultId: VAULT_ID });

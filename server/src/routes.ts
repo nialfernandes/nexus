@@ -8,6 +8,8 @@
 //   GET  /list      (no parameters)                    200 the live notes: id, latest version, time, kid, hash
 //   GET  /changes   [?after=CURSOR][&limit=N]          200 the versions after the cursor, oldest first, and `next`: a page ends at N versions or at the
 //                                                      size cap on its blobs, whichever is first (store.ts `changes`), so it can be short
+//   GET  /heads     [?after=CURSOR][&limit=N]          200 the newest version of every note (a delete without its blob), in the order of those versions, and `next`: paged
+//                                                      as /changes is, and its last `next` is a place /changes can carry on from (store.ts `heads`)
 //   POST /delete    { id, base }                       200 deleted, 404 no such note, 409 the note is at another version
 //   GET  /wraps                                        200 { vaultId, wraps }: the vault id the wraps were made with (null before the first wrap) and the
 //                                                      vault key's wraps (Recovery, password), each with its kid
@@ -92,6 +94,7 @@ const ROUTES: readonly Route[] = [
   { method: "GET", name: "history", who: "identity", run: (c) => operations.history(c.host, c.caller, param(c, "id")) },
   { method: "GET", name: "list", who: "identity", run: (c) => operations.list(c.host, c.caller) },
   { method: "GET", name: "changes", who: "identity", run: (c) => operations.changes(c.host, c.caller, param(c, "after"), param(c, "limit")) },
+  { method: "GET", name: "heads", who: "identity", run: (c) => operations.heads(c.host, c.caller, param(c, "after"), param(c, "limit")) },
   { method: "POST", name: "delete", who: "identity", run: async (c) => operations.remove(c.host, c.caller, await c.body()) },
   { method: "GET", name: "wraps", who: "identity", run: (c) => operations.wraps(c.host) },
 

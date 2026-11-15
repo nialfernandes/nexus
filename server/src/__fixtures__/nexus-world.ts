@@ -43,6 +43,10 @@
 //           A page ends at N versions or before the version that would take the blobs on it past the size cap (4,000,000
 //           characters of base64 unless set), so it can be short; it holds at least one version, and `next` is the place of
 //           the last one on it (changes-size.test.ts).
+//   GET  /heads     [?after=CURSOR][&limit=N]
+//       200 { heads: [ { id, version, kind, kid, writer, at, hash, blob } ], next }    (the newest version of every note; a delete has no blob)
+//           Paged as /changes is, with the same limit and size cap; the notes come in the order of their newest versions, and the
+//           last `next` is a cursor /changes can carry on from (heads.test.ts).
 //   POST /delete    { id, base }
 //       200 { result: "deleted", id, version }
 //       404 no such note   409 { error, current } the note is at another version
@@ -193,6 +197,7 @@ export function vault(cookie: string | null, env?: Record<string, unknown>) {
     history: (id: string) => get("history", { id }),
     list: () => get("list", {}),
     changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
+    heads: (after?: string | number, limit?: number) => get("heads", { after, limit }),
     remove: (id: string, base: number) => post("delete", { id, base }),
     wraps: () => get("wraps", {}),
   };
@@ -205,6 +210,7 @@ export const EVERY_ROUTE: ReadonlyArray<{ name: string; method: "GET" | "POST"; 
   { name: "history", method: "GET", path: `${API}/history?id=gate-1` },
   { name: "list", method: "GET", path: `${API}/list` },
   { name: "changes", method: "GET", path: `${API}/changes` },
+  { name: "heads", method: "GET", path: `${API}/heads` },
   { name: "delete", method: "POST", path: `${API}/delete`, body: { id: "gate-1", base: 1 } },
   { name: "wraps", method: "GET", path: `${API}/wraps` },
 ];

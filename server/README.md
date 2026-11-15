@@ -94,6 +94,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `GET /history?id=I` | any | `200 { id, versions: [ { version, kind, kid, writer, at, hash } ] }` |
 | `GET /list` | any | `200 { notes: [ { id, version, at, kid, hash } ] }`, the live notes |
 | `GET /changes[?after=C][&limit=N]` | any | `200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`, a delete has no blob. A page can hold fewer than `limit` versions: see "The changes feed" |
+| `GET /heads[?after=C][&limit=N]` | any | `200 { heads: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`: the newest version of every note, a delete (a deleted note's newest version) with no blob. Paged as `/changes` is: see "The heads listing" |
 | `POST /delete` `{ id, base }` | any | `200 { result: "deleted", id, version }`; `404`; `409 { error, current }` |
 | `GET /wraps` | any | `200 { vaultId, wraps: [ { kid, kind, wrap, writer, at } ] }`: `vaultId` is the vault id the wraps were made with, `null` before the first wrap |
 | `POST /wrap` `{ kid, kind, wrap, vaultId }` | owner | Keeps a wrap, replacing the one of that kind for that `kid`; `400` with a `reason` when the wrap does not begin as that kind of wrap does; `409` when the server already holds a vault with another `vaultId` |
@@ -115,6 +116,17 @@ page always holds at least one version, so a single version larger than the cap 
 each blob as it is sent, as base64 text (a blob of the largest size a note may be, 1,000,000 bytes, is 1,333,336
 characters); a delete is sent with no blob and counts for none, and the few hundred bytes of JSON around each blob are not counted. So a page can be shorter than `limit` without the feed
 being at its end: a device keeps asking from `next` until a page comes back empty (the same cursor comes back).
+
+### The heads listing
+
+`GET /heads` answers the newest version of each note and none of the versions it replaced, for a client that wants to know what
+the vault holds now: where `/changes` sends one blob for every version ever saved, `/heads` sends one for every note. It pages
+exactly as `/changes` does (`limit` and the same `NEXUS_CHANGES_PAGE_BYTES` cap, at least one note a page, the same cursor and the
+same answer to a bad one), and the notes come in the order of their newest versions, so `next` is the place of the newest version of
+the last note on the page. A note saved again while a client is reading the pages moves to the end of the listing and is met once
+more, at its new version, so no note is missed: a client keeps the highest version it was given for each id. When a page comes back
+empty its `next` is the place of the last version Nexus holds, so the changes feed asked from there gives what happened after the
+listing and nothing from before it.
 
 ## Addresses: `/nexus`
 

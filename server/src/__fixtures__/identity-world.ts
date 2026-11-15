@@ -115,6 +115,7 @@ export function vaultAs(who: Who, env?: NexusEnv) {
     history: (id: string) => get("history", { id }),
     list: () => get("list", {}),
     changes: (after?: string | number, limit?: number) => get("changes", { after, limit }),
+    heads: (after?: string | number, limit?: number) => get("heads", { after, limit }),
     remove: (id: string, base: number) => post("delete", { id, base }),
     wraps: () => get("wraps", {}),
   };
