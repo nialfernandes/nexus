@@ -95,16 +95,49 @@ describe("a save that meets a newer version", () => {
     vault.close();
   });
 
-  it("keeps both when another writer made a new note at the same path at the same moment: Nexus holds two notes, and the plugin sorts them out as it does for two devices", async () => {
+  // Two notes made at one path at the same moment have two ids, which Nexus cannot tell apart. The plugin's rule is that the smaller id keeps
+  // the path and the writer that holds the other acts. The other writer's id is chosen here so that the agent's own (random, 22 characters) is
+  // always larger ("-" is smaller than any id that starts with it) or always smaller (128 letters z is larger than any 22-character id).
+  const SMALLER = "-";
+  const LARGER = "z".repeat(128);
+
+  it("moves its own new note to a duplicate path when another note was made at the same path at the same moment and that one has the smaller id", async () => {
     const { vault } = await agentMet(async () => {
-      await world.elsewhere.create("Inbox/new.md", "the other writer's first text\n");
+      await world.elsewhere.create("Inbox/new.md", "the other writer's first text\n", SMALLER);
     });
-    // Nexus cannot tell two new notes at one path apart (their ids differ), so the agent's save goes through as a note of its own.
-    expect(await vault.write("Inbox/new.md", "the agent's first text\n")).toMatchObject({ path: "Inbox/new.md", saved: true, duplicate: false });
-    expect(Object.values(await nexusNotes(world)).map((note) => note.text).sort()).toEqual(["the agent's first text\n", "the other writer's first text\n"]);
+    expect(await vault.write("Inbox/new.md", "the agent's first text\n")).toEqual({
+      path: "Inbox/new (duplicate agent 2026-11-15).md", version: 2, saved: true, merged: false, duplicate: true,
+    });
+    expect(await nexusTexts(world)).toEqual({
+      "Inbox/new.md": "the other writer's first text\n",
+      "Inbox/new (duplicate agent 2026-11-15).md": "the agent's first text\n",
+    });
     const device = await makeDevice(world, { unlock: new TestUnlock(world.keys) });
     await device.engine.sync();
-    expect(Object.values(device.vault.texts()).sort(), "the plugin's vault holds both texts").toEqual(["the agent's first text\n", "the other writer's first text\n"]);
+    expect(device.vault.texts(), "the plugin's vault holds both").toEqual({
+      "Inbox/new.md": "the other writer's first text\n",
+      "Inbox/new (duplicate agent 2026-11-15).md": "the agent's first text\n",
+    });
+    vault.close();
+  });
+
+  it("drops its own new note when the note made at the same path at the same moment, with the smaller id, says the same", async () => {
+    const { vault } = await agentMet(async () => {
+      await world.elsewhere.create("Inbox/new.md", "the same text\n", SMALLER);
+    });
+    expect(await vault.write("Inbox/new.md", "the same text\n")).toMatchObject({ path: "Inbox/new.md", saved: false, duplicate: false });
+    expect(await nexusTexts(world)).toEqual({ "Inbox/new.md": "the same text\n" });
+    vault.close();
+  });
+
+  it("keeps the path for its own new note when its id is the smaller, and leaves the other note to the writer that holds it", async () => {
+    const { vault } = await agentMet(async () => {
+      await world.elsewhere.create("Inbox/new.md", "the other writer's first text\n", LARGER);
+    });
+    expect(await vault.write("Inbox/new.md", "the agent's first text\n")).toMatchObject({ path: "Inbox/new.md", saved: true, duplicate: false });
+    const device = await makeDevice(world, { unlock: new TestUnlock(world.keys) });
+    await device.engine.sync();
+    expect(device.vault.textOf("Inbox/new.md"), "the plugin gives the path to the smaller id, as it does for two devices").toBe("the agent's first text\n");
     vault.close();
   });
 

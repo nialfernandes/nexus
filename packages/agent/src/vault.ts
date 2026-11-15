@@ -329,13 +329,37 @@ export class AgentVault {
       const reply = await this.#nexus.post("save", { id, base, kid: this.#kid, blob });
       if (reply.status === 200 && reply.json.result === "saved") {
         // The index catches up with this save the next time the changes are read.
-        return { path, version: reply.json.version, saved: true, merged, duplicate: false };
+        const done: WriteResult = { path, version: reply.json.version, saved: true, merged, duplicate: false };
+        return base === 0 ? this.#settlePath(id, done, sending) : done;
       }
       if (reply.status !== 409) throw refusal(reply, "save the note");
       // The note is at another version. Read that version, so the next round starts from what Nexus holds now.
       await this.#readVersion(id, reply.json.current);
     }
     throw new AgentError("changed", `The note at ${path} kept changing while it was being saved, so nothing more was written. Try again.`);
+  }
+
+  /**
+   * A note that was new has been saved. Two notes made at one path before either writer saw the other's are two ids in Nexus, which
+   * cannot tell. The plugin's rule (plugin/src/sync.ts `adoptNew`) is that the one with the smaller id keeps the path, and the writer
+   * that holds the other one acts and loses nothing: when the two texts are the same it drops its own note, and when they differ it moves
+   * its own note to a duplicate path, as an ordinary note. The agent follows the same rule, so a plugin that has neither note gets both.
+   */
+  async #settlePath(id: string, done: WriteResult, text: string): Promise<WriteResult> {
+    await this.#refresh(false);
+    const rival = [...this.#entries.values()].find((e) => !e.deleted && e.note?.path === done.path && e.id !== id && e.id < id);
+    const own = this.#entries.get(id);
+    if (rival?.note === undefined || rival.note === null || own === undefined) return done;
+    if (rival.note.text === text) {
+      const dropped = await this.#nexus.post("delete", { id, base: own.version });
+      if (dropped.status !== 200) throw refusal(dropped, "drop the copy it just made");
+      return { path: done.path, version: rival.version, saved: false, merged: false, duplicate: false };
+    }
+    const taken = this.#byPath();
+    const moved = duplicateNotePath(done.path, this.#name, this.#now(), (candidate) => taken.has(candidate));
+    const reply = await this.#nexus.post("save", { id, base: own.version, kid: this.#kid, blob: await this.#seal(id, moved, text) });
+    if (reply.status !== 200 || reply.json.result !== "saved") throw reply.status === 409 ? new AgentError("changed", `The note at ${done.path} changed while it was being moved aside. Try again.`) : refusal(reply, "move the note aside");
+    return { path: moved, version: reply.json.version, saved: true, merged: false, duplicate: true };
   }
 
   /** The agent's text, kept as a note of its own beside `path`, which is left as it is. */

@@ -108,9 +108,11 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   is merged: the agent's text is kept as a second note beside the first,
   `<name> (duplicate agent 2026-11-15).md`, which the plugin takes as an ordinary note. The result
   says which happened (`merged`, `duplicate`). A note that keeps changing under the write ends in an
-  error after a few rounds, with nothing more written. Two notes made at one path at the same moment
-  have different ids, so Nexus cannot tell them apart: both are kept, and the plugin sorts them out
-  as it does for two devices.
+  error after a few rounds, with nothing more written. Two new notes made at one path at the same
+  moment have different ids, so Nexus cannot tell them apart. The plugin's rule is that the smaller id keeps the
+  path and the writer that holds the other one acts, so the agent does the same: when its new note has the
+  larger id it moves it to a duplicate path (or drops it, if the two texts are the same), and when it has the
+  smaller id it leaves the other writer to do that.
 - **`remove` refuses** a note that changed since it was last looked at (`changed`), so a newer text is
   never deleted unseen.
 - **One call runs at a time** on a vault.
