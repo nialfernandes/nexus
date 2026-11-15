@@ -3,6 +3,7 @@ import {
   formatRecoveryKey,
   generateRecoveryKey,
   NexusCryptoError,
+  normaliseRecoveryText,
   parseRecoveryKey,
   RECOVERY_ALPHABET,
 } from "../src/index.js";
@@ -24,6 +25,13 @@ function withSymbol(text: string, index: number, symbol: string): string {
   const symbols = text.replace(/-/g, "");
   return (symbols.slice(0, index) + symbol + symbols.slice(index + 1)).replace(/(.{4})(?=.)/g, "$1-");
 }
+
+describe("what a person types back from a Recovery Key", () => {
+  it("is read the way the key itself is: capitals or small letters, hyphens and spaces do not matter, and O is 0, I and L are 1", () => {
+    expect(normaliseRecoveryText(" 4tq8-w2k0\n")).toBe("4TQ8W2K0");
+    expect(normaliseRecoveryText("oil")).toBe("011");
+  });
+});
 
 describe("the written Recovery Key", () => {
   it("is 14 groups of 4 symbols from the alphabet, and reads back to the same bytes", async () => {

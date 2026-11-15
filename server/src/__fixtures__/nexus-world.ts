@@ -47,7 +47,7 @@
 //       200 { result: "deleted", id, version }
 //       404 no such note   409 { error, current } the note is at another version
 //   GET  /wraps
-//       200 { wraps: [ { kid, kind, wrap, writer, at } ] }
+//       200 { vaultId, wraps: [ { kid, kind, wrap, writer, at } ] }     `vaultId` is null until the first wrap is kept (vault-id.test.ts)
 //
 //   `kind` is "save" or "delete". `hash` is SHA-256 of the blob, 64 lower case hex characters. `at` is unix
 //   milliseconds. `writer` is the device that wrote the version: `device:<the id of the token it called with>` (identity-world.ts `writerOf`), or "owner" for the owner's own browser session.

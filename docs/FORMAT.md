@@ -260,6 +260,24 @@ Why this stops a server that makes or swaps an approval:
 Both devices keep their private keys to themselves. The new device keeps its
 private key only until it has opened the approval, and does not store it.
 
+### 7.5 An agent's approval, and the vault id kept beside the wraps
+
+An agent is a device that keeps only its private key. Its approval is the sealed approval of
+section 7.3, made by `nexus-agent approve-agent`: the person opens the Recovery wrap with the
+Recovery Key and seals the vault key to the agent's public key. The bytes are the same.
+
+The server never sees an agent's approval, so the server cannot make or swap one, and the
+matching code of section 7.4 is not used for it: that code exists because a device approval
+passes through the server. The person carries an agent's approval from the terminal that made it
+to the agent's secrets themself.
+
+**The vault id.** The wraps of section 7.1 and 7.2 are bound to the vault id (section 4), so a
+holder of only the Recovery Key needs it to open the Recovery wrap. It is not secret. The server
+keeps it once, beside the wraps: it is sent with every wrap (`vaultId`), the first wrap sets it,
+a wrap sent with another id is refused, and the wraps are answered with it (`GET /wraps`). A new
+device that has only the Recovery Key reads the vault id and the wrap from the server and opens
+the wrap with `unwrapVaultKeyWithRecoveryKey`.
+
 ## 8. Writing the Recovery Key down
 
 The 32 bytes of RK are written in the 32 symbols

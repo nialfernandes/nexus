@@ -40,8 +40,11 @@ The rest of the surface:
   Recovery Key and its written form with check characters.
 - `wrapVaultKeyWithRecoveryKey`, `unwrapVaultKeyWithRecoveryKey`.
 - `createPasswordWrap`, `openPasswordWrap`: the optional Argon2id wrap.
-- `generateDeviceKeyPair`, `sealApproval`, `openApproval`: one-time approvals
-  sealed to a device's or agent's X25519 key.
+- `generateDeviceKeyPair`, `devicePublicKey`, `sealApproval`, `openApproval`: one-time
+  approvals sealed to a device's or agent's X25519 key. `devicePublicKey` works the
+  public half out of a private key, for an agent that keeps only the private one.
+- `normaliseRecoveryText`: reads what a person typed from a Recovery Key (capitals,
+  hyphens and spaces do not matter, O is 0, I and L are 1).
 - `deviceKeyCode`, `approvalCode`, `readApprovalCode`: the two short codes a person
   compares so a server cannot give a device a key of its own (docs/FORMAT.md section 7.4).
 
