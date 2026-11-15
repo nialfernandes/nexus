@@ -12,7 +12,7 @@ import { onlyFields } from "./fields";
 import type { NexusHost, SqlStatement } from "./ports";
 import { stmt } from "./ports";
 import { Refusal } from "./refusal";
-import { ownerCaller, type Caller } from "./caller";
+import { deviceWriter, ownerCaller, type Caller } from "./caller";
 
 export const KINDS = ["person", "agent", "app"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -22,9 +22,12 @@ export const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 interface IdentityRow { name: string; kind: Kind }
 
-/** The caller for an identity: the owner (the `owner` setting) if it is that name, otherwise one who may use the notes and nothing more. */
-export function loadCaller(host: NexusHost, name: string): Caller {
-  return name === host.settings.owner ? ownerCaller(name) : { name, owner: false };
+/**
+ * The caller for an identity: the owner (the `owner` setting) if it is that name, otherwise one who may use the notes and
+ * nothing more. `writer` is who its saves are kept under (caller.ts): the identity's name unless a token says otherwise.
+ */
+export function loadCaller(host: NexusHost, name: string, writer: string = name): Caller {
+  return name === host.settings.owner ? ownerCaller(name, writer) : { name, owner: false, writer };
 }
 
 /** Whether a name is an identity: the owner always is, whether or not its row has been made yet, and any other is a row. */
@@ -106,5 +109,5 @@ export async function authenticateToken(host: NexusHost, token: string): Promise
   );
   if (!row) return null;
   await host.sql.run("UPDATE nexus_tokens SET last_used_at = ? WHERE id = ?", [host.clock.now(), row.id]);
-  return loadCaller(host, row.identity);
+  return loadCaller(host, row.identity, deviceWriter(row.id));
 }

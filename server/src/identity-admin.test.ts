@@ -9,7 +9,7 @@ import {
   GARDEN_V1, PASSWORD_WRAP, PODCAST_V1, RECOVERY_WRAP, RECOVERY_WRAP_KID_0, RECOVERY_WRAP_KID_1_AGAIN, RECOVERY_WRAP_KID_2, RECOVERY_WRAP_KID_MAX,
 } from "./__fixtures__/device-blobs";
 import { API, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
-import { issueToken, manage, sendAs, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { issueToken, manage, sendAs, tokenFor, vaultAs, writerOf, type Who } from "./__fixtures__/identity-world";
 
 let ownerCookie: string;
 let owner: Who;
@@ -33,11 +33,11 @@ describe("creating an identity", () => {
     expect(bodyOf(await manage(owner).createIdentity("podcast-app", "app"))).toMatchObject({ kind: "app" });
   });
 
-  it("is a name the new identity can be given a token for, and what it writes carries that name", async () => {
+  it("is a name the new identity can be given a token for, and what it writes carries that token's device", async () => {
     bodyOf(await manage(owner).createIdentity("named-writer", "agent"));
     const writer: Who = tokenFor(() => ownerCookie, "named-writer", "named device");
     bodyOf(await vaultAs(writer).save(GARDEN_V1, 0));
-    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: "named-writer" });
+    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: await writerOf(ownerCookie, "named device") });
   });
 
   it("refuses a kind that is not person, agent or app, a blank name, and a name that is taken", async () => {
@@ -65,7 +65,7 @@ describe("creating an identity", () => {
 describe("an identity that is let in can use every note", () => {
   it("lets agents and recorder alike save, read and delete, since there is no folder to hold them to", async () => {
     expect(bodyOf(await vaultAs(agents).save(PODCAST_V1, 0))).toMatchObject({ result: "saved", version: 1 });
-    expect(bodyOf(await vaultAs(recorder).note(PODCAST_V1.id))).toMatchObject({ writer: "agents" });
+    expect(bodyOf(await vaultAs(recorder).note(PODCAST_V1.id))).toMatchObject({ writer: await writerOf(ownerCookie, "admin-test agents") });
     expect(bodyOf(await vaultAs(recorder).remove(PODCAST_V1.id, 1))).toMatchObject({ result: "deleted", version: 2 });
   });
 });

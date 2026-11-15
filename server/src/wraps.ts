@@ -42,7 +42,7 @@ export async function setWrap(host: NexusHost, caller: Caller, input: Record<str
   await host.sql.run(
     `INSERT INTO nexus_wraps (kid, kind, wrap, writer, saved_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (kid, kind) DO UPDATE SET wrap = excluded.wrap, writer = excluded.writer, saved_at = excluded.saved_at`,
-    [kid, kind, text, caller.name, host.clock.now()],
+    [kid, kind, text, caller.writer, host.clock.now()],
   );
   return { result: "saved", kid, kind };
 }

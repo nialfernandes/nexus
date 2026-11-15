@@ -29,7 +29,9 @@ default user.
   its id when no name was typed), shows the link and the code and opens the link.
   Allow it on the page the link opens, while signed in to your server as that user,
   and the plugin keeps the token it is handed in Obsidian's per-device local storage, never in the
-  vault's files. The token is never shown. Sign out forgets it.
+  vault's files. The token is never shown. Sign out forgets it. A sign-in belongs to the
+  address and user it began with: if you change either while it waits, it is dropped and no
+  token is kept.
 - **First sync.** Notes only in Nexus come down, notes only in the vault go up, and
   a note in both with different text is a clash. Nothing is deleted on a first sync.
   On a first sync a note in the vault and a note in Nexus are the same note when they
@@ -122,6 +124,26 @@ in this plugin writes it to disk. The vault id comes through the same port. It i
 screens will make it once, when the vault is made, keep it in this plugin's data file and beside the wraps on your
 server, and hand it to a new device when you approve it. Every device of a vault has to use the same one,
 because each note's encryption is bound to it. This plugin does none of that storing yet.
+
+## Giving a new device the vault key
+
+The engine for this is built (`src/approval.ts`); its screens are not, so nothing in the plugin's own
+screens starts it yet. A device that holds the vault key can approve a new one, so that the new device
+unlocks the vault with no Recovery Key typed.
+
+- The new device makes a key pair of its own for the attempt, keeps the private half in memory only,
+  and asks to be signed in with its public key. It shows a **key code** for that key.
+- The approving device is unlocked and signed in as the owner. The person types the new device's key
+  code on it. It refuses to go on unless that is the code of the key Nexus gave it, so a server that
+  swapped the new device's key for its own is not sent the vault key. Otherwise it seals the vault key to the
+  new device's key and leaves that with Nexus, which cannot open it, hands it over once and deletes it.
+  The approving device shows a **matching code**.
+- The new device works out the matching code from both devices' keys and what it was handed. It uses nothing
+  it was handed, not the token and not the key, until the person types the approving device's code on
+  it and it is the same. An approval a server made or swapped gives a different code and is refused.
+
+The derivation of both codes is in [docs/FORMAT.md](../docs/FORMAT.md) section 7.4. The vault key goes to the
+unlock port and nowhere else; nothing here writes a key or an approval to disk.
 
 ## Install through BRAT
 

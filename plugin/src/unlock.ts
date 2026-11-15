@@ -28,5 +28,14 @@ export interface Unlock {
   keys(): VaultKeys | null;
 }
 
+/**
+ * The other direction of the same door: where a device puts the vault key when it has been given it. A new device that has
+ * been approved (approval.ts) puts the key here, and only after the person has confirmed the matching code. The holder keeps
+ * it in memory and nowhere else, the same as for `keys`.
+ */
+export interface KeyReceiver {
+  unlock(keys: VaultKeys): void;
+}
+
 /** The port the plugin has until the setup screens exist: nothing is ever unlocked. */
 export const NEVER_UNLOCKED: Unlock = { keys: () => null };

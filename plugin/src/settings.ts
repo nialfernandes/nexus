@@ -11,7 +11,7 @@ import { isSetUp } from "./state";
 import type { PluginData } from "./types";
 
 /** What the address field shows, greyed, while it is empty: the shape of an address, not a real one. */
-const ADDRESS_EXAMPLE = "https://nexus.example.com/apps/nexus/api";
+const ADDRESS_EXAMPLE = "https://nexus.example.com/nexus/api";
 
 /** What the person sees while a sign-in waits for them to allow it. */
 interface Waiting {
@@ -153,6 +153,9 @@ export class NexusSettingTab extends PluginSettingTab {
         void this.plugin.engine.sync();
       } else if (result === "denied") {
         new Notice("Nexus sign-in was denied.");
+      } else if (result === "changed") {
+        // The address or the user changed while it waited, so it was dropped and no token was kept. Changing either has already said so.
+        if (!waiting.cancelled) new Notice("The address or user name changed, so that sign-in was dropped. Sign in again.");
       } else {
         new Notice("The Nexus sign-in ran out. Try again.");
       }

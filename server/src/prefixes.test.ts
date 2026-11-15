@@ -1,7 +1,7 @@
-// Where Nexus answers. Every address is under `/nexus` (the API at `/nexus/api/...`, the device approval page at
-// `/nexus/approve`). The old prefix `/apps/nexus` keeps answering for one release, with the same handlers, so a device
-// that has not been updated still reaches the server; server/README.md says so. `/search` is gone under both. The page's
-// files sit in the assets at the address the Worker serves them at, so the Worker has to run first for them (wrangler.jsonc).
+// Where Nexus answers: every address is under `/nexus` (the API at `/nexus/api/...`, the device approval page at
+// `/nexus/approve`), and nothing is under the old prefix `/apps/nexus`: it answers 404, for the owner, for a token and for
+// nobody, so a request that still goes there is told plainly it has no Nexus. `/search` is gone too. The page's files sit
+// in the assets at the address the Worker serves them at, so the Worker has to run first for them (wrangler.jsonc).
 // Through the Nexus Worker (see __fixtures__/nexus-world.ts).
 
 import { readFileSync } from "node:fs";
@@ -9,12 +9,13 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseJsonc } from "./__fixtures__/jsonc";
 import { staticAssets } from "./__fixtures__/assets";
-import { GARDEN_V1, GARDEN_V2 } from "./__fixtures__/device-blobs";
+import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { bodyOf, expectRefusal, nexusEnv, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
-import { sendAs, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { sendAs, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
+import * as addresses from "./addresses";
 import { ROUTE_NAMES } from "./routes";
 
-const NEW = "/nexus/api";
+const API = "/nexus/api";
 const OLD = "/apps/nexus/api";
 
 let owner: Who;
@@ -24,78 +25,67 @@ beforeAll(async () => {
   owner = { cookie: (await signInOwner()).cookie };
 });
 
-describe("the API answers at /nexus/api and, for one release, at /apps/nexus/api", () => {
-  it("holds one set of notes: a save at one prefix is read at the other", async () => {
-    const save = (prefix: string, id: string, base: number, blob: string) =>
-      sendAs("POST", `${prefix}/save`, owner, { id, base, kid: 1, blob });
-    expect(bodyOf(await save(NEW, "prefix-1", 0, GARDEN_V1.blob))).toMatchObject({ result: "saved", version: 1 });
-    expect(bodyOf(await save(OLD, "prefix-1", 1, GARDEN_V2.blob))).toMatchObject({ result: "saved", version: 2 });
-
-    for (const prefix of [NEW, OLD]) {
-      expect(bodyOf(await sendAs("GET", `${prefix}/note?id=prefix-1`, owner)), prefix).toMatchObject({ version: 2, blob: GARDEN_V2.blob });
-      expect(bodyOf(await sendAs("GET", `${prefix}/history?id=prefix-1`, owner)).versions, prefix).toHaveLength(2);
-      expect(bodyOf(await sendAs("GET", `${prefix}/list`, owner)).notes.map((n: { id: string }) => n.id), prefix).toContain("prefix-1");
-    }
-    const stale = await save(OLD, "prefix-1", 1, GARDEN_V1.blob);
-    expectRefusal(stale, 409, "a stale save at the old prefix");
-    expect(stale.body.current).toBe(2);
+describe("the API answers at /nexus/api", () => {
+  it("saves and reads a note there", async () => {
+    expect(bodyOf(await vaultAs(owner).save({ id: "prefix-1", blob: GARDEN_V1.blob }, 0))).toMatchObject({ result: "saved", version: 1 });
+    expect(bodyOf(await sendAs("GET", `${API}/note?id=prefix-1`, owner))).toMatchObject({ version: 1, blob: GARDEN_V1.blob });
+    expect(bodyOf(await sendAs("GET", `${API}/list`, owner)).notes.map((n: { id: string }) => n.id)).toContain("prefix-1");
   });
 
-  it("gives the same answer from the same handler for every route, signed in or not, whatever the method", async () => {
+  it("has no search, and answers a route it does not have 404 for the owner and 401 for nobody", async () => {
+    expectRefusal(await sendAs("GET", `${API}/search?q=garden`, owner), 404, "search");
+    expectRefusal(await sendAs("GET", `${API}/search?q=garden`, null), 401, "search signed out");
+    expect(ROUTE_NAMES).not.toContain("search");
+  });
+});
+
+describe("the old /apps/nexus prefix answers nothing", () => {
+  it("is a 404 for every route, whatever the method and whoever asks: the owner, a token or nobody", async () => {
+    const token = tokenFor(() => (owner as { cookie: string }).cookie, "agents", "an agent that still uses the old prefix");
     for (const name of ROUTE_NAMES) {
       for (const method of ["GET", "POST"]) {
-        for (const [who, what] of [[null, "nobody"], [owner, "the owner"]] as const) {
-          const now = await sendAs(method, `${NEW}/${name}`, who, method === "POST" ? {} : undefined);
-          const before = await sendAs(method, `${OLD}/${name}`, who, method === "POST" ? {} : undefined);
-          expect(before.status, `${method} ${name} as ${what}`).toBe(now.status);
-          expect(before.text, `${method} ${name} as ${what}`).toBe(now.text);
+        for (const [who, what] of [[null, "nobody"], [owner, "the owner"], [token, "a token"]] as const) {
+          const answer = await sendAs(method, `${OLD}/${name}`, who, method === "POST" ? {} : undefined);
+          expect(answer.status, `${method} ${OLD}/${name} as ${what}`).toBe(404);
         }
       }
     }
   });
 
-  it("has no search at either prefix, and answers a route it does not have 404 for the owner and 401 for nobody", async () => {
-    for (const prefix of [NEW, OLD]) {
-      expectRefusal(await sendAs("GET", `${prefix}/search?q=garden`, owner), 404, `search at ${prefix}`);
-      expectRefusal(await sendAs("GET", `${prefix}/search?q=garden`, null), 401, `search at ${prefix} signed out`);
-    }
-    expect(ROUTE_NAMES).not.toContain("search");
+  it("does not read what a save to the old prefix sent", async () => {
+    const answer = await sendAs("POST", `${OLD}/save`, owner, { id: "old-prefix-1", base: 0, kid: 1, blob: GARDEN_V1.blob });
+    expect(answer.status).toBe(404);
+    expectRefusal(await sendAs("GET", `${API}/note?id=old-prefix-1`, owner), 404, "the note the old prefix was asked to save");
   });
 
-  it("serves no address that is neither prefix: not /nexus without api, not /apps, not /api", async () => {
+  it("is no longer written in the server's addresses", () => {
+    expect(Object.keys(addresses).sort()).toEqual(["APPROVE_PATH", "NEXUS_BASE", "NEXUS_PREFIX", "routeName"]);
+    expect(addresses.routeName(`${OLD}/save`)).toBeNull();
+    expect(addresses.routeName(`${API}/save`)).toBe("save");
+  });
+
+  it("serves no address that is not /nexus/api/<route>: not /nexus without api, not /apps, not /api", async () => {
     for (const path of ["/api/list", "/nexus/list", "/apps/nexus/list", "/apps/api/list", "/nexusapi/list"]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(404);
     }
   });
 });
 
-describe("the device approval page is at /nexus/approve and, for one release, at /apps/nexus/approve", () => {
+describe("the device approval page is at /nexus/approve", () => {
   const FILES = ["approve", "approve.css", "approve.js", "theme-boot.js"];
 
-  it("serves the same four files at both prefixes, to the owner only", async () => {
+  it("serves the four files to the owner only, and none of them under the old prefix", async () => {
     for (const file of FILES) {
-      const now = await sendAs("GET", `/nexus/${file}`, owner);
-      const before = await sendAs("GET", `/apps/nexus/${file}`, owner);
-      expect(now.status, file).toBe(200);
-      expect(before.status, file).toBe(200);
-      expect(before.text, file).toBe(now.text);
+      expect((await sendAs("GET", `/nexus/${file}`, owner)).status, file).toBe(200);
       expect((await sendAs("GET", `/nexus/${file}`, null)).status, `${file} signed out`).toBe(401);
-      expect((await sendAs("GET", `/apps/nexus/${file}`, null)).status, `${file} signed out at the old prefix`).toBe(401);
+      expect((await sendAs("GET", `/apps/nexus/${file}`, owner)).status, `${file} at the old prefix`).toBe(404);
+      expect((await sendAs("GET", `/apps/nexus/${file}`, null)).status, `${file} at the old prefix, signed out`).toBe(404);
     }
   });
 
-  it("hands a device a link under /nexus, whichever prefix the device asked at", async () => {
-    for (const path of [`${NEW}/device/start`, `${OLD}/device/start`]) {
-      const started = bodyOf(await sendAs("POST", path, null, { identity: "agents", label: "prefix device" }));
-      expect(started.link).toBe(`https://nexus.example.test/nexus/approve?code=${encodeURIComponent(started.code)}`);
-    }
-    // And the device's own two calls, and the owner's answer, work through the old prefix as well.
-    const started = bodyOf(await sendAs("POST", `${OLD}/device/start`, null, { identity: "agents", label: "old prefix device" }));
-    expect(bodyOf(await sendAs("GET", `${OLD}/device/pending?code=${started.code}`, owner)).label).toBe("old prefix device");
-    bodyOf(await sendAs("POST", `${OLD}/device/approve`, owner, { code: started.code }));
-    const polled = bodyOf(await sendAs("POST", `${OLD}/device/poll`, null, { secret: started.secret }));
-    expect(polled.status).toBe("approved");
-    expect(bodyOf(await vaultAs({ bearer: polled.token }).list()).notes).toBeInstanceOf(Array);
+  it("hands a device a link under /nexus", async () => {
+    const started = bodyOf(await sendAs("POST", `${API}/device/start`, null, { identity: "agents", label: "prefix device" }));
+    expect(started.link).toBe(`https://nexus.example.test/nexus/approve?code=${encodeURIComponent(started.code)}`);
   });
 
   it("refuses the page's files to anyone else without asking the asset server for them", async () => {
@@ -105,10 +95,13 @@ describe("the device approval page is at /nexus/approve and, for one release, at
     const env = await nexusEnv({ ASSETS: watching });
 
     expect((await sendAs("GET", "/nexus/approve.js", null, undefined, env)).status).toBe(401);
-    expect((await sendAs("GET", "/apps/nexus/approve.js", { cookie: "nexus_owner=wrong" }, undefined, env)).status).toBe(401);
+    expect((await sendAs("GET", "/nexus/approve.js", { cookie: "nexus_owner=wrong" }, undefined, env)).status).toBe(401);
     expect(asked, "the asset server was not asked").toEqual([]);
 
-    expect((await sendAs("GET", "/apps/nexus/approve.js", owner, undefined, env)).status).toBe(200);
+    expect((await sendAs("GET", "/apps/nexus/approve.js", owner, undefined, env)).status).toBe(404);
+    expect(asked, "the old prefix is never passed on to the asset server").toEqual([]);
+
+    expect((await sendAs("GET", "/nexus/approve.js", owner, undefined, env)).status).toBe(200);
     expect(asked, "the file is asked for at its own address in the assets").toEqual(["/nexus/approve.js"]);
   });
 });
@@ -131,12 +124,10 @@ describe("the Worker runs before the asset server for /nexus", () => {
   });
 });
 
-describe("a device can still call the device routes without a credential at either prefix", () => {
+describe("a device can call the device routes without a credential", () => {
   it("answers start and poll for nobody", async () => {
-    for (const prefix of [NEW, OLD]) {
-      const started = await sendAs("POST", `${prefix}/device/start`, null, { identity: "agents", label: `prefix open ${prefix}` });
-      expect(started.status, prefix).toBe(200);
-      expect((await sendAs("POST", `${prefix}/device/poll`, null, { secret: bodyOf(started).secret })).status, prefix).toBe(200);
-    }
+    const started = await sendAs("POST", `${API}/device/start`, null, { identity: "agents", label: "prefix open" });
+    expect(started.status).toBe(200);
+    expect((await sendAs("POST", `${API}/device/poll`, null, { secret: bodyOf(started).secret })).status).toBe(200);
   });
 });

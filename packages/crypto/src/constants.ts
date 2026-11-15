@@ -22,6 +22,15 @@ export const Kind = {
 /** The label HKDF is given for the key that wraps the vault key under the Recovery Key. */
 export const RECOVERY_KDF_LABEL = "nexus v1 recovery";
 
+/** Mixed into the hash that makes the matching code of a device approval. */
+export const APPROVAL_CODE_LABEL = "nexus v1 approval code";
+
+/** Mixed into the hash that makes the device key code: what the approving device checks before it seals anything. */
+export const DEVICE_KEY_CODE_LABEL = "nexus v1 device key code";
+
+/** How many symbols the matching code has: 10 symbols of 5 bits are 50 bits, written in two groups of 5. */
+export const APPROVAL_CODE_SYMBOLS = 10;
+
 /** Mixed into the hash that makes the Recovery Key's check characters. */
 export const RECOVERY_CHECK_LABEL = "nexus v1 recovery check";
 

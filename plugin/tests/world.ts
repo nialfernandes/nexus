@@ -250,6 +250,9 @@ export const manage = (who: Who) => nexus().manage(who);
 /** The device's calls, and the owner's answers to them. */
 export const deviceRoutes = (who: Who = null) => nexus().device(who);
 
+/** What whoever runs the server can do to what it holds (real-nexus.ts): for the tests that play a hostile server. */
+export const hostileServer = () => nexus().asHostileServer();
+
 /** A token made the way a device gets one: start, the owner approves, the device polls. Every step must work. */
 export async function issueToken(ownerCookie: string, identity: string, label: string): Promise<string> {
   const started = bodyOf(await deviceRoutes().start(identity, label));

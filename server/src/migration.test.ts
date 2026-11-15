@@ -1,7 +1,8 @@
 // Migration 0003 turns today's tables into the blob shape. The server cannot encrypt, so it cannot convert a plain text
 // vault: the migration drops the tables that hold paths and texts, and the first device that connects afterwards
 // uploads every note again, encrypted. What is not about notes survives: the identities, and the tokens that were given
-// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied, a plain vault written with
+// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied (and 0004, which only adds the
+// device key and the sealed approval to the sign-in tables and which the device approval code needs), a plain vault written with
 // the SQL the old store used, an identity and a token made through the real device approval; then 0003 is applied.
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -38,10 +39,12 @@ let before: string;
 
 beforeAll(async () => {
   const migrations = nexusMigrations();
-  expect(migrations.length, "0001, 0002 and 0003 at least").toBeGreaterThanOrEqual(3);
+  expect(migrations.length, "0001, 0002, 0003 and 0004 at least").toBeGreaterThanOrEqual(4);
   db = freshDatabase();
-  // Only the first two migrations: the database as it was before this change.
-  for (const sql of migrations.slice(0, 2)) await db.applyMigration(sql);
+  // The first two migrations: the database as it was before this change. Migration 0004 (a device's public key and its sealed
+  // approval) only adds to the sign-in tables, which 0003 never touches, and the device approval the code runs today needs it,
+  // so it is applied here, before 0003, where an operator's database would have had it applied after.
+  for (const sql of [migrations[0]!, migrations[1]!, migrations[3]!]) await db.applyMigration(sql);
   env = { ...(await nexusEnv()), NEXUS_DB: db };
 
   // A plain vault, written with the statements the old store ran (server/src/store.ts before this change): the note's
@@ -100,7 +103,7 @@ describe("migration 0003", () => {
     const device = vaultAs({ bearer: oldToken }, env);
     expect(bodyOf(await device.list()).notes).toEqual([]);
     expect(bodyOf(await device.save(GARDEN_V1, 0))).toMatchObject({ result: "saved", id: "n-1", version: 1 });
-    expect(bodyOf(await device.note("n-1"))).toMatchObject({ blob: GARDEN_V1.blob, writer: "agents" });
+    expect(bodyOf(await device.note("n-1"))).toMatchObject({ blob: GARDEN_V1.blob, writer: expect.stringMatching(/^device:[0-9a-f]{16}$/) });
     expect(bodyOf(await device.changes()).changes).toHaveLength(1);
   });
 

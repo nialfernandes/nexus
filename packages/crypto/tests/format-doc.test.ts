@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES, FORMAT_VERSION, PASSWORD_KDF, PASSWORD_KDF_LIMITS, RECOVERY_ALPHABET, encryptNote,
 } from "../src/index.js";
-import { MAX_ID_BYTES, MIN_PADDED_RECORD_BYTES, RECOVERY_CHECK_LABEL, RECOVERY_KDF_LABEL, Kind } from "../src/constants.js";
+import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, DEVICE_KEY_CODE_LABEL, MAX_ID_BYTES, MIN_PADDED_RECORD_BYTES, RECOVERY_CHECK_LABEL, RECOVERY_KDF_LABEL, Kind } from "../src/constants.js";
 import { MIN_NOTE_BLOB_BYTES } from "../src/note.js";
 import { PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "../src/wraps.js";
 import * as format from "../src/format.js";
 import { fromHex } from "./helpers.js";
-import { NOTE_BLOB_HEX, NOTE_CONTEXT, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX, VAULT_KEY } from "./fixtures.js";
+import { APPROVAL_CODE_TEXT, DEVICE_KEY_CODE_TEXT, NOTE_BLOB_HEX, NOTE_CONTEXT, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX, VAULT_KEY } from "./fixtures.js";
 
 const doc = readFileSync(new URL("../../../docs/FORMAT.md", import.meta.url), "utf8");
 const docWithoutLineBreaks = doc.replace(/\n/g, "");
@@ -21,6 +21,17 @@ describe("docs/FORMAT.md says what the code does", () => {
   it("holds the pinned worked examples byte for byte", () => {
     for (const hex of [NOTE_BLOB_HEX, RECOVERY_WRAP_HEX, PASSWORD_WRAP_HEX]) expect(docWithoutLineBreaks).toContain(hex);
     expect(doc).toContain(RECOVERY_KEY_TEXT);
+    expect(doc).toContain(APPROVAL_CODE_TEXT);
+    expect(doc).toContain(DEVICE_KEY_CODE_TEXT);
+  });
+
+  it("writes the matching code's derivation: its label, how many symbols and what goes into the hash", () => {
+    expect(doc).toContain(`"${APPROVAL_CODE_LABEL}"`);
+    expect(doc).toContain(`the first ${APPROVAL_CODE_SYMBOLS * 5} bits of digest, as ${APPROVAL_CODE_SYMBOLS} symbols`);
+    expect(doc).toContain(`The label is the ${APPROVAL_CODE_LABEL.length} ASCII bytes`);
+    expect(doc).toContain(`The label is the ${DEVICE_KEY_CODE_LABEL.length} ASCII bytes of \`${DEVICE_KEY_CODE_LABEL}\``);
+    expect(doc).toContain('digest = SHA-256( "nexus v1 device key code" || N )');
+    expect(doc).toContain('digest = SHA-256( "nexus v1 approval code" || N || A || kid (4) || SHA-256(S) )');
   });
 
   it("states the version, labels, alphabet and limits the code uses", () => {

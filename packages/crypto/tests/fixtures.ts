@@ -21,3 +21,9 @@ export const RECOVERY_WRAP_HEX =
 export const PASSWORD_WRAP_HEX =
   "0103000100000000000300000001606162636465666768696a6b6c6d6e6f404142434445464748494a4b4c4d4e4f5051525354555657aabf5c2ca8ef548a032d84583b467a725f7ea0806abae90239ab5a435b4058049f3b818e5a531fd658577e560d8eeb0f";
 export const RECOVERY_KEY_TEXT = "40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-CDSR-74X3-PF1X-7RZG-2M48";
+
+/** The matching code of docs/FORMAT.md section 10: N = 0x10.., A = 0x50.., kid 1, S = 91 bytes from 0x90. */
+export const APPROVAL_CODE_TEXT = "ENBRP-QJF17";
+
+/** The device key code of docs/FORMAT.md section 10: the key is 32 bytes from 0x10. */
+export const DEVICE_KEY_CODE_TEXT = "3X1TB-8BMC4";

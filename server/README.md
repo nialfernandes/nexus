@@ -23,7 +23,7 @@ A **note** is a row with an id the device chose at random (never the path) and t
 | `kid` | The number of the vault key the blob is under |
 | `blob` | The encrypted note, as base64 text. The server never opens it |
 | `hash` | SHA-256 of the blob, 64 hex characters, so a device can check what it reads is what was stored |
-| `writer`, `at` | The name of the identity that saved it, and the time (unix milliseconds) |
+| `writer`, `at` | The device that saved it, and the time (unix milliseconds). A device is a sign-in's token, written `device:<the token's id>`, the id the owner sees in the list of tokens and can revoke by. The owner's own browser session is not a token, and is written as the owner's name |
 | `kind` | `save`, or `delete` (a delete keeps the blob it followed) |
 
 A **wrap** is the vault key locked under the Recovery Key (`recovery`) or, if the person chose one, under a password
@@ -59,6 +59,15 @@ Sign-in tokens, device labels and identity names are kept, since the server need
   bearer token that was made for one identity. Only the owner manages identities, tokens and wraps.
 - A token is got by **device approval**: a device asks for a sign-in and is handed a short code and a link, the owner
   opens the link and allows it, and the device is handed its token once. Only a hash of a token is ever kept.
+- A device can send its **public key** (`deviceKey`, an X25519 key as base64) when it asks for a sign-in. The owner's
+  device, if it holds the vault key, can send with its allow an **approval**: the vault key sealed to that key, and
+  its own public key for the approval (`approval` and `approverKey`). The server cannot open the approval. It keeps it
+  beside the sign-in and hands it to the new device in the same first poll that hands over the token, **once**: the
+  approval is deleted as the sign-in is marked collected. One that is never collected is deleted when its sign-in
+  has run out (ten minutes): the device's own poll deletes it, and so does the next sign-in that starts or is allowed, because
+  the server has no clock of its own to run at that moment. A server can still make or swap an approval, so the new
+  device does not use the key in one until a person has compared the matching code on both screens
+  ([docs/FORMAT.md](../docs/FORMAT.md) section 7.4).
 
 Gone from earlier versions of this server: `/search` (a device searches its own copy), the folder rights and the
 `/rights` route, `/move` (a rename is a new blob with the new path inside it, saved as the next version of the same id),
@@ -101,12 +110,11 @@ each blob as it is sent, as base64 text (a blob of the largest size a note may b
 characters); a delete is sent with no blob and counts for none, and the few hundred bytes of JSON around each blob are not counted. So a page can be shorter than `limit` without the feed
 being at its end: a device keeps asking from `next` until a page comes back empty (the same cursor comes back).
 
-## Addresses: `/nexus`, and `/apps/nexus` for one release
+## Addresses: `/nexus`
 
-Everything is under `/nexus`: the API at `/nexus/api/...` and the device approval page at `/nexus/approve`. The old prefix
-`/apps/nexus` **keeps answering for one release, with the same handlers** (`/apps/nexus/api/...` and
-`/apps/nexus/approve`), so a device that has not been updated still reaches the server. It will then be removed. A link
-a device is handed is always on `/nexus`. `src/addresses.ts` is the one place either prefix is written.
+Everything is under `/nexus`: the API at `/nexus/api/...` and the device approval page at `/nexus/approve`. Nothing else
+answers: the older `/apps/nexus` prefix has been removed, and an address under it is a 404 like any other that is not
+Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
 On Cloudflare the page's four files sit in the assets under `public/nexus`, the same address the Worker serves them at, so
 `wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand them to anyone
@@ -164,7 +172,7 @@ package.
 
 Serve Nexus over HTTPS only. The owner's secret and every token travel in request headers.
 
-The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` (and the old `/apps/nexus/api/*`) to Nexus, gives the
+The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` to Nexus, gives the
 owner the device approval page (`public/nexus/`, served through the `ASSETS` binding), and answers 404 to everything
 else. The four files of the page are static and identical for everyone and hold nothing private, and `run_worker_first`
 (above) makes the Worker the only way to them.

@@ -7,7 +7,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { ORIGIN, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
-import { device, manage, tokenFor, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { device, manage, tokenFor, vaultAs, writerOf, type Who } from "./__fixtures__/identity-world";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -91,7 +91,7 @@ describe("the owner allows a sign-in and the device is handed its token once", (
     expect(polled.token.length).toBeGreaterThanOrEqual(32);
 
     expect(bodyOf(await vaultAs({ bearer: polled.token }).save(GARDEN_V1, 0))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: "agents" });
+    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id)), "the writer is the device").toMatchObject({ writer: await writerOf(ownerCookie, "lab-m") });
     expect(await tokensLabelled("lab-m")).toHaveLength(1);
   });
 

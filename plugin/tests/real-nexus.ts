@@ -98,6 +98,40 @@ export class RealNexus {
       .join("\n");
   }
 
+  /**
+   * What whoever runs the server can do with what it holds, for the tests that play a hostile server: it can read its own tables, and
+   * it can write to them. It cannot open a sealed approval (it has no key to), so what it swaps in is made by the test with the
+   * real encryption, the way a hostile server would make it. Nothing here is a route: the server's own code never does any of this.
+   */
+  asHostileServer() {
+    return {
+      /** How many sealed approvals the server holds, for one sign-in's code or (with none) for every sign-in. */
+      approvalsHeld: (code?: string): number =>
+        Number(
+          (code === undefined
+            ? this.db.prepare("SELECT COUNT(*) AS n FROM nexus_approvals").get()
+            : this.db.prepare("SELECT COUNT(*) AS n FROM nexus_approvals WHERE code = ?").get(code))!.n,
+        ),
+      /** The approval and the approving device's key the server holds for a sign-in, as base64. */
+      approvalFor: (code: string): { approval: string; approverKey: string } | null => {
+        const row = this.db.prepare("SELECT approval, approver_key FROM nexus_approvals WHERE code = ?").get(code) as { approval: string; approver_key: string } | undefined;
+        return row ? { approval: row.approval, approverKey: row.approver_key } : null;
+      },
+      /** The public key a sign-in was started with, as base64: the server has it because the device sent it. */
+      deviceKeyOf: (code: string): string | null =>
+        ((this.db.prepare("SELECT device_key FROM nexus_signins WHERE code = ?").get(code) as { device_key: string | null } | undefined)?.device_key) ?? null,
+      /** Puts another approval (and, if given, another approving key) where the one the owner's device left was. */
+      swapApproval: (code: string, approval: string, approverKey?: string): void => {
+        this.db.prepare("UPDATE nexus_approvals SET approval = ? WHERE code = ?").run(approval, code);
+        if (approverKey !== undefined) this.db.prepare("UPDATE nexus_approvals SET approver_key = ? WHERE code = ?").run(approverKey, code);
+      },
+      /** Puts another public key where the new device's was, so the next device asked to approve it is shown that one. */
+      swapDeviceKey: (code: string, deviceKey: string): void => {
+        this.db.prepare("UPDATE nexus_signins SET device_key = ? WHERE code = ?").run(deviceKey, code);
+      },
+    };
+  }
+
   /** No notes and no versions, so a test starts from a feed that begins at its own first change. Identities and tokens stay. */
   emptyNotes(): void {
     this.db.exec("DELETE FROM nexus_versions");
@@ -158,9 +192,10 @@ export class RealNexus {
   device(who: Who = null) {
     const post = (route: string, body: unknown) => this.send("POST", `${API}/device/${route}`, who, body);
     return {
-      start: (identity: string, label: string) => post("start", { identity, label }),
+      start: (identity: string, label: string, deviceKey?: string) => post("start", { identity, label, ...(deviceKey === undefined ? {} : { deviceKey }) }),
       pending: (code: string) => this.send("GET", `${API}/device/pending${query({ code })}`, who),
-      approve: (code: string) => post("approve", { code }),
+      /** `sealed` is a sealed approval and the approving device's public key, both base64, sent with the allow. */
+      approve: (code: string, sealed?: { approval: string; approverKey: string }) => post("approve", { code, ...sealed }),
       deny: (code: string) => post("deny", { code }),
       poll: (secret: string) => post("poll", { secret }),
     };

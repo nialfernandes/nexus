@@ -52,7 +52,7 @@ function openTab(state: PluginData) {
   return { plugin, tab, settings, named, field };
 }
 
-const ADDRESS = "https://nexus.example.com/apps/nexus/api";
+const ADDRESS = "https://nexus.example.com/nexus/api";
 
 beforeEach(() => {
   Notice.clear();

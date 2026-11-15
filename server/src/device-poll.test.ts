@@ -31,7 +31,7 @@ beforeAll(async () => {
 /** A sign-in started and allowed the way a device and the owner do it, through the real functions. */
 async function allowedSignin(label: string): Promise<{ secret: string; code: string }> {
   const started = await devices.start(host, ORIGIN, { identity: "agents", label });
-  await devices.approve(host, started.code);
+  await devices.approve(host, { code: started.code });
   return { secret: started.secret, code: started.code };
 }
 
@@ -101,6 +101,33 @@ describe("the token is handed over once", () => {
     expect(typeof handed[0].value.token).toBe("string");
     expect(refused.map((r) => (r.reason as Refusal).status), "the other is told the code is used").toEqual([410]);
     expect(await tokensLabelled("poll-both-read-first"), "one sign-in, one token").toHaveLength(1);
+  });
+
+  it("hands a sealed approval to the one poll that gets the token, and the other is given neither", async () => {
+    const started = await devices.start(host, ORIGIN, { identity: "agents", label: "poll-with-approval", deviceKey: Buffer.alloc(32, 7).toString("base64") });
+    await devices.approve(host, { code: started.code, approval: Buffer.alloc(100, 9).toString("base64"), approverKey: Buffer.alloc(32, 5).toString("base64") });
+
+    let arrived = 0;
+    let release!: () => void;
+    const bothRead = new Promise<void>((resolve) => (release = resolve));
+    const giveUp = setTimeout(release, 2000);
+    const racing = watched({
+      read: async (sql) => {
+        if (!/FROM nexus_signins WHERE secret_hash/.test(sql)) return;
+        arrived += 1;
+        if (arrived === 2) release();
+        await bothRead;
+      },
+    });
+    const results = await Promise.allSettled([devices.poll(racing, started.secret), devices.poll(racing, started.secret)]);
+    clearTimeout(giveUp);
+
+    const handed = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<{ approval: string | null; approverKey: string | null }>[];
+    const refused = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+    expect(handed).toHaveLength(1);
+    expect(handed[0].value, "the poll that got the token got the approval").toMatchObject({ approval: Buffer.alloc(100, 9).toString("base64"), approverKey: Buffer.alloc(32, 5).toString("base64") });
+    expect(refused.map((r) => (r.reason as Refusal).status)).toEqual([410]);
+    expect(JSON.stringify(refused[0].reason), "and the one that did not has no approval to show").not.toContain(Buffer.alloc(100, 9).toString("base64"));
   });
 
   it("turns a poll of a sign-in that is already collected away without writing anything", async () => {

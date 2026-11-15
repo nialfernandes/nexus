@@ -130,8 +130,11 @@ export interface SignInDeps {
   data: PluginData;
   persist: (data: PluginData) => Promise<void>;
   device: string;
-  /** Shows the person the link and the code. */
-  show: (link: string, code: string) => void;
+  /**
+   * Shows the person the link and the code. A sign-in that asks to be sent the vault key (approval.ts) also gives the key code,
+   * which the person types on the device that approves it.
+   */
+  show: (link: string, code: string, keyCode?: string) => void;
   /** Opens the link in a browser. */
   open: (link: string) => void;
   /** Pauses between polls. */

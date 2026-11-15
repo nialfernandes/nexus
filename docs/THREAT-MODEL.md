@@ -159,7 +159,10 @@ lie in any response.
 - **Cannot answer for recovery or start it,** because the server has no recovery
   feature (section 5).
 - **Cannot slip its own public key into a device approval,** because the new
-  device and the approving device both show a short code you compare [S10].
+  device shows a short code for its own key that you type on the approving
+  device, which seals nothing unless it is the code of the key it was given, and
+  because both devices then work out a matching code from both keys and the sealed
+  approval that you compare before the new device uses what it was handed [S10].
 - **Can withhold notes, delete the whole store, or roll back,** meaning serve an
   older version of a note. An authenticated cipher shows a blob is genuine, not
   that it is the latest. Cryptomator describes the same class of limit: a hostile
@@ -325,8 +328,9 @@ This is a summary so that the rules in section 6 have something to refer to.
 - **Password wrap (optional):** Argon2id at 64 MiB of memory, 3 passes, 1 lane,
   with a random salt, settings stored beside the wrap [S34][S33][S42].
 - **A new device or agent** gets the key by a one-time approval from a device you
-  already hold, sealed to the new device's own public key, with the matching
-  short code shown on both screens [S10].
+  already hold, sealed to the new device's own public key, with a code for that
+  key checked before it is sealed and a matching short code checked on both
+  screens before it is used (docs/FORMAT.md section 7.4) [S10].
 - **The server holds** note blobs, ids, version numbers, key numbers, timestamps,
   writer ids and the wrapped keys. It keeps the sign-in tokens, device approval,
   changes feed, history and the check that stops two saves overwriting each
