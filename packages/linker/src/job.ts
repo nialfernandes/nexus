@@ -14,6 +14,8 @@ export interface JobOptions {
   fetchNexus?: FetchLike;
   /** How the model is reached. The runtime's `fetch` when left out. */
   fetchModel?: ModelFetch;
+  /** What time it is. The clock's own when left out. */
+  now?: () => Date;
   /** In a Cloudflare Worker, libsodium's WebAssembly, compiled: `import wasm from "@nexus/agent/nexus-agent.wasm"`. */
   wasm?: WebAssembly.Module;
 }
@@ -28,7 +30,7 @@ export async function runJob(options: JobOptions): Promise<RunReport> {
     ...(options.wasm === undefined ? {} : { wasm: options.wasm }),
   });
   try {
-    return await runLinker({ store: vault, settings, fetchModel: options.fetchModel ?? ((url, init) => fetch(url, init)), log: options.log });
+    return await runLinker({ store: vault, settings, fetchModel: options.fetchModel ?? ((url, init) => fetch(url, init)), log: options.log, ...(options.now === undefined ? {} : { now: options.now }) });
   } finally {
     vault.close();
   }

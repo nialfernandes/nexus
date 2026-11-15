@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 /** The Worker, with the lab's settings as its bindings and the lab's two servers behind its outbound calls. */
-function startWorker(l: Lab, env: Record<string, string>): { worker: Miniflare; printed: string[] } {
+function startWorker(l: Lab, env: Record<string, string>, more: Record<string, unknown> = {}): { worker: Miniflare; printed: string[] } {
   const printed: string[] = [];
   const worker = new Miniflare({
     modules: [
@@ -43,6 +43,7 @@ function startWorker(l: Lab, env: Record<string, string>): { worker: Miniflare; 
     ],
     // A Worker's settings are strings, its secrets are too.
     bindings: env,
+    ...more,
     compatibilityDate: "2026-07-01",
     cf: false,
     defaultPersistRoot: scratch,
@@ -87,6 +88,8 @@ describe("the built Worker, woken by a cron trigger", () => {
       expect(texts[hushPath(name)]).toContain("mentions: linked");
     }
     expect(l.model.asked).toHaveLength(2);
+    // The key is a plain secret here: a string, sent to the model as it is.
+    expect(l.model.asked.every((asked) => asked.authorization === `Bearer ${l.env.LINKER_MODEL_KEY}`)).toBe(true);
     // The Worker says what it did in its log, and the log holds no key.
     const log = printed.join("");
     expect(log).toContain("Linked 2 of 2 notes taken on.");
@@ -96,6 +99,44 @@ describe("the built Worker, woken by a cron trigger", () => {
     expect((await (await worker.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome).toBe("ok");
     expect(await l.refs()).toEqual(before);
     expect(l.model.asked).toHaveLength(2);
+  }, 120_000);
+
+  /** The Worker with the model's key as a Secrets Store binding, which holds `key` when it is given one. */
+  async function startWithKeyInAStore(l: Lab, key: string | null): Promise<ReturnType<typeof startWorker>> {
+    const { LINKER_MODEL_KEY: _plain, ...without } = l.env;
+    const started = startWorker(l, without, {
+      secretsStoreSecrets: { LINKER_MODEL_KEY: { store_id: "a-store-of-the-example", secret_name: "linker-model-key" } },
+      secretsStorePersist: join(scratch, `secrets-${Math.random().toString(36).slice(2)}`),
+    });
+    if (key !== null) await (await started.worker.getSecretsStoreSecretAPI("LINKER_MODEL_KEY"))().create(key);
+    return started;
+  }
+
+  it("takes the model's key from a Secrets Store binding, an object whose get() answers it, as it takes a plain secret", async () => {
+    const l = await openLab();
+    toDispose.push(() => l.close());
+    await l.seed(hushPath("One"), transcriptNote({ title: "One", spoken: ["Atomic Habits by James Clear, a good one."] }));
+    l.model.answer(() => listOf({ type: "book", title: "Atomic Habits" }));
+    const key = "a-key-from-the-store";
+
+    const { worker, printed } = await startWithKeyInAStore(l, key);
+    expect((await (await worker.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome).toBe("ok");
+
+    expect(l.model.asked).toHaveLength(1);
+    expect(l.model.asked[0]!.authorization).toBe(`Bearer ${key}`);
+    expect((await l.texts())[hushPath("One")]).toContain("- [[Atomic Habits]]\n");
+    expect(printed.join("")).not.toContain(key);
+  }, 120_000);
+
+  it("fails the trigger, and writes nothing, when the Secrets Store binding has no key to give", async () => {
+    const l = await openLab();
+    toDispose.push(() => l.close());
+    await l.seed(hushPath("One"), transcriptNote({ title: "One", spoken: ["Hello."] }));
+    const { worker } = await startWithKeyInAStore(l, null);
+    const before = await l.refs();
+    expect((await (await worker.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome).toBe("exception");
+    expect(await l.refs()).toEqual(before);
+    expect(l.model.asked).toHaveLength(0);
   }, 120_000);
 
   it("fails the trigger, and writes nothing, when a setting is missing", async () => {

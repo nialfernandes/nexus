@@ -23,6 +23,10 @@ LINKER_MODEL_NAME = "the-name-of-your-model"
 # Optional. These are the values used when they are left out.
 # LINKER_MAX_NOTES = "10"
 # LINKER_MAX_CHECKS = "20"
+# The note the job keeps its record of notes it could not link in (in a folder of its own, not Mentions/, not a hidden folder), and how many
+# times a note may fail before it is skipped until its line is taken out of that note.
+# LINKER_STATE_NOTE = "Linker/State.md"
+# LINKER_MAX_FAILURES = "5"
 # LINKER_MODEL_WINDOW_CHARS = "12000"
 # LINKER_MODEL_TIMEOUT_SECONDS = "60"
 
@@ -31,4 +35,11 @@ LINKER_MODEL_NAME = "the-name-of-your-model"
 #   NEXUS_AGENT_PRIVATE_KEY    the agent's private key
 #   NEXUS_AGENT_APPROVAL       the approval a person sealed to the agent's public key
 #   LINKER_MODEL_KEY           the key the model endpoint wants as a bearer token
+# LINKER_MODEL_KEY may instead be a Cloudflare Secrets Store binding (an object whose get() answers the key), which the Worker reads when it
+# wakes. Then leave out `wrangler secret put LINKER_MODEL_KEY` and bind it here: the binding's name is LINKER_MODEL_KEY, and the store's id
+# and the secret's name are your own (these are examples, not real ones).
+# [[secrets_store_secrets]]
+# binding = "LINKER_MODEL_KEY"
+# store_id = "0123456789abcdef-an-example-id"
+# secret_name = "linker-model-key"
 # The agent's token, key and approval are the four values `nexus-agent set-up-agent` prints (see packages/agent/README.md).

@@ -11,6 +11,10 @@ export const SETTING = {
   maxNotes: "LINKER_MAX_NOTES",
   /** The most already-edited notes (a version after the first) a run reads to see whether they were linked. */
   maxChecks: "LINKER_MAX_CHECKS",
+  /** The path of the note the job keeps its record of failed notes in, such as `Linker/State.md`. It is never in `Mentions/` or in a hidden folder. */
+  stateNote: "LINKER_STATE_NOTE",
+  /** How many times a note may fail before it is skipped, until its line is removed from the state note. */
+  maxFailures: "LINKER_MAX_FAILURES",
   /** The address of the chat endpoint, such as `https://models.example.org/v1`. */
   modelAddress: "LINKER_MODEL_ADDRESS",
   /** The key the endpoint is given as a bearer token. */
@@ -33,6 +37,8 @@ export const VAULT_SETTING = {
 
 export const DEFAULT_MAX_NOTES = 10;
 export const DEFAULT_MAX_CHECKS = 20;
+export const DEFAULT_STATE_NOTE = "Linker/State.md";
+export const DEFAULT_MAX_FAILURES = 5;
 export const DEFAULT_WINDOW_CHARS = 12_000;
 export const DEFAULT_TIMEOUT_SECONDS = 60;
 /** A window smaller than this is a mistake: a part would hold little more than a paragraph. */
@@ -43,6 +49,10 @@ export interface LinkerSettings {
   folders: string[];
   maxNotes: number;
   maxChecks: number;
+  /** The path of the job's own note of the notes it could not link. */
+  stateNote: string;
+  /** A note that has failed this many times is skipped until its line is removed from the state note. */
+  maxFailures: number;
   model: { address: string; key: string; name: string; windowChars: number; timeoutMs: number };
 }
 
@@ -83,6 +93,30 @@ export function foldersOf(value: string): string[] {
   });
 }
 
+/**
+ * The environment of a Worker with the model's key as a string. A Worker's secret is a string, or it is a Cloudflare Secrets Store binding:
+ * an object whose `get()` answers the string. Both are taken, and nothing else is changed. A binding that cannot be read is a
+ * `SettingsError` that names the setting and says nothing of what the store answered.
+ */
+export async function withModelKeyRead(env: Environment): Promise<Environment> {
+  const binding = env[SETTING.modelKey];
+  if (typeof binding !== "object" || binding === null || typeof (binding as { get?: unknown }).get !== "function") return env;
+  try {
+    return { ...env, [SETTING.modelKey]: await (binding as { get(): Promise<unknown> }).get() };
+  } catch {
+    throw new SettingsError(`${SETTING.modelKey} is a Secrets Store binding that could not be read.`);
+  }
+}
+
+/** The path of the state note: a markdown note in a folder of its own, not in `Mentions/` and not in a hidden folder, which the plugin does not sync. */
+export function stateNoteOf(value: string): string {
+  const steps = value.split("/");
+  const bad = !value.endsWith(".md") || !value.includes("/") || value.includes("\\") || steps.some((step) => step === "" || step.startsWith("."));
+  if (bad) throw new SettingsError(`${SETTING.stateNote} has to be a path of a note in a folder, such as ${DEFAULT_STATE_NOTE}, and not in a hidden folder.`);
+  if (value.startsWith(MENTIONS_FOLDER)) throw new SettingsError(`${SETTING.stateNote} cannot be in ${MENTIONS_FOLDER}, where the job writes its notes of what is mentioned.`);
+  return value;
+}
+
 /** The job's settings from the environment, or a `SettingsError` that names every setting that is missing. */
 export function readSettings(env: Environment): LinkerSettings {
   const required = [SETTING.folders, SETTING.modelAddress, SETTING.modelKey, SETTING.modelName] as const;
@@ -99,6 +133,8 @@ export function readSettings(env: Environment): LinkerSettings {
     folders: foldersOf(text(env, SETTING.folders)!),
     maxNotes: whole(env, SETTING.maxNotes, DEFAULT_MAX_NOTES, 1),
     maxChecks: whole(env, SETTING.maxChecks, DEFAULT_MAX_CHECKS, 0),
+    stateNote: stateNoteOf(text(env, SETTING.stateNote) ?? DEFAULT_STATE_NOTE),
+    maxFailures: whole(env, SETTING.maxFailures, DEFAULT_MAX_FAILURES, 1),
     model: {
       address,
       key: text(env, SETTING.modelKey)!,

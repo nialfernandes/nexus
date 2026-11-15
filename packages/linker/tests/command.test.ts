@@ -49,8 +49,8 @@ describe("nexus-linker run", () => {
     l.model.answer(() => "garbage");
     const ran = await run(["run"], l.env, { fetchNexus: l.fetchNexus, fetchModel: realFetch });
     expect(ran.code).toBe(1);
-    expect(ran.stderr).toBe(`${hushPath("One")}: not linked, tried again next run (The model's answer was not a JSON list.)\n`);
-    expect(ran.stdout).toBe("Linked 0 of 1 note taken on.\n1 note could not be linked, left for the next run.\n");
+    expect(ran.stderr).toBe(`${hushPath("One")}: not linked, left for a later run (The model's answer was not a JSON list.)\n`);
+    expect(ran.stdout).toBe("Linked 0 of 1 note taken on.\n1 note could not be linked, left for a later run.\n");
   });
 
   it("exits 1 with a plain message, and touches nothing, for a missing setting", async () => {

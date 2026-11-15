@@ -5,7 +5,7 @@ import type { FetchLike } from "@nexus/agent";
 import { runJob } from "./job";
 import type { ModelFetch } from "./model";
 import { summaryOf } from "./run";
-import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_NOTES, SETTING, SettingsError, VAULT_SETTING } from "./settings";
+import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_FAILURES, DEFAULT_MAX_NOTES, DEFAULT_STATE_NOTE, SETTING, SettingsError, VAULT_SETTING } from "./settings";
 
 export interface Output {
   write(text: string): unknown;
@@ -27,6 +27,8 @@ const USAGE = `nexus-linker: join each new transcript note in the vault to the b
 
 Each thing mentioned gets one note in Mentions/, found again by its title the next time it is mentioned. The transcript note gets a
 "## Mentions" section of links and the front matter line "mentions: linked", so it is never done twice. Nothing is ever deleted.
+A note that could not be linked is written in a note of the job's own (${DEFAULT_STATE_NOTE} unless set), and the notes never tried are taken
+before the ones that failed. A note that has failed ${DEFAULT_MAX_FAILURES} times is skipped until its line is taken out of that note.
 
 The vault is read and written as an agent, so these are set in the environment:
   ${VAULT_SETTING.address}, ${VAULT_SETTING.token}, ${VAULT_SETTING.privateKey}, ${VAULT_SETTING.approval}
@@ -35,7 +37,7 @@ and so is the job's own:
   ${SETTING.modelAddress}      the chat endpoint's address, such as https://models.example.org/v1
   ${SETTING.modelKey}          its key
   ${SETTING.modelName}         the model's name (there is no default)
-and, if you want them: ${SETTING.maxNotes}, ${SETTING.maxChecks} (${DEFAULT_MAX_CHECKS} unless set), ${SETTING.modelWindow}, ${SETTING.modelTimeout}.
+and, if you want them: ${SETTING.maxNotes}, ${SETTING.maxChecks} (${DEFAULT_MAX_CHECKS} unless set), ${SETTING.stateNote}, ${SETTING.maxFailures} (${DEFAULT_MAX_FAILURES} unless set), ${SETTING.modelWindow}, ${SETTING.modelTimeout}.
 A key is never an argument.
 `;
 

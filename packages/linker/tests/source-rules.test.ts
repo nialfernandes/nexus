@@ -19,7 +19,7 @@ const code = (name: string): string => withoutComments(readFileSync(join(sourceD
 
 describe("the job's source", () => {
   it("finds the files", () => {
-    expect(files.sort()).toEqual(["bin.ts", "command.ts", "index.ts", "job.ts", "mention.ts", "mentions.ts", "model.ts", "note-text.ts", "run.ts", "settings.ts", "show-notes.ts", "store.ts", "titles.ts", "wasm.d.ts", "worker.ts"]);
+    expect(files.sort()).toEqual(["bin.ts", "command.ts", "index.ts", "job.ts", "mention.ts", "mentions.ts", "model.ts", "note-text.ts", "run.ts", "settings.ts", "show-notes.ts", "state.ts", "store.ts", "titles.ts", "wasm.d.ts", "worker.ts"]);
   });
 
   for (const [what, pattern] of [

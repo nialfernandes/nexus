@@ -150,6 +150,34 @@ describe("askModel: one call to the endpoint", () => {
     }
   });
 
+  it("says whether the endpoint or the note is what failed: no answer, a timeout, a network error, a status 5xx or 429 are the endpoint's", async () => {
+    const cases: Array<[string, Parameters<ModelServer["answer"]>[0], Partial<ModelSettings>, boolean]> = [
+      ["a status 500", () => ({ status: 500 }), {}, true],
+      ["a status 503", () => ({ status: 503 }), {}, true],
+      ["a status 599", () => ({ status: 599 }), {}, true],
+      ["a status 429", () => ({ status: 429 }), {}, true],
+      ["no answer in time", () => ({ delayMs: 1500 }), { timeoutMs: 200 }, true],
+      ["a connection that drops", () => ({ delayMs: 1 }), {}, true],
+      ["a server that is not there", () => "[]", { address: "http://127.0.0.1:1/v1" }, true],
+      ["a status 400", () => ({ status: 400 }), {}, false],
+      ["a status 401", () => ({ status: 401 }), {}, false],
+      ["a status 408", () => ({ status: 408 }), {}, false],
+      ["a status 413", () => ({ status: 413 }), {}, false],
+      ["garbage", () => "Sure! Atomic Habits is a book.", {}, false],
+      ["a reply that is not JSON", () => ({ raw: "<html>gateway</html>" }), {}, false],
+      ["a reply with no answer in it", () => ({ raw: JSON.stringify({ choices: [] }) }), {}, false],
+    ];
+    for (const [what, handler, over, unreachable] of cases) {
+      server.answer(handler);
+      const failure = await askModel(settings(over), realFetch, "words").then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(failure, what).toBeInstanceOf(ModelFailure);
+      expect((failure as ModelFailure).unreachable, what).toBe(unreachable);
+    }
+  });
+
   it("is one call for a transcript that fits the window, and one for each part of one that does not, the lists joined", async () => {
     server.asked.length = 0;
     server.answer((transcript) => JSON.stringify([{ type: "person", title: transcript.slice(0, 3) }]));

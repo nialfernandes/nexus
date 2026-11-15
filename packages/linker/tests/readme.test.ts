@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_NOTES, DEFAULT_TIMEOUT_SECONDS, DEFAULT_WINDOW_CHARS, SETTING, VAULT_SETTING } from "../src/settings";
+import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_FAILURES, DEFAULT_MAX_NOTES, DEFAULT_STATE_NOTE, DEFAULT_TIMEOUT_SECONDS, DEFAULT_WINDOW_CHARS, SETTING, VAULT_SETTING } from "../src/settings";
 
 const here = new URL("../", import.meta.url).pathname;
 const readme = readFileSync(join(here, "README.md"), "utf8");
@@ -19,6 +19,8 @@ describe("the README", () => {
   it("says the defaults the code has", () => {
     expect(readme).toContain(`| \`LINKER_MAX_NOTES\` | The most notes a run takes on | no, ${DEFAULT_MAX_NOTES} |`);
     expect(readme).toContain(`| no, ${DEFAULT_MAX_CHECKS} |`);
+    expect(readme).toContain(`| no, ${DEFAULT_MAX_FAILURES} |`);
+    expect(readme).toContain(`| no, \`${DEFAULT_STATE_NOTE}\` |`);
     expect(readme).toContain(`| no, ${DEFAULT_WINDOW_CHARS} |`);
     expect(readme).toContain(`| no, ${DEFAULT_TIMEOUT_SECONDS} |`);
   });
@@ -31,6 +33,12 @@ describe("the Worker's example configuration", () => {
     for (const name of everySetting) expect(example, name).toContain(name);
     for (const name of secrets) expect(vars.slice(0, vars.indexOf("# Secrets")), `${name} is not a variable`).not.toMatch(new RegExp(`^${name}\\s*=`, "m"));
     for (const name of everySetting.filter((one) => !(secrets as readonly string[]).includes(one))) expect(vars, name).toMatch(new RegExp(`^(# )?${name} = "`, "m"));
+  });
+
+  it("shows the model's key as a Secrets Store binding, commented out and with no real id", () => {
+    expect(example).toMatch(/^# \[\[secrets_store_secrets\]\]\n# binding = "LINKER_MODEL_KEY"\n# store_id = "[^"]*example[^"]*"\n# secret_name = "[^"]+"$/m);
+    expect(example).not.toMatch(/^\[\[secrets_store_secrets\]\]/m);
+    expect(readme).toContain("Secrets Store binding");
   });
 
   it("wakes on a cron trigger, and runs the Worker's source", () => {
