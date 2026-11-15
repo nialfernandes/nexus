@@ -34,7 +34,7 @@ export interface RunOptions {
 export interface RunReport {
   /** The paths of the notes that were linked. */
   linked: string[];
-  /** The notes that could not be done, each with the reason, and so are tried again next run. */
+  /** The notes that could not be done, each with the reason. They are written in the state note, and tried again by a later run until they have failed too often. */
   failed: Array<{ path: string; reason: string }>;
   /** The notes that were edited between being read and being saved, left alone and tried again next run. */
   changedMeanwhile: string[];
@@ -122,7 +122,7 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
       note = await store.readNote(ref.id);
     } catch (error) {
       const reason = reasonOf(error);
-      log(`${ref.path}: could not be read, so it is left for the next run (${reason})`);
+      log(`${ref.path}: could not be read, so it is left for a later run (${reason})`);
       await state.failed(ref, reason, now()).catch((stateError) => log(notWritten(ref.path, stateError)));
       continue;
     }
@@ -155,7 +155,7 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
     } catch (error) {
       const reason = reasonOf(error);
       report.failed.push({ path: ref.path, reason });
-      log(`${ref.path}: not linked, tried again next run (${reason})`);
+      log(`${ref.path}: not linked, left for a later run (${reason})`);
       await state.failed(ref, reason, now()).catch((stateError) => log(notWritten(ref.path, stateError)));
     }
   }
@@ -186,6 +186,6 @@ export function summaryOf(report: RunReport): string[] {
   const count = (n: number) => `${n} ${n === 1 ? "note" : "notes"}`;
   const lines = [`Linked ${report.linked.length} of ${count(report.tried)} taken on.`];
   if (report.changedMeanwhile.length > 0) lines.push(`${count(report.changedMeanwhile.length)} edited meanwhile, left for the next run.`);
-  if (report.failed.length > 0) lines.push(`${count(report.failed.length)} could not be linked, left for the next run.`);
+  if (report.failed.length > 0) lines.push(`${count(report.failed.length)} could not be linked, left for a later run.`);
   return lines;
 }

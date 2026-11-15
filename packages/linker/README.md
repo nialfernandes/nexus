@@ -53,7 +53,7 @@ For each transcript note in the folders you name that has not been linked yet:
 ## Safe by design
 
 - **A model that fails, times out or answers with something that is not a list leaves the note as it was**, with the
-  reason logged once, and the next run tries it again. Nothing is written for that note, not even from its links.
+  reason logged once, and a later run tries it again (see Failed notes). Nothing is written to that note, not even from its links: its failure is written in the state note.
 - **At most `LINKER_MAX_NOTES` notes a run** (10 unless set). A note that fails counts, so a failing model is asked no
   more than that a run. A note that fails is written in the job's own state note (see Failed notes), so the notes that
   fail never keep the notes that have not been tried from being linked.
