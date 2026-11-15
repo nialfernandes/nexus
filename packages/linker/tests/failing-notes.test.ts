@@ -137,6 +137,116 @@ describe("a note the model cannot read", () => {
   });
 });
 
+describe("a model that cannot be reached", () => {
+  // Each is the endpoint failing, whatever the note: no answer, a timeout, a status 5xx or 429, a network error (the connection dropped).
+  const outages: Array<[string, Parameters<Lab["model"]["answer"]>[0], Record<string, string>, RegExp]> = [
+    ["a status 500", () => ({ status: 500 }), {}, /status 500/],
+    ["a status 502", () => ({ status: 502 }), {}, /status 502/],
+    ["a status 503", () => ({ status: 503 }), {}, /status 503/],
+    ["a status 429", () => ({ status: 429 }), {}, /status 429/],
+    ["no answer within the time", () => ({ delayMs: 2500 }), { LINKER_MODEL_TIMEOUT_SECONDS: "1" }, /did not answer within 1 seconds/],
+    ["a connection that drops", () => ({ delayMs: 1 }), {}, /could not be reached/],
+  ];
+
+  for (const [what, handler, env, reason] of outages) {
+    it(`stops the run at the first note on ${what}, holds nothing against any note, and says once that the model is unreachable`, async () => {
+      const l = await lab(env);
+      for (const name of ["A", "B", "C"]) await l.seed(hushPath(name), noteNamed(name));
+      l.model.answer(handler);
+
+      const first = await l.run();
+      // One call, to the first note, and the run goes no further: the notes after it would meet the same.
+      expect(l.model.asked).toHaveLength(1);
+      expect(first.report.failed).toEqual([{ path: A, reason: expect.stringMatching(reason) }]);
+      expect(first.report.linked).toEqual([]);
+      expect(first.logs).toHaveLength(1);
+      expect(first.logs[0]).toMatch(/model is unreachable/);
+      expect(first.logs[0]).toMatch(reason);
+      expect((await l.texts())[DEFAULT_STATE_NOTE]).toBeUndefined();
+
+      // However often it happens, no note is skipped for it: the endpoint comes back, and the first note is taken first and every note is linked.
+      for (let again = 0; again < DEFAULT_MAX_FAILURES; again++) await l.run();
+      expect((await l.texts())[DEFAULT_STATE_NOTE]).toBeUndefined();
+      l.model.asked.length = 0;
+      l.model.answer(() => "[]");
+      const back = await l.run();
+      expect(back.report.linked).toEqual([A, B, C]);
+      expect(askedAbout(l)).toEqual(["A", "B", "C"]);
+    });
+  }
+
+  it("holds nothing against a note that had failed before, and its line stays as it was", async () => {
+    const l = await lab({ LINKER_MAX_NOTES: "5" });
+    await l.seed(A, noteNamed("A"));
+    l.model.answer(cannotRead("A"));
+    await l.run();
+    const before = (await l.texts())[DEFAULT_STATE_NOTE];
+    l.model.answer(() => ({ status: 503 }));
+    await l.run();
+    expect((await l.texts())[DEFAULT_STATE_NOTE]).toBe(before);
+    expect(await failuresByPath(l)).toEqual({ [A]: 1 });
+  });
+
+  it("ends the run on the first note it meets, even when the notes before it were linked", async () => {
+    const l = await lab();
+    for (const name of ["A", "B", "C"]) await l.seed(hushPath(name), noteNamed(name));
+    l.model.answer((transcript) => (transcript === "Words of A." ? "[]" : { status: 503 }));
+    const { report, logs } = await l.run();
+    expect(report.linked).toEqual([A]);
+    expect(report.failed.map((one) => one.path)).toEqual([B]);
+    expect(askedAbout(l)).toEqual(["A", "B"]);
+    expect(logs.filter((line) => /unreachable/.test(line))).toHaveLength(1);
+  });
+});
+
+describe("a failure that is the note's own", () => {
+  // The endpoint answered, and what it said is about this note: a status 4xx other than 429 (it refuses what it was sent, such as a note
+  // too long for it even in parts), or an answer that fails the shape.
+  const ownFailures: Array<[string, Parameters<Lab["model"]["answer"]>[0], RegExp]> = [
+    ["a status 400", () => ({ status: 400 }), /status 400/],
+    ["a status 404", () => ({ status: 404 }), /status 404/],
+    ["a status 413", () => ({ status: 413 }), /status 413/],
+    ["a status 422", () => ({ status: 422 }), /status 422/],
+    ["an answer that is no list", () => "garbage", /not a JSON list/],
+    ["a reply with no answer in it", () => ({ raw: JSON.stringify({ choices: [{ message: { content: null } }] }) }), /no answer/],
+    ["a reply that is not JSON", () => ({ raw: "<html>nope</html>" }), /not JSON/],
+  ];
+
+  for (const [what, handler, reason] of ownFailures) {
+    it(`counts toward the 5 on ${what}, and the run goes on to the next note`, async () => {
+      const l = await lab();
+      await l.seed(A, noteNamed("A"));
+      await l.seed(B, noteNamed("B"));
+      l.model.answer((transcript, call) => (transcript === "Words of A." ? handler(transcript, call) : "[]"));
+
+      const first = await l.run();
+      expect(askedAbout(l)).toEqual(["A", "B"]);
+      expect(first.report.failed).toEqual([{ path: A, reason: expect.stringMatching(reason) }]);
+      expect(first.report.linked).toEqual([B]);
+      expect(first.logs.join("\n")).not.toMatch(/unreachable/);
+      expect(await failuresByPath(l)).toEqual({ [A]: 1 });
+
+      for (let again = 2; again <= DEFAULT_MAX_FAILURES; again++) await l.run();
+      expect(await failuresByPath(l)).toEqual({ [A]: DEFAULT_MAX_FAILURES });
+      const asked = l.model.asked.length;
+      const skipped = await l.run();
+      expect(l.model.asked).toHaveLength(asked);
+      expect(skipped.logs.join("\n")).toContain("failed 5 times, so it is skipped");
+    });
+  }
+
+  it("counts a note too long for the endpoint even in parts, which it refuses with a status 413 on each part", async () => {
+    const l = await lab({ LINKER_MODEL_WINDOW_CHARS: "500" });
+    await l.seed(A, transcriptNote({ title: "A", spoken: Array.from({ length: 6 }, (_, at) => `Words of A. ${at} ${"words ".repeat(40)}`) }));
+    await l.seed(B, noteNamed("B"));
+    l.model.answer((transcript) => (transcript.startsWith("Words of A.") ? { status: 413 } : "[]"));
+    const { report } = await l.run();
+    expect(report.failed).toEqual([{ path: A, reason: "The model answered with status 413." }]);
+    expect(report.linked).toEqual([B]);
+    expect(await failuresByPath(l)).toEqual({ [A]: 1 });
+  });
+});
+
 describe("a note that has failed too often", () => {
   it("is skipped after 5 failures, and tried again once its line is taken out of the state note", async () => {
     expect(DEFAULT_MAX_FAILURES).toBe(5);

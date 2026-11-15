@@ -6,7 +6,8 @@
 // line, and only when the note is still at the version it read, so a note edited meanwhile is left alone and tried again next run. The one
 // other note it writes is its own state note (state.ts).
 // A model that fails or answers with garbage leaves the note as it was, with the reason logged once and the failure written in the state
-// note, because the transcript note cannot say it. At most `maxNotes` notes are taken on: the notes never tried first, then the ones that
+// note, because the transcript note cannot say it. A model that cannot be reached at all (no answer, a timeout, a status 5xx or 429, a
+// network error) is not the note's failure: the run stops at the first, and nothing is written in the state note. At most `maxNotes` notes are taken on: the notes never tried first, then the ones that
 // failed, the longest ago tried first, so notes that cannot be read never keep a new note from being linked. A note that has failed
 // `maxFailures` times is not taken on until its line is taken out of the state note.
 
@@ -34,7 +35,7 @@ export interface RunOptions {
 export interface RunReport {
   /** The paths of the notes that were linked. */
   linked: string[];
-  /** The notes that could not be done, each with the reason. They are written in the state note, and tried again by a later run until they have failed too often. */
+  /** The notes that could not be done, each with the reason. Each is written in the state note and tried again by a later run until it has failed too often, unless the model could not be reached: then the run stopped with this note last, and nothing was written against it. */
   failed: Array<{ path: string; reason: string }>;
   /** The notes that were edited between being read and being saved, left alone and tried again next run. */
   changedMeanwhile: string[];
@@ -155,6 +156,11 @@ export async function runLinker(options: RunOptions): Promise<RunReport> {
     } catch (error) {
       const reason = reasonOf(error);
       report.failed.push({ path: ref.path, reason });
+      if (error instanceof ModelFailure && error.unreachable) {
+        // The endpoint is down, not this note: nothing is held against it, and every note after it would meet the same, so the run ends here.
+        log(`${ref.path}: the model is unreachable, so this run stops taking on notes and records nothing against the note (${reason})`);
+        break;
+      }
       log(`${ref.path}: not linked, left for a later run (${reason})`);
       await state.failed(ref, reason, now()).catch((stateError) => log(notWritten(ref.path, stateError)));
     }

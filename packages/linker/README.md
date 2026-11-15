@@ -53,7 +53,7 @@ For each transcript note in the folders you name that has not been linked yet:
 ## Safe by design
 
 - **A model that fails, times out or answers with something that is not a list leaves the note as it was**, with the
-  reason logged once, and a later run tries it again (see Failed notes). Nothing is written to that note, not even from its links: its failure is written in the state note.
+  reason logged once, and a later run tries it again (see Failed notes). Nothing is written to that note, not even from its links: its failure is written in the state note, unless the model could not be reached at all, when the run stops and nothing is held against the note.
 - **At most `LINKER_MAX_NOTES` notes a run** (10 unless set). A note that fails counts, so a failing model is asked no
   more than that a run. A note that fails is written in the job's own state note (see Failed notes), so the notes that
   fail never keep the notes that have not been tried from being linked.
@@ -119,15 +119,23 @@ says another path. It is not in `Mentions/`, and not in a hidden folder, which t
 ```
 
 That is the note's id (what Nexus knows it by), how many times it has failed, when it was last tried, why, and its path. The job
-writes a line on every failure (a model that fails, an answer that is no list, a note that cannot be read) and takes the line out when the
-note is linked.
+writes a line on every failure **that belongs to the note**: an answer that fails the shape (no list, a reply with no answer in it), a status
+4xx from the model other than 429 (it refuses what it was sent, such as a note too long for it even in parts), or a note that cannot be
+read. It takes the line out when the note is linked.
+
+**A model that cannot be reached is not the note's failure.** No answer, a timeout, a network error, a status 5xx or a status 429 mean the
+endpoint is down or busy, whatever the note. The run **stops at the first such failure**, writes nothing in the state note, holds nothing
+against any note, and logs once that the model is unreachable. The notes are tried again, in the same order, when the endpoint is back,
+however long it was away, and none is skipped for it.
 
 - **Each run takes the notes never tried first**, as before (the ones at their first version, then up to `LINKER_MAX_CHECKS` of the later
   ones), **then the notes that failed, the one tried longest ago first**. A failing note is tried again only when there is room for it,
   and each takes its turn.
-- **A note that has failed `LINKER_MAX_FAILURES` times (5 unless set) is skipped**, and each run logs that it is. **Delete its line** from the
-  state note, and it is tried again (its count starts again from nothing). Lines that are not in the form above are left as they are.
-- **Do not delete the state note itself**: Nexus never brings a deleted note back, so the job could not make it again. Delete its lines.
+- **A note that has failed `LINKER_MAX_FAILURES` times (5 unless set) is skipped**, and each run logs that it is. **To clear one note**, open
+  the state note, find the note's line (by its path, or by its id) and delete that one line, leaving the rest. It is tried again by the next
+  run, and its count starts again from nothing. Lines that are not in the form above are left as they are.
+- **The state note itself must not be deleted.** Nexus never brings a deleted note back, so the job could not make it again and could only
+  log that it cannot write its failures. To clear everything, delete every line that starts with `- ` and leave the note.
 - **A state note that cannot be read** is logged, and every note is tried as if none had failed, which is how the job was before it kept one.
 - **Two runs at once** keep each other's lines. The note is made with a key (`createNote`'s `key`), so two runs that make it at the same
   moment make the same note, and every change is read, made, and saved at the version read (`updateNote`): a save that finds the note
@@ -145,8 +153,8 @@ note is linked.
   as two notes, which a person can join. A page with no title in its address (a short link) is a website named by its address.
 - **A note that fails every run** (a model that cannot read that transcript) is not left to fill the run. The job may write nothing
   into a note but its `## Mentions` section and its one front matter line, so it keeps its record of failures in a note of its own
-  (see Failed notes). A model that is down for a while does not skip every note: each run takes the notes never tried first, so a short
-  outage marks each note at most once.
+  (see Failed notes). A model that is down, for any time, does not skip any note: the run
+  stops at the first failure that says the endpoint is the trouble, and writes nothing against the note.
 - **Two runs at once** (a slow run still going when the next cron trigger wakes, or a command run beside the Worker) are safe for the
   Mentions notes: each note is made with its normalised title as the key of its id (`createNote`'s `key` in the agent library), so two runs
   that make the note for one thing at the same moment make the same note, and a run that finds the other's note, even under another

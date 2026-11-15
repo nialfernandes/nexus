@@ -32,14 +32,15 @@ async function vaultWithoutState(l: Lab): Promise<{ texts: Record<string, string
 const withLink = (name: string, spoken = "He talks about habits.") => transcriptNote({ title: name, description: "Atomic Habits by James Clear.", links: [AMAZON], spoken: [spoken] });
 
 describe("a model that fails", () => {
-  const failures: Array<[string, Parameters<Lab["model"]["answer"]>[0], Record<string, string>, RegExp]> = [
-    ["answers garbage", () => "Atomic Habits is a great book by James Clear!", {}, /not a JSON list/],
-    ["answers with an error", () => ({ status: 503 }), {}, /status 503/],
-    ["answers with an answer of the wrong shape", () => ({ raw: JSON.stringify({ choices: [{ message: { content: null } }] }) }), {}, /no answer/],
-    ["takes too long", () => ({ delayMs: 2500 }), { LINKER_MODEL_TIMEOUT_SECONDS: "1" }, /did not answer within 1 seconds/],
+  const failures: Array<[string, Parameters<Lab["model"]["answer"]>[0], Record<string, string>, RegExp, boolean]> = [
+    // The last is whether the failure is the note's, and so written in the state note: an endpoint that is down is not (see failing-notes.test.ts).
+    ["answers garbage", () => "Atomic Habits is a great book by James Clear!", {}, /not a JSON list/, true],
+    ["answers with an error", () => ({ status: 503 }), {}, /status 503/, false],
+    ["answers with an answer of the wrong shape", () => ({ raw: JSON.stringify({ choices: [{ message: { content: null } }] }) }), {}, /no answer/, true],
+    ["takes too long", () => ({ delayMs: 2500 }), { LINKER_MODEL_TIMEOUT_SECONDS: "1" }, /did not answer within 1 seconds/, false],
   ];
 
-  for (const [what, handler, env, reason] of failures) {
+  for (const [what, handler, env, reason, theNotes] of failures) {
     it(`leaves the note as it was when it ${what}, says why once, and the next run links it`, async () => {
       const l = await lab(env);
       const path = hushPath("One");
@@ -52,12 +53,16 @@ describe("a model that fails", () => {
       expect(failed.logs).toHaveLength(1);
       expect(failed.logs[0]).toContain(path);
       expect(failed.logs[0]).toMatch(reason);
-      // Not the note, and not a note made from its links either: nothing was written but the line in the state note.
+      // Not the note, and not a note made from its links either: nothing was written but the line in the state note, and none when the endpoint is what failed.
       const after = await vaultWithoutState(l);
       expect(after.texts).toEqual(before.texts);
       expect(after.refs).toEqual(before.refs);
-      expect(after.state).toContain(`failed 1 | `);
-      expect(after.state).toContain(` | ${path}\n`);
+      if (theNotes) {
+        expect(after.state).toContain(`failed 1 | `);
+        expect(after.state).toContain(` | ${path}\n`);
+      } else {
+        expect(after.state).toBeUndefined();
+      }
 
       l.model.answer(() => BOOK);
       const next = await l.run();

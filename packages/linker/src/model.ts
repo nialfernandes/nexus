@@ -26,13 +26,23 @@ export type ModelFetch = (
   init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
-/** Said when the model could not be asked, or did not answer with a list. The message is plain words with no key and no address in it. */
+/**
+ * Said when the model could not be asked, or did not answer with a list. The message is plain words with no key and no address in it.
+ * `unreachable` is true when the endpoint is what failed and not the note: no answer, a timeout, a network error, a status 5xx or 429. A
+ * run that meets one stops, and nothing is held against the note. An answer that fails the shape, a reply with no answer in it and a status
+ * 4xx other than 429 (the endpoint refusing what it was sent, a note too long for it even in parts) belong to the note, and count.
+ */
 export class ModelFailure extends Error {
-  constructor(message: string) {
+  readonly unreachable: boolean;
+  constructor(message: string, unreachable = false) {
     super(message);
     this.name = "ModelFailure";
+    this.unreachable = unreachable;
   }
 }
+
+/** A status that says the endpoint is the trouble and not what it was sent: it may be asked again later and answer the same note. */
+const endpointStatus = (status: number): boolean => status >= 500 || status === 429;
 
 /** How many items one answer may hold. A longer list is a model running on, and the rest is dropped. */
 export const ITEMS_MAX = 60;
@@ -180,9 +190,9 @@ export async function askModel(settings: ModelSettings, fetchModel: ModelFetch, 
     body = await reply.text();
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    throw new ModelFailure(timedOut ? `The model did not answer within ${Math.round(settings.timeoutMs / 1000)} seconds.` : "The model could not be reached.");
+    throw new ModelFailure(timedOut ? `The model did not answer within ${Math.round(settings.timeoutMs / 1000)} seconds.` : "The model could not be reached.", true);
   }
-  if (!reply.ok) throw new ModelFailure(`The model answered with status ${reply.status}.`);
+  if (!reply.ok) throw new ModelFailure(`The model answered with status ${reply.status}.`, endpointStatus(reply.status));
   let content: unknown;
   try {
     content = (JSON.parse(body) as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
