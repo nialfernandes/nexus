@@ -36,11 +36,12 @@ cannot hold a key, and the threat model explains what you give up if you allow o
 The repository is one npm workspace: the encryption (`packages/crypto`), the line merge
 (`packages/merge`), the test database the server and plugin tests share
 (`packages/test-sqlite`), the library and the `nexus-agent` command for an agent that holds its own key
-(`packages/agent`), the server (`server/`) and the Obsidian plugin (`plugin/`). Node 22.13 or later is needed.
+(`packages/agent`), the linking job that joins each transcript note to the books, websites, quotes and people it mentions
+(`packages/linker`), the server (`server/`) and the Obsidian plugin (`plugin/`). Node 22.13 or later is needed.
 
 ```
 npm ci            # installs every package, with one lockfile
-npm run check     # checks the CI actions are pinned to commit hashes, builds the encryption package, type-checks every package, builds the agent package and the plugin, runs every test
+npm run check     # checks the CI actions are pinned to commit hashes, builds the encryption package and the agent package, type-checks every package, builds the linking job and the plugin, runs every test
 ```
 
 `npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
