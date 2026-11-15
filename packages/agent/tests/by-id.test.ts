@@ -312,6 +312,42 @@ describe("a note made again after its answer was lost", () => {
     vault.close();
   });
 
+  it("tells the id on the refusal, and noteIdForKey tells it again, so a writer that lost the id updates the note at its version", async () => {
+    const { vault, seen } = await connect();
+    const made = await vault.createNote(PATH, "# First\n", { key: "ep-1" });
+    // The writer forgets `made.id`, and the note's text moves on in the vault, so a create with the same text would no longer be a repeat.
+    expect(await vault.updateNote(made.id, 1, "# First\n\nMore.\n")).toMatchObject({ result: "saved", version: 2 });
+
+    const refused = await vault.createNote(PATH, "# Written again\n", { key: "ep-1" }).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ name: "AgentError", code: "key-taken", id: made.id });
+    expect((refused as Error).message, "the id is a field of the error: the message stays a fixed sentence").not.toContain(made.id);
+
+    const before = seen.length;
+    expect(await vault.noteIdForKey("ep-1")).toBe(made.id);
+    expect(await vault.noteIdForKey("ep-1"), "the same key is the same id every time").toBe(made.id);
+    expect(await vault.noteIdForKey("ep-2"), "another key is another id").not.toBe(made.id);
+    expect(seen.length, "noteIdForKey asks Nexus for nothing").toBe(before);
+
+    const found = await vault.readNote(await vault.noteIdForKey("ep-1"));
+    expect(found).toEqual({ id: made.id, path: PATH, version: 2, text: "# First\n\nMore.\n" });
+    expect(await vault.updateNote(found.id, found.version, "# Written again\n")).toEqual({ result: "saved", id: made.id, path: PATH, version: 3 });
+    expect(await nexusNotes(world)).toEqual({ [made.id]: { path: PATH, text: "# Written again\n", version: 3 } });
+    vault.close();
+  });
+
+  it("makes the id before any note is there, the one a create with that key then makes; refuses a key that cannot make one, and a closed vault", async () => {
+    const { vault } = await connect();
+    const id = await vault.noteIdForKey(KEY);
+    expect(id).toBe(await idOf());
+    expect(await vault.createNote(PATH, "# First\n", { key: KEY })).toEqual({ id, path: PATH, version: 1 });
+    const wrong = await vault.noteIdForKey("x".repeat(1025)).catch((error: unknown) => error);
+    expect(wrong).toMatchObject({ name: "AgentError", code: "bad-settings" });
+    expect((wrong as Error).message).not.toContain("xxxx");
+    await expect(vault.noteIdForKey(""), "a key of no bytes").rejects.toMatchObject({ code: "bad-settings" });
+    vault.close();
+    await expect(vault.noteIdForKey(KEY)).rejects.toMatchObject({ code: "closed" });
+  });
+
   it("refuses the same key and text at another path, which is another note, and changes nothing", async () => {
     const { vault } = await connect();
     const id = await idOf();

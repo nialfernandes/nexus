@@ -73,6 +73,7 @@ export interface CreateOptions {
    * A key the caller can make again from its own data (an episode's id, say): 1 to 1024 bytes of text. The note's id is made from it and the
    * vault key (`noteIdFromKey`), so the same key is the same id in this vault and Nexus, which sees the id, learns nothing from it. A repeat of the
    * same call, with the same path and text, answers the note that is there and saves nothing. Left out, the note gets a new random id.
+   * `noteIdForKey` tells the id a key makes.
    */
   key?: string;
 }
@@ -309,7 +310,8 @@ export class AgentVault {
    * id in this vault, and Nexus, which sees ids, cannot tell what the key was. Then a repeat is safe: when a note with that id is already
    * there with the same path and the same text, it is the first call's own note, so its id and version are answered and nothing is saved.
    * When the note there differs (another text or path, or it was deleted, or this vault's key cannot open it) the call is refused as
-   * "key-taken" and changes nothing: the caller reads the note (`readNote`) and updates it (`updateNote`) if that is what it wants.
+   * "key-taken" and changes nothing: the error carries the note's id (`id`), and the caller reads the note (`readNote`) and updates it
+   * (`updateNote`) if that is what it wants. A caller that lost the id has it again from `noteIdForKey`.
    */
   createNote(path: string, text: string, options: CreateOptions = {}): Promise<NoteRef> {
     return this.#serially(async () => {
@@ -326,6 +328,15 @@ export class AgentVault {
       this.#rememberPath(id, reply.json.version, path);
       return { id, path, version: reply.json.version };
     });
+  }
+
+  /**
+   * The id `createNote` makes from this key in this vault: the same key is always the same id here, whether or not a note is there. Asks
+   * Nexus for nothing. It is how a writer that made a note but lost its id gets the id back: `readNote(await noteIdForKey(key))` and then
+   * `updateNote` at the version it tells. The key is the same as `createNote`'s `key`: 1 to 1024 bytes of text.
+   */
+  noteIdForKey(key: string): Promise<string> {
+    return this.#serially(() => this.#idOfKey(key));
   }
 
   /** The note with this id, as it is now: its path, version and text. Reads that one note and nothing else. */
@@ -421,7 +432,7 @@ export class AgentVault {
    */
   async #sameNote(id: string, path: string, text: string): Promise<NoteRef> {
     const there = await this.#fetch(id, undefined);
-    if (there === null || there.entry.path !== path || there.text !== text) throw keyTaken();
+    if (there === null || there.entry.path !== path || there.text !== text) throw keyTaken(id);
     this.#rememberPath(id, there.entry.version, path);
     return { id, path, version: there.entry.version };
   }
@@ -689,7 +700,7 @@ export class AgentVault {
 const notFound = (path: string): AgentError => new AgentError("not-found", `There is no note at ${path}.`);
 const wrongKey = (): AgentError => new AgentError("wrong-key", "The approval's key opens none of the notes in this vault, so it is not this vault's key. Ask for a new approval.");
 const noNoteWithId = (): AgentError => new AgentError("not-found", "There is no note with that id, or it was deleted.");
-const keyTaken = (): AgentError => new AgentError("key-taken", "A note with that key's id is already there, and it is not the note this call would make (its text or path differs, it was deleted, or this vault's key cannot open it), so nothing was saved. Read it with readNote and update it with updateNote if that is what you want.");
+const keyTaken = (id: string): AgentError => new AgentError("key-taken", "A note with that key's id is already there, and it is not the note this call would make (its text or path differs, it was deleted, or this vault's key cannot open it), so nothing was saved. Read it with readNote and update it with updateNote if that is what you want.", id);
 const unreadable = (what: string): AgentError => new AgentError("unreadable", `The note ${what} could not be opened with this vault's key, or names a path the plugin would refuse.`);
 
 /** A random id for a note, made the first time it is saved: 16 random bytes in url-safe base64, as the plugin makes them. */

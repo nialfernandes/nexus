@@ -138,7 +138,16 @@ say) gives it, and then the call can safely be repeated:
 const key = "episode-123"; // any text of 1 to 1024 bytes the writer can make again; the note's id is made from it
 await vault.createNote("Agent/First.md", "# First\n", { key }); // the answer is lost ...
 await vault.createNote("Agent/First.md", "# First\n", { key }); // ... { id, path, version: 1 }: the note that is there, nothing saved
-await vault.createNote("Agent/First.md", "# Other\n", { key }); // throws AgentError "key-taken": read it (readNote) and update it (updateNote)
+await vault.createNote("Agent/First.md", "# Other\n", { key }); // throws AgentError "key-taken", whose `id` is the note's: read it (readNote) and update it (updateNote)
+```
+
+A writer that made the note but lost the id it was told (a crash before it stored it), and whose text has changed since, gets `key-taken` on every
+create, and it does not need the id kept: the key makes it again. `noteIdForKey(key)` answers the id the key makes in this vault, asking Nexus for
+nothing, so the writer recovers with `readNote(await vault.noteIdForKey(key))` and then `updateNote` at the version that read tells:
+
+```ts
+const found = await vault.readNote(await vault.noteIdForKey(key));       // { id, path, version, text }
+await vault.updateNote(found.id, found.version, "# New text\n");          // { result: "saved", ... }, or "changed-since" if it moved on meanwhile
 ```
 
 It uses no Node module: only `fetch`, `atob`/`btoa`, `TextEncoder` and `crypto.getRandomValues`,
@@ -182,8 +191,11 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   already there **at the same path with the same text**, it is the first call's own note: the call answers it (`{ id, path, version }`,
   version 1 unless it has been updated since, when it is the version now) and saves nothing. When the note there is any other (another text or path, a deleted
   note, or one this vault's key cannot open) the call throws an `AgentError` with the code `key-taken` and nothing is changed or brought
-  back; the caller reads the note with `readNote` (the id is in the answer of the first call) and updates it with `updateNote`. The repeat costs one more
-  read of that note.
+  back; the caller reads the note with `readNote` and updates it with `updateNote`. The error's `id` field is the note's id (an id is not secret, and the
+  message stays a fixed sentence that holds neither the id nor the key). A writer that lost the id has it again from `noteIdForKey(key)`, which answers the
+  id the key makes in this vault with no request to Nexus (the same id `createNote` makes, whether or not a note is there yet, and it refuses a key
+  that cannot make one with `bad-settings`): `readNote(await noteIdForKey(key))` then `updateNote` at its version is how a writer recovers a note it
+  can no longer make by `createNote`. The repeat costs one more read of that note.
 - **A write never overwrites a newer text blind.** A save names the version it started from. When
   Nexus says the note is at another version (409) the library reads that version and puts the
   agent's change on top of it with the same three-way line merge the plugin uses, from the text
