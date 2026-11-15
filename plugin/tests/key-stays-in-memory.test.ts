@@ -96,7 +96,7 @@ describe("the vault key", () => {
     expect(device.log.to("POST save"), "nothing went up with a key that was taken away").toEqual([]);
   });
 
-  it("is made, and unwrapped from a Recovery Key or a password, by no source file of the plugin: those belong to the setup screens, which are later work; only the approval engine opens an approval", async () => {
+  it("is made, and unwrapped from a Recovery Key or a password, by no source file of the plugin: those steps are the shared ones in packages/agent (@nexus/agent/setup), which the setup controller calls; only the approval engine opens an approval", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const dir = fileURLToPath(new URL("../src/", import.meta.url));
@@ -106,5 +106,7 @@ describe("the vault key", () => {
       expect(source, `${file} neither makes nor unwraps a vault key`).not.toMatch(/generateVaultKey|generateRecoveryKey|parseRecoveryKey|unwrapVaultKeyWithRecoveryKey|openPasswordWrap/);
       if (file !== "approval.ts") expect(source, `${file} does not open an approval: only approval.ts does, and it holds the key back until the person has checked the code`).not.toMatch(/openApproval/);
     }
+    const controller = written.find(([file]) => file === "vault-setup.ts")?.[1] ?? "";
+    expect(controller, "the setup controller takes every key step from the shared file, not a copy of it").toMatch(/from "@nexus\/agent\/setup"/);
   });
 });

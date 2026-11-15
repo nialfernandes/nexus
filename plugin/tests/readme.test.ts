@@ -41,17 +41,22 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(existsSync(path.join(PLUGIN, link!)), `${link} is a file in this repository`).toBe(true);
   });
 
-  it('says plainly what this version does with notes and what it cannot do yet: it encrypts on the device, but nothing can unlock it', () => {
+  it('says plainly what this version does with notes and what it cannot do yet: it encrypts on the device, and the logic that unlocks it is built, but no screen starts it', () => {
     expect(WORDS).toMatch(/encrypts every note on your own device before it is sent/i);
     expect(WORDS).toMatch(/screens that make the vault key[^.]*are not built yet/i);
+    expect(WORDS).toMatch(/logic behind them is built and tested, but nothing in the plugin starts it/i);
     expect(WORDS).toMatch(/has no key and syncs nothing/i);
     expect(WORDS).toMatch(/status line says the vault is locked/i);
     expect(WORDS, 'and no longer says that notes are sent as they are').not.toMatch(/does not encrypt yet|sends the text of each note to your Nexus server as it is/i);
   });
 
-  it('says that the key is held in memory only, and where the engine asks for it', () => {
+  it('says that the key is held in memory only, where the engine asks for it, and that the setup controller and the key holder are what fill and empty it', () => {
     expect(WORDS).toMatch(/held in memory only while unlocked, and nothing in this plugin writes it to disk/i);
     expect(WORDS).toMatch(/unlock port \(`src\/unlock\.ts`\)/);
+    expect(WORDS).toMatch(/key holder \(`src\/key-holder\.ts`\)/);
+    expect(WORDS).toMatch(/setup controller \(`src\/vault-setup\.ts`\)/);
+    expect(WORDS).toMatch(/no second copy of any of them in this plugin/i);
+    expect(WORDS, 'and no longer says the plugin is given a port that never holds a key').not.toMatch(/never holds a key/i);
   });
 
   it('says that merging and search are done on the device, because Nexus cannot read a note', () => {
@@ -66,10 +71,11 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(WORDS).toMatch(/both texts are in Nexus and on every device/i);
   });
 
-  it('says where the vault id comes from and that storing it is later work, and that search has no screen because Obsidian searches its own files', () => {
+  it('says where the vault id comes from and that the plugin keeps it nowhere else, and that search has no screen because Obsidian searches its own files', () => {
     expect(WORDS).toMatch(/vault id comes through the same port\. It is not secret/i);
     expect(WORDS).toMatch(/beside the wraps on your server/i);
-    expect(WORDS).toMatch(/does none of that storing yet/i);
+    expect(WORDS).toMatch(/keeps it nowhere else, so the data file still holds only the address and the user name/i);
+    expect(WORDS, 'and no longer says that storing it is later work').not.toMatch(/does none of that storing yet/i);
     expect(WORDS).toMatch(/inside Obsidian its own search already reads your files/i);
   });
 
