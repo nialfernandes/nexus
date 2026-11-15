@@ -39,7 +39,7 @@
 //   tryAgain()                    From save-failed: send the same Recovery wrap again.
 //   typeRecoveryKey(text)         From has-vault: open the Recovery wrap with the key typed. Right: unlocked. Wrong: has-vault with a
 //                                 message, and nothing is kept.
-//   askAnotherDevice()            From signed-out or has-vault: ask Nexus to sign this device in, and another device to send the vault key.
+//   askAnotherDevice()            From locked, stopped, signed-out or has-vault: ask Nexus to sign this device in, and another device to send the vault key.
 //   typeMatchingCode(text)        From type-matching-code: the code the approving device shows. Right: signed in and unlocked. Wrong: another
 //                                 try, and after three the approval is thrown away (stopped).
 //   refuseCode()                  From type-matching-code: the person says the codes do not match. The approval is thrown away (stopped).
@@ -263,7 +263,7 @@ export class VaultSetup {
 
   /** The sign-in's two-code exchange: this device asks another, which is unlocked, to send it the vault key. */
   async askAnotherDevice(): Promise<void> {
-    if (!this.#is("signed-out", "has-vault")) return;
+    if (!this.#is("locked", "signed-out", "has-vault", "stopped")) return;
     if (!isSetUp(this.#deps.data)) return this.#stop(this.#start(), "not-set-up", NOT_SET_UP);
     const flow = this.#start();
     this.#set({ step: "working", doing: "starting-sign-in" });
