@@ -54,7 +54,7 @@ describe("the package README", () => {
     expect(WORDS).toMatch(/Wasm code generation disallowed by embedder/);
   });
 
-  it("says a create can be repeated safely with an id the caller chose, what is answered, and when it is refused", () => {
+  it("says a create can be repeated safely with a key the caller keeps, what is answered, and when it is refused", () => {
     expect(README).toContain("createNote(path, text, { key })");
     expect(WORDS).toMatch(/at the same path with the same text/);
     expect(WORDS).toMatch(/answers it .* and saves nothing/);
