@@ -180,3 +180,31 @@ export function timesIn(text: string, secret: string): number {
   }
   return starts.size;
 }
+
+// ── the server over a real socket ────────────────────────────────────────────
+
+/**
+ * The server's own code on a port of this machine, for a client that runs in another process (the memory test's): each request that
+ * arrives is handed to `askNexus` as it came, with the Authorization header it carried, and the answer is sent back as the server wrote it.
+ */
+export async function serveNexus(): Promise<{ address: string; close: () => Promise<void> }> {
+  const { createServer } = await import("node:http");
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", async () => {
+      const url = new URL(request.url ?? "/", "http://localhost");
+      const text = Buffer.concat(chunks).toString("utf8");
+      const authorization = request.headers.authorization;
+      const answer = await askNexus(request.method ?? "GET", url.pathname.slice(API.length + 1) + url.search, authorization === undefined ? null : { authorization }, text === "" ? undefined : JSON.parse(text));
+      response.writeHead(answer.status, { "content-type": "application/json; charset=utf-8" });
+      response.end(answer.text);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+  return {
+    address: `http://127.0.0.1:${port}${API}`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}

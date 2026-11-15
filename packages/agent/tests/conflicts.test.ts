@@ -46,11 +46,14 @@ describe("a save that meets a newer version", () => {
 
     expect(done).toEqual({ path: "Projects/plan.md", version: 3, saved: true, merged: true, duplicate: false });
     expect(await nexusTexts(world), "both edits are in the text").toEqual({ "Projects/plan.md": "ONE from the agent\ntwo\nTHREE from the plugin\n" });
-    // The order of what the agent asked Nexus: a save from version 1 (refused), a read of version 2, a save from version 2.
-    expect(about(seen)).toEqual(["POST save -> 409", `GET note?id=${made.id} -> 200`, "POST save -> 200"]);
+    // The order of what the agent asked Nexus: a read of the note's text at version 1 (the vault keeps no text, so it reads the one note it
+    // is about to change), a save from version 1 (refused), a read of version 2, a save from version 2.
+    expect(about(seen)).toEqual([`GET note?id=${made.id} -> 200`, "POST save -> 409", `GET note?id=${made.id} -> 200`, "POST save -> 200"]);
     const saves = seen.filter((s) => s.route === "save");
     expect(saves.map((s) => s.body.base), "the first save started from 1, the second from the version it had read").toEqual([1, 2]);
-    const read = seen.find((s) => s.route.startsWith("note"))!;
+    const reads = seen.filter((s) => s.route.startsWith("note"));
+    expect(reads[0]!.route).toContain("version=1");
+    const read = reads[1]!;
     expect(read.route).toContain("version=2");
     expect(seen.indexOf(read), "the read of the newer version came before the second save").toBeLessThan(seen.indexOf(saves[1]!));
     // Nothing was overwritten: the plugin's version is still in the note's history.

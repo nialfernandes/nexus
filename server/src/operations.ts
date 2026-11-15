@@ -34,6 +34,10 @@ export const operations = {
     const { rows, next } = await store.changes(host, caller, after, limit);
     return ok({ changes: rows.map(changeEntry), next });
   },
+  async heads(host: NexusHost, caller: Caller, after: unknown, limit: unknown): Promise<Answered> {
+    const { rows, next } = await store.heads(host, caller, after, limit);
+    return ok({ heads: rows.map(changeEntry), next });
+  },
   async remove(host: NexusHost, caller: Caller, input: { id?: unknown; base?: unknown }): Promise<Answered> {
     return ok(await store.remove(host, caller, input));
   },
