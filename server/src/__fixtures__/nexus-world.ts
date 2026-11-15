@@ -6,7 +6,7 @@
 // wire contract below, because the routes and their answers are what the devices that sync notes will call.
 //
 // WHERE THINGS COME FROM
-//   - The database: an in-memory SQLite (node:sqlite) wearing the shape of a D1 binding (d1-sqlite.ts), with the real
+//   - The database: an in-memory SQLite (node:sqlite) wearing the shape of a D1 binding (`memoryD1` of @nexus/test-sqlite, packages/test-sqlite/src/d1.ts), with the real
 //     migration files in migrations/ applied in name order, the way `wrangler d1 migrations apply` would. No file name
 //     is assumed. The statements are split at `;`, so a migration holds no `;` inside a literal, a trigger or a
 //     comment.
@@ -57,11 +57,11 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { memoryD1, type MemoryD1 } from "@nexus/test-sqlite";
 import { expect } from "vitest";
 import type { NexusEnv } from "../plugs/cloudflare/host";
 import worker from "../plugs/cloudflare/worker";
 import { staticAssets } from "./assets";
-import { memoryD1 } from "./d1-sqlite";
 
 /** The address the tests call Nexus on. */
 export const ORIGIN = "https://nexus.example.test";
@@ -116,9 +116,12 @@ const STARTING_IDENTITIES = [
   { name: "recorder", kind: "app" },
 ];
 
+/** An empty in-memory database wearing the shape of a D1 binding. `memoryD1` names no Cloudflare type, so it is said once, here, that it is one. */
+export const freshDatabase = (): D1Database & MemoryD1 => memoryD1() as unknown as D1Database & MemoryD1;
+
 /** A fresh database with the migrations applied, and a Worker's variables pointing at it. `settings` change or take away what the Worker is told. */
 export async function nexusEnv(settings: Partial<NexusEnv> = {}): Promise<NexusEnv> {
-  const db = memoryD1();
+  const db = freshDatabase();
   for (const sql of nexusMigrations()) await db.applyMigration(sql);
   return {
     NEXUS_DB: db,

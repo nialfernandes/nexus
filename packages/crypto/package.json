@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/types/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./format": {
+      "types": "./src/format.ts",
+      "default": "./src/format.ts"
     }
   },
   "files": [

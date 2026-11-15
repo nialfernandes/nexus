@@ -46,11 +46,15 @@ The rest of the surface:
 ## Develop
 
 ```
-npm ci
-npm test          # known-answer vectors, cross-check against noble, refusal tests
-npm run typecheck
-npm run build     # dist/index.js, one ES module with libsodium's WebAssembly inside
+npm ci            # at the repository root: this package is one workspace of it
+npm test --workspace @nexus/crypto          # known-answer vectors, cross-check against noble, refusal tests
+npm run typecheck --workspace @nexus/crypto
+npm run build --workspace @nexus/crypto     # dist/index.js, one ES module with libsodium's WebAssembly inside
 ```
+
+A part of Nexus that only reads the first bytes of a blob and never opens one (the server) takes the layout's numbers
+from `@nexus/crypto/format` (`src/format.ts`) instead of the built file: the version byte, the kind bytes and the sizes,
+with no encryption and no libsodium.
 
 `@noble/ciphers` and `@noble/hashes` are development dependencies only: the
 tests use them as an independent second implementation.

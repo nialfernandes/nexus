@@ -6,13 +6,12 @@
 //     the tokens and the device approval behind it, the owner's cookie check and the settings reader of the Cloudflare plug,
 //     and the tables from server/migrations. Nothing of the server is written out again here. The server holds blobs only: it
 //     reads no note, merges nothing and searches nothing, so none of that is here either.
-//   - Two small things are not the server's. `sqlOver` below is the SQL port (server/src/ports.ts `SqlDb`) over node:sqlite,
-//     and the Worker's own front door (server/src/plugs/cloudflare/worker.ts) is left out, because it names Cloudflare types
-//     that the plugin's type check does not have; it only hands a request under the API's base to `runNexus`, which is what
-//     `RealNexus.fetch` does.
-//   - The server's own tests build the same thing from a stand-in for D1 (server/src/__fixtures__/d1-sqlite.ts). That file
-//     cannot be type-checked from the plugin's install, so the SQL port is written here against the same contract: a batch
-//     is one transaction, a row is a plain object, a count is a number.
+//   - One small thing is not the server's: the Worker's own front door (server/src/plugs/cloudflare/worker.ts) is left out,
+//     because it names Cloudflare types that the plugin's type check does not have; it only hands a request under the API's
+//     base to `runNexus`, which is what `RealNexus.fetch` does.
+//   - The database is the SQL port (server/src/ports.ts `SqlDb`) over node:sqlite, which the shared test package
+//     (@nexus/test-sqlite, packages/test-sqlite) provides. The server's own tests build the same database from the same
+//     package, wearing the shape of D1: a batch is one transaction, a row is a plain object, a count is a number.
 //
 // The plugin is pinned to the server as it is in this repository. When the server changes what it holds or answers, the
 // plugin's tests have to move along with it, in the slice that moves the plugin. The server holds blobs only: a note is an
@@ -24,12 +23,13 @@
 // and `agents`, another writer, made the way an operator makes them: the owner calls POST identity through the real route.
 // An identity has no folder rights any more (the folders are inside the encrypted notes), so the two can use every note.
 
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { sqlOver } from "@nexus/test-sqlite";
 import { APPROVE_PATH as SERVER_APPROVE_PATH, NEXUS_BASE } from "../../server/src/addresses";
-import type { NexusHost, RunResult, SqlDb, SqlStatement, SqlValue } from "../../server/src/ports";
+import type { NexusHost } from "../../server/src/ports";
 import { runNexus } from "../../server/src/routes";
 import { workerSecrets } from "../../server/src/plugs/cloudflare/secrets";
 import { settingsFromEnv } from "../../server/src/plugs/cloudflare/settings";
@@ -44,37 +44,6 @@ export const API = NEXUS_BASE;
 export const APPROVE_PATH = SERVER_APPROVE_PATH;
 
 const MIGRATIONS = join(import.meta.dirname, "../../server/migrations");
-
-// ── the SQL port over node:sqlite ────────────────────────────────────────────
-
-function sqlOver(db: DatabaseSync): SqlDb {
-  const params = (values: readonly SqlValue[]): SQLInputValue[] => [...values];
-  const runOne = (sql: string, values: readonly SqlValue[]): RunResult => ({ changes: Number(db.prepare(sql).run(...params(values)).changes) });
-  return {
-    async first<T>(sql: string, values: readonly SqlValue[] = []): Promise<T | null> {
-      const row = db.prepare(sql).get(...params(values));
-      return row === undefined ? null : ({ ...row } as T);
-    },
-    async all<T>(sql: string, values: readonly SqlValue[] = []): Promise<T[]> {
-      return db.prepare(sql).all(...params(values)).map((row) => ({ ...row }) as T);
-    },
-    async run(sql: string, values: readonly SqlValue[] = []): Promise<RunResult> {
-      return runOne(sql, values);
-    },
-    // One transaction: every statement is applied or none is.
-    async batch(statements: readonly SqlStatement[]): Promise<RunResult[]> {
-      db.exec("BEGIN");
-      try {
-        const results = statements.map((s) => runOne(s.sql, s.params));
-        db.exec("COMMIT");
-        return results;
-      } catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-      }
-    },
-  };
-}
 
 // ── the answers a test reads ─────────────────────────────────────────────────
 

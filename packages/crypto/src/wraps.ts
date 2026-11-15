@@ -13,17 +13,11 @@ import {
   TAG_BYTES,
 } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
+import { PASSWORD_HEADER_BYTES, PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "./format.js";
 import { hkdfSha256 } from "./hkdf.js";
 import { loadSodium, type Sodium } from "./sodium.js";
 
-/** version, kind, nonce, then the vault key and its tag. */
-export const RECOVERY_WRAP_BYTES = 2 + NONCE_BYTES + KEY_BYTES + TAG_BYTES;
-
-/** version, kind, memory (KiB), iterations, parallelism, salt: the part that is read before the key is derived. */
-const PASSWORD_HEADER_BYTES = 2 + 4 + 4 + 4 + SALT_BYTES;
-
-/** The password wrap: the header, nonce, then the vault key and its tag. */
-export const PASSWORD_WRAP_BYTES = PASSWORD_HEADER_BYTES + NONCE_BYTES + KEY_BYTES + TAG_BYTES;
+export { PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES };
 
 /** The key that locks the vault key under the Recovery Key: HKDF-SHA-256 with the fixed label. */
 export function recoveryWrapKey(sodium: Sodium, recoveryKey: Uint8Array): Uint8Array {

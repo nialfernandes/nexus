@@ -15,6 +15,7 @@ export const workerSecrets: Secrets = {
     return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
   },
   async hashBytes(bytes) {
-    return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+    // `slice` copies into a plain ArrayBuffer, the one kind of buffer the Workers types and the DOM types both let `digest` take.
+    return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes.slice())));
   },
 };

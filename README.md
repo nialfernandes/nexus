@@ -31,6 +31,22 @@ notes. There is no password reset: if you lose every device and your Recovery
 Key, the notes are gone. Cloud assistants are the one exception, because they
 cannot hold a key, and the threat model explains what you give up if you allow one.
 
+## Build and test
+
+The repository is one npm workspace: the encryption (`packages/crypto`), the line merge
+(`packages/merge`), the test database the server and plugin tests share
+(`packages/test-sqlite`), the server (`server/`) and the Obsidian plugin (`plugin/`). Node 22.13 or
+later is needed.
+
+```
+npm ci            # installs every package, with one lockfile
+npm run check     # builds the encryption package, type-checks every package, builds the plugin, runs every test
+```
+
+`npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
+`bash docs/check-citations.sh`. `probe/` is not part of the workspace: it is a small test
+plugin that ships its own built files, with its own `npm ci` and `npm run check`.
+
 ## Read before you trust it
 
 - [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md): who Nexus defends against, what

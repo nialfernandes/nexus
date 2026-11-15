@@ -1,0 +1,16 @@
+{
+  // The compiler settings every Nexus package shares. A package extends this and adds only what is its own: the
+  // libraries and types it runs against (the server has the Workers types, the plugin and the encryption library have the
+  // browser's), and any stricter checks it asks of itself.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noEmit": true,
+    // Libraries' own declaration files name types that the Workers types and the DOM types both describe and disagree about.
+    // Only our own .ts files are checked.
+    "skipLibCheck": true
+  }
+}

@@ -8,22 +8,20 @@
 //
 // A refusal is a 400 with a `reason`, a name a device can act on, beside the plain words in `error`.
 
+import { FORMAT_VERSION, Kind, MIN_WRITTEN_NOTE_BLOB_BYTES, PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "@nexus/crypto/format";
 import { Refusal } from "./refusal";
 import type { WrapKind } from "./wraps";
 
-/** The format version in the first byte of every note blob and wrap (docs/FORMAT.md section 2). */
-export const FORMAT_VERSION = 1;
+// Every number below is the format's, and @nexus/crypto owns it: the server takes it from `@nexus/crypto/format`, a file of
+// numbers that holds no encryption, so a change to the format moves the server's check with it.
 
-/** The bytes of a note blob before its ciphertext: version (1), kid (4) and nonce (24). */
-const NOTE_HEADER_BYTES = 1 + 4 + 24;
-
-/** A new note blob is at least this long: the header, the record padded to 256 bytes, and the 16-byte tag (docs/FORMAT.md section 6). */
-export const MIN_NOTE_BLOB_BYTES = NOTE_HEADER_BYTES + 256 + 16;
+/** A new note blob is at least this long: the header, the record padded to its floor, and the tag (docs/FORMAT.md section 6). */
+export const MIN_NOTE_BLOB_BYTES = MIN_WRITTEN_NOTE_BLOB_BYTES;
 
 /** What a wrap begins with, and how long it is: the second byte says which wrap it is (docs/FORMAT.md section 7). */
 export const WRAP_HEADERS: Readonly<Record<WrapKind, { kindByte: number; bytes: number }>> = {
-  recovery: { kindByte: 0x02, bytes: 74 },
-  password: { kindByte: 0x03, bytes: 102 },
+  recovery: { kindByte: Kind.recoveryWrap, bytes: RECOVERY_WRAP_BYTES },
+  password: { kindByte: Kind.passwordWrap, bytes: PASSWORD_WRAP_BYTES },
 };
 
 /** The names a refusal carries in `reason`. */
