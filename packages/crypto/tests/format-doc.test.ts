@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  ERROR_CODES, FORMAT_VERSION, PASSWORD_KDF, PASSWORD_KDF_LIMITS, RECOVERY_ALPHABET,
+  ERROR_CODES, FORMAT_VERSION, PASSWORD_KDF, PASSWORD_KDF_LIMITS, RECOVERY_ALPHABET, encryptNote,
 } from "../src/index.js";
 import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, MAX_ID_BYTES, MIN_PADDED_RECORD_BYTES, RECOVERY_CHECK_LABEL, RECOVERY_KDF_LABEL, Kind } from "../src/constants.js";
 import { MIN_NOTE_BLOB_BYTES } from "../src/note.js";
 import { PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "../src/wraps.js";
-import { APPROVAL_CODE_TEXT, NOTE_BLOB_HEX, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX } from "./fixtures.js";
+import * as format from "../src/format.js";
+import { fromHex } from "./helpers.js";
+import { APPROVAL_CODE_TEXT, NOTE_BLOB_HEX, NOTE_CONTEXT, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX, VAULT_KEY } from "./fixtures.js";
 
 const doc = readFileSync(new URL("../../../docs/FORMAT.md", import.meta.url), "utf8");
 const docWithoutLineBreaks = doc.replace(/\n/g, "");
@@ -59,5 +61,23 @@ describe("docs/FORMAT.md says what the code does", () => {
     expect(doc).toContain(`shortest blob a reader can open is ${MIN_NOTE_BLOB_BYTES} bytes`);
     expect(doc).toContain(`Recovery wrap (${RECOVERY_WRAP_BYTES} bytes)`);
     expect(doc).toContain(`Password wrap (${PASSWORD_WRAP_BYTES} bytes)`);
+  });
+});
+
+describe("the numbers a part of Nexus that never opens a blob takes from @nexus/crypto/format (src/format.ts)", () => {
+  it("are the version, the kind bytes and the sizes the code writes and the document states", async () => {
+    expect(format.FORMAT_VERSION).toBe(FORMAT_VERSION);
+    expect(format.Kind).toBe(Kind);
+    expect(format.RECOVERY_WRAP_BYTES).toBe(RECOVERY_WRAP_BYTES);
+    expect(format.PASSWORD_WRAP_BYTES).toBe(PASSWORD_WRAP_BYTES);
+    expect(format.RECOVERY_WRAP_BYTES).toBe(fromHex(RECOVERY_WRAP_HEX).length);
+    expect(format.PASSWORD_WRAP_BYTES).toBe(fromHex(PASSWORD_WRAP_HEX).length);
+    expect(doc).toContain(`at least ${format.MIN_WRITTEN_NOTE_BLOB_BYTES}`);
+    expect(doc).toContain(`${format.MIN_WRITTEN_NOTE_BLOB_BYTES} bytes = 1 + 4 + 24 + ${MIN_PADDED_RECORD_BYTES} + 16`);
+    // The smallest note blob the library writes is exactly that long: an empty note, padded to the floor.
+    const smallest = await encryptNote(VAULT_KEY, NOTE_CONTEXT, { path: "", text: "" });
+    expect(smallest.length).toBe(format.MIN_WRITTEN_NOTE_BLOB_BYTES);
+    expect(format.NOTE_HEADER_BYTES).toBe(1 + 4 + 24);
+    expect(smallest.length).toBeGreaterThan(MIN_NOTE_BLOB_BYTES);
   });
 });

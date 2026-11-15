@@ -3,6 +3,7 @@ import { noteAssociatedData, type NoteContext } from "./associated-data.js";
 import { fromUtf8, readU32be, requireBytes, u32be, utf8 } from "./bytes.js";
 import { FORMAT_VERSION, Kind, KEY_BYTES, KID_BYTES, MAX_RECORD_BYTES, NONCE_BYTES, TAG_BYTES } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
+import { NOTE_HEADER_BYTES } from "./format.js";
 import { padRecord, unpadRecord } from "./padme.js";
 import { loadSodium, type Sodium } from "./sodium.js";
 
@@ -15,7 +16,7 @@ export interface NoteRecord {
 /** Where each part of a note blob starts: version (1), kid (4), nonce (24), then the ciphertext. */
 const KID_OFFSET = 1;
 const NONCE_OFFSET = KID_OFFSET + KID_BYTES;
-const SEALED_OFFSET = NONCE_OFFSET + NONCE_BYTES;
+const SEALED_OFFSET = NOTE_HEADER_BYTES;
 
 /** The shortest possible blob: the header, the tag, and one byte (the end mark). */
 export const MIN_NOTE_BLOB_BYTES = SEALED_OFFSET + TAG_BYTES + 1;

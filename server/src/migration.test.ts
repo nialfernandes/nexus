@@ -6,8 +6,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { GARDEN_V1 } from "./__fixtures__/device-blobs";
-import { memoryD1 } from "./__fixtures__/d1-sqlite";
-import { API, OWNER_SECRET, bodyOf, nexusEnv, nexusMigrations } from "./__fixtures__/nexus-world";
+import { API, OWNER_SECRET, bodyOf, freshDatabase, nexusEnv, nexusMigrations } from "./__fixtures__/nexus-world";
 import { device, manage, sendAs, vaultAs, type Who } from "./__fixtures__/identity-world";
 import type { NexusEnv } from "./plugs/cloudflare/host";
 
@@ -34,13 +33,13 @@ const tableNames = async (db: D1Database): Promise<string[]> =>
 const columnsOf = async (db: D1Database, table: string): Promise<string[]> =>
   (await db.prepare(`SELECT name FROM pragma_table_info('${table}') ORDER BY cid`).all<{ name: string }>()).results.map((r) => r.name);
 
-let db: ReturnType<typeof memoryD1>;
+let db: ReturnType<typeof freshDatabase>;
 let before: string;
 
 beforeAll(async () => {
   const migrations = nexusMigrations();
   expect(migrations.length, "0001, 0002 and 0003 at least").toBeGreaterThanOrEqual(3);
-  db = memoryD1();
+  db = freshDatabase();
   // Only the first two migrations: the database as it was before this change.
   for (const sql of migrations.slice(0, 2)) await db.applyMigration(sql);
   env = { ...(await nexusEnv()), NEXUS_DB: db };

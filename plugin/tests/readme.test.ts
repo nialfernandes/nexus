@@ -73,10 +73,15 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(WORDS).toMatch(/inside Obsidian its own search already reads your files/i);
   });
 
-  it('says to run npm run check, which builds the packages the plugin depends on', () => {
+  it("says to run npm ci and npm run check at the repository's root, which builds the encryption package first", () => {
+    expect(WORDS).toMatch(/npm ci/);
     expect(WORDS).toMatch(/npm run check/);
-    expect(WORDS).toMatch(/builds the two packages the plugin depends on/i);
-    expect(WORDS).toMatch(/npm run packages/);
+    expect(WORDS).toMatch(/one workspace of the repository's root `package\.json`/i);
+    expect(WORDS).toMatch(/builds the encryption package, type-checks every package/i);
+    expect(WORDS, 'and no longer names the per-package install the root replaced').not.toMatch(/npm run packages|cd plugin/);
+    const root = JSON.parse(readFileSync(path.join(PLUGIN, '..', 'package.json'), 'utf8')) as { scripts: Record<string, string>; workspaces: string[] };
+    expect(root.scripts.check, 'the root has the check the README names').toBeTruthy();
+    expect(root.workspaces, 'and the plugin is one of its workspaces').toContain('plugin');
   });
 
   it('says there is no default address and no default user, and that nothing is sent until both are set', () => {

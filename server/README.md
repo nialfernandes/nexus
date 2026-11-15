@@ -146,7 +146,7 @@ variable is wrong.
 You need a Cloudflare account and Node 22.13 or later. `wrangler` is run with `npx` and is not a dependency of this
 package.
 
-1. Install: `cd server && npm ci`.
+1. Install: `npm ci` at the repository root, which installs every package, this one included.
 2. Make the database: `npx wrangler d1 create nexus`. It prints a database id. Put it in `wrangler.jsonc`, in place
    of `REPLACE-WITH-THE-ID-FROM-WRANGLER-D1-CREATE`.
 3. Build its tables: `npx wrangler d1 migrations apply nexus --remote`. The files in `migrations/` are applied in
@@ -237,16 +237,21 @@ settings, `worker.ts` is the entry, and `app.ts` lets an app in the same Worker 
 ## Develop
 
 ```sh
-npm ci            # install exactly what package-lock.json says
-npm test          # every test
-npm run typecheck # tsc --noEmit
+npm ci                                   # at the repository root: installs exactly what package-lock.json says
+npm test --workspace nexus-server        # every test
+npm run typecheck --workspace nexus-server # tsc --noEmit
 ```
 
-Node 22.13 or later is needed: the tests use `node:sqlite`, which prints an "experimental" warning that can be
-ignored.
+The server is one workspace of the repository's root `package.json`; `npm run check` at the root runs every package's
+checks, this one's included. Node 22.13 or later is needed (the root `package.json` says so once): the tests use
+`node:sqlite`, which prints an "experimental" warning that can be ignored.
+
+The one thing the server takes from the encryption package, `@nexus/crypto`, is the format's numbers
+(`@nexus/crypto/format`: the version byte, the kind bytes and the smallest sizes `src/header.ts` checks a blob and a wrap
+against). That file holds no encryption, so the server still holds none.
 
 The tests run in plain Node. They call the real Worker entry (`src/plugs/cloudflare/worker.ts`), with a stand-in for
-D1 made from an in-memory SQLite database (`src/__fixtures__/d1-sqlite.ts`) that keeps D1's two behaviours Nexus
+D1 made from an in-memory SQLite database (`memoryD1` in `packages/test-sqlite`, shared with the plugin's tests) that keeps D1's two behaviours Nexus
 relies on: a batch is one transaction, and foreign keys are enforced. They do not run on Cloudflare itself, so the
 plug's use of the real D1 and of the real asset server is the part they do not prove.
 
