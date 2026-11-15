@@ -114,7 +114,6 @@ export interface SetupDeps {
 export const SETUP_WORDS = {
   keyNeverShownAgain: "Nexus cannot show the Recovery Key again or reset it. Write it down before going on.",
   typeBackFailed: "The check characters were not typed back, so the vault was not set up and nothing was sent. Start again for a new key.",
-  signedOut: "This device is signed out of Nexus. Sign in first, or ask another device that is unlocked to approve this one.",
   notOwner: "This sign-in is not the owner's, and only the owner may set up the vault. Sign in as the owner.",
   otherVault: "This server already holds a vault with another vault id, so this one was not kept.",
   wouldNotSay: "Nexus would not say what it holds.",
