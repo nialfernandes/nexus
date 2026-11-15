@@ -44,6 +44,8 @@ server, and do not try to reach anyone else's notes or data.
 - **The agent library and the `nexus-agent` command**, in `packages/agent`: how an
   agent that holds its own key opens the vault, and how the vault is set up and an
   agent approved.
+- **The linking job**, in `packages/linker`: it opens the vault as an agent, reads transcript notes, sends their text to the
+  language-model endpoint its owner chooses, and writes links back. What it sends and where, and what it may write, count.
 - **The shared encryption code**, in `packages/crypto`.
 - **The format of the encrypted data**, described in [docs/FORMAT.md](docs/FORMAT.md).
   A weakness in the design of the format counts, as well as a mistake in the

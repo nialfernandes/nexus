@@ -1,0 +1,30 @@
+{
+  "name": "@nexus/linker",
+  "version": "0.1.0",
+  "description": "A linking job for the Nexus vault: it reads each new transcript note, finds the books, websites, quotes and people it mentions, and joins it to one note for each of them in Mentions/. It runs as a scheduled Cloudflare Worker and as a command in a terminal, and reads and writes the vault through @nexus/agent.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "nexus-linker": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.cli.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@nexus/agent": "0.1.0"
+  },
+  "devDependencies": {
+    "@nexus/test-sqlite": "0.1.0",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
