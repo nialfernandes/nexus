@@ -52,8 +52,8 @@ describe("the build", () => {
     expect(Object.keys(built).sort()).toEqual(
       [
         "ERROR_CODES", "FORMAT_VERSION", "NexusCryptoError", "PASSWORD_KDF", "PASSWORD_KDF_LIMITS", "RECOVERY_ALPHABET",
-        "approvalCode", "createPasswordWrap", "decryptNote", "deviceKeyCode", "encryptNote", "formatRecoveryKey", "generateDeviceKeyPair",
-        "generateRecoveryKey", "generateVaultKey", "openApproval", "openPasswordWrap", "padmeLength",
+        "approvalCode", "createPasswordWrap", "decryptNote", "devicePublicKey", "deviceKeyCode", "encryptNote", "formatRecoveryKey", "generateDeviceKeyPair",
+        "generateRecoveryKey", "generateVaultKey", "normaliseRecoveryText", "openApproval", "openPasswordWrap", "padmeLength",
         "parseRecoveryKey", "readApprovalCode", "sealApproval", "unwrapVaultKeyWithRecoveryKey", "wrapVaultKeyWithRecoveryKey",
       ].sort(),
     );

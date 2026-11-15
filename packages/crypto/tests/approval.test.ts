@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import {
-  approvalCode, deviceKeyCode, generateDeviceKeyPair, generateVaultKey, NexusCryptoError, openApproval, readApprovalCode, RECOVERY_ALPHABET, sealApproval,
+  approvalCode, devicePublicKey, deviceKeyCode, generateDeviceKeyPair, generateVaultKey, NexusCryptoError, openApproval, readApprovalCode, RECOVERY_ALPHABET, sealApproval,
 } from "../src/index.js";
 import { APPROVAL_CODE_TEXT, DEVICE_KEY_CODE_TEXT, VAULT_CONTEXT, VAULT_ID, VAULT_KEY } from "./fixtures.js";
 import { filled, flipBit, sequence, toHex } from "./helpers.js";
@@ -24,6 +24,16 @@ describe("sealed approvals", () => {
     const opened = await openApproval(device, sealed, { vaultId: VAULT_ID });
     expect(toHex(opened.vaultKey)).toBe(toHex(vaultKey));
     expect(opened.kid).toBe(7);
+  });
+
+  it("can be opened by a holder of the private key alone, whose public key is worked out from it", async () => {
+    const device = await generateDeviceKeyPair();
+    expect(toHex(await devicePublicKey(device.privateKey)), "the public half of a made pair").toBe(toHex(device.publicKey));
+    const sealed = await sealApproval(device.publicKey, VAULT_KEY, VAULT_CONTEXT);
+    const opened = await openApproval({ publicKey: await devicePublicKey(device.privateKey), privateKey: device.privateKey }, sealed, { vaultId: VAULT_ID });
+    expect(toHex(opened.vaultKey)).toBe(toHex(VAULT_KEY));
+    expect((await refusal(devicePublicKey(new Uint8Array(31)))).code).toBe("invalid-argument");
+    expect((await refusal(devicePublicKey("not bytes" as unknown as Uint8Array))).code).toBe("invalid-argument");
   });
 
   it("make a key pair of 32-byte X25519 keys, new each time", async () => {

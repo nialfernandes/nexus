@@ -37,6 +37,16 @@ export async function generateDeviceKeyPair(): Promise<DeviceKeyPair> {
 }
 
 /**
+ * The public key that goes with a device's or agent's private key, so a holder of the private key alone (an agent that keeps
+ * only that, and its approval) can open an approval without keeping the public half beside it.
+ */
+export async function devicePublicKey(privateKey: Uint8Array): Promise<Uint8Array> {
+  const sodium = await loadSodium();
+  requireBytes(privateKey, sodium.crypto_box_SECRETKEYBYTES, "privateKey");
+  return sodium.crypto_scalarmult_base(privateKey);
+}
+
+/**
  * Seals the vault key to one device's public key, so only that device can open
  * it. What is sealed is: version, kind, kid, the vault id (with its length) and
  * the key. A sealed box does not say who made it: an approval alone is not

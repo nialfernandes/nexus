@@ -3,7 +3,7 @@ export { FORMAT_VERSION, PASSWORD_KDF, PASSWORD_KDF_LIMITS, RECOVERY_ALPHABET } 
 export type { NoteContext, VaultContext } from "./associated-data.js";
 export { generateVaultKey, encryptNote, decryptNote, type NoteRecord } from "./note.js";
 export { padmeLength } from "./padme.js";
-export { generateRecoveryKey, formatRecoveryKey, parseRecoveryKey } from "./recovery-key.js";
+export { generateRecoveryKey, formatRecoveryKey, parseRecoveryKey, normalise as normaliseRecoveryText } from "./recovery-key.js";
 export {
   wrapVaultKeyWithRecoveryKey,
   unwrapVaultKeyWithRecoveryKey,
@@ -13,6 +13,7 @@ export {
 } from "./wraps.js";
 export {
   generateDeviceKeyPair,
+  devicePublicKey,
   sealApproval,
   openApproval,
   approvalCode,
