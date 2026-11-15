@@ -135,7 +135,7 @@ would save a second copy under a new id nobody kept. A writer that can make its 
 episode id, say) gives it, and then the call can safely be repeated:
 
 ```ts
-const id = "ep-123"; // 1 to 128 letters, digits, hyphens or underscores, made again from the writer's own data
+const id = "ep-123"; // 1 to 128 letters, digits, hyphens or underscores, made again from the writer's own data (in use, a hash of it: Nexus sees the id)
 await vault.createNote("Agent/First.md", "# First\n", { id }); // the answer is lost ...
 await vault.createNote("Agent/First.md", "# First\n", { id }); // ... { id: "ep-123", path, version: 1 }: the note that is there, nothing saved
 await vault.createNote("Agent/First.md", "# Other\n", { id }); // throws AgentError "id-taken": read it (readNote) and update it (updateNote)
@@ -154,7 +154,7 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   A vault with no note in it cannot show a wrong key, so the first note written there is the
   first proof. `connect` refuses all three the same way, before anything is written, without looking at the whole vault.
   A single note that does not open, or whose path the plugin would refuse, is `unreadable` to `readNote` and `updateNote`.
-- **Notes are found by path.** The server knows a note only by a random id: the path is inside
+- **Notes are found by path.** The server knows a note only by an id (random, unless the caller chose it): the path is inside
   the encrypted note. The first look at a vault asks Nexus for the newest version of each note
   (`GET /heads`), 100 notes at a time, opens each note to learn its path and keeps only its
   id, its version and its path: the note's text is not kept, and at most one page of encrypted
@@ -174,7 +174,8 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   `updateNote` reads the version it is given once to learn the path, unless this vault made, read or saved the note just before.
 - **A create can be repeated safely when the caller chooses the id.** Without an id, `createNote` makes a new random one on every
   call, so a call whose answer was lost and is made again leaves a second copy. `createNote(path, text, { id })` saves the note
-  under the id given (the same rule as any note id: 1 to 128 letters, digits, hyphens or underscores). When a note with that id is
+  under the id given (the same rule as any note id: 1 to 128 letters, digits, hyphens or underscores). Nexus sees a note's id, so make it from a hash
+  of the writer's own data, never a name, a path or any text that says what the note holds. When a note with that id is
   already there **at the same path with the same text**, it is the first call's own note: the call answers it (`{ id, path, version }`,
   version 1 unless it has been updated since) and saves nothing. When the note there is any other (another text or path, a deleted
   note, or one this key cannot open) the call throws an `AgentError` with the code `id-taken` and nothing is changed or brought

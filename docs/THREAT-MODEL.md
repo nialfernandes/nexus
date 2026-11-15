@@ -53,7 +53,8 @@ applies to you.
 not encrypt sends the server its notes as they are):
 
 - That your vault exists, how many notes it has, and how many versions each has.
-- A random id for each note.
+- An id for each note: a random one, unless the agent that made the note chose it (the agent library lets an agent give its own id,
+  so a create can be repeated safely, and its README tells it to use a hash, never a name or a path).
 - When each version was saved, and the order of the versions.
 - Which of your devices or agents saved each version.
 - The size of each blob, rounded up (section 2).

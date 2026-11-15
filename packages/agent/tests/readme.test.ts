@@ -59,6 +59,7 @@ describe("the package README", () => {
     expect(WORDS).toMatch(/at the same path with the same text/);
     expect(WORDS).toMatch(/answers it .* and saves nothing/);
     expect(WORDS).toMatch(/`AgentError` with the code `id-taken`/);
+    expect(WORDS, "the operator sees an id, so the README says to make it from a hash").toMatch(/Nexus sees a note's id, so make it from a hash/);
   });
 
   it("says how the first look at a vault is made and what it keeps, and that a stale update changes nothing", () => {

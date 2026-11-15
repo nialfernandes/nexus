@@ -7,7 +7,7 @@
 // `close()` overwrites it. Nothing in this file touches a file, a clock other than the one it is given, or a Node module: it runs
 // in Node and in a Cloudflare Worker, over the `fetch` it is given or the runtime's.
 //
-// BY PATH. The server knows a note only by a random id: the path is inside the encrypted record. So the vault reads what Nexus
+// BY PATH. The server knows a note only by an id (random, unless the caller chose it): the path is inside the encrypted record. So the vault reads what Nexus
 // holds, opens the newest version of each note, and keeps a small index in memory: for each note its id, its version and its path.
 // It does NOT keep a note's text: a vault of thousands of long notes would not fit in a Worker's memory. The first look at a vault
 // asks Nexus for the newest version of each note (`heads`), a page at a time, and holds at most one page of blobs while it decrypts
