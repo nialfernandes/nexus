@@ -130,6 +130,17 @@ const late = await vault.updateNote(made.id, made.version, "# Stale\n");        
 const note = await vault.readNote(made.id);                                         // { id, path, version: 2, text }
 ```
 
+A call whose answer was lost (a timeout, a Worker cut off mid-request) may have been kept by Nexus all the same. Made again, `createNote`
+would save a second copy under a new id nobody kept. A writer that can make its note's id again from its own data (a hash of its own
+episode id, say) gives it, and then the call can safely be repeated:
+
+```ts
+const id = "ep-123"; // 1 to 128 letters, digits, hyphens or underscores, made again from the writer's own data
+await vault.createNote("Agent/First.md", "# First\n", { id }); // the answer is lost ...
+await vault.createNote("Agent/First.md", "# First\n", { id }); // ... { id: "ep-123", path, version: 1 }: the note that is there, nothing saved
+await vault.createNote("Agent/First.md", "# Other\n", { id }); // throws AgentError "id-taken": read it (readNote) and update it (updateNote)
+```
+
 It uses no Node module: only `fetch`, `atob`/`btoa`, `TextEncoder` and `crypto.getRandomValues`,
 so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are strings, which
 `privateKey` and `approval` take as they are.
@@ -161,6 +172,13 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   is not, the answer is `changed-since` with the version it is at, and nothing is changed, merged or overwritten. A note
   that was deleted is at a newer version, so `updateNote` never brings one back. The note keeps its path;
   `updateNote` reads the version it is given once to learn the path, unless this vault made, read or saved the note just before.
+- **A create can be repeated safely when the caller chooses the id.** Without an id, `createNote` makes a new random one on every
+  call, so a call whose answer was lost and is made again leaves a second copy. `createNote(path, text, { id })` saves the note
+  under the id given (the same rule as any note id: 1 to 128 letters, digits, hyphens or underscores). When a note with that id is
+  already there **at the same path with the same text**, it is the first call's own note: the call answers it (`{ id, path, version }`,
+  version 1 unless it has been updated since) and saves nothing. When the note there is any other (another text or path, a deleted
+  note, or one this key cannot open) the call throws an `AgentError` with the code `id-taken` and nothing is changed or brought
+  back; the caller reads the note with `readNote` and updates it with `updateNote`. The repeat costs one more read of that note.
 - **A write never overwrites a newer text blind.** A save names the version it started from. When
   Nexus says the note is at another version (409) the library reads that version and puts the
   agent's change on top of it with the same three-way line merge the plugin uses, from the text

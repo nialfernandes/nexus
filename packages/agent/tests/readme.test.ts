@@ -54,6 +54,13 @@ describe("the package README", () => {
     expect(WORDS).toMatch(/Wasm code generation disallowed by embedder/);
   });
 
+  it("says a create can be repeated safely with an id the caller chose, what is answered, and when it is refused", () => {
+    expect(README).toContain("createNote(path, text, { id })");
+    expect(WORDS).toMatch(/at the same path with the same text/);
+    expect(WORDS).toMatch(/answers it .* and saves nothing/);
+    expect(WORDS).toMatch(/`AgentError` with the code `id-taken`/);
+  });
+
   it("says how the first look at a vault is made and what it keeps, and that a stale update changes nothing", () => {
     expect(WORDS).toMatch(/GET \/heads/);
     expect(WORDS).toMatch(/keeps only its id, its version and its path: the note's text is not kept/);
