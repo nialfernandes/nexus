@@ -15,6 +15,9 @@ export {
   generateDeviceKeyPair,
   sealApproval,
   openApproval,
+  approvalCode,
+  readApprovalCode,
+  type ApprovalCodeInput,
   type DeviceKeyPair,
   type OpenedApproval,
 } from "./approval.js";

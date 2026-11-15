@@ -180,14 +180,63 @@ longer than its content). The content is:
 version (0x01) || kind (0x04) || kid (4) || vaultId (length-prefixed) || vault key (32)
 ```
 
-The opening device passes the vault id it expects and refuses an approval for
-another vault (`wrong-vault`). It learns the `kid` from the content.
+A device that already knows its vault passes the vault id it expects, and
+refuses an approval for another vault (`wrong-vault`). A new device that does
+not know its vault yet passes none, and learns the vault id from the approval.
+Either way it learns the `kid` from the content.
 
 A sealed box does **not** say who sealed it: anyone who has the public key,
-including a server, can make one. **An approval alone is not authenticated.** It
-must be checked by the matching code that the device approval flow shows on both
-screens, which that flow binds to both device keys and to the sealed key, before
-the device trusts what it opened. That flow is outside this package.
+including a server, can make one. **An approval alone is not authenticated.** A
+server that wanted a device to use a vault key of its own could seal one to the
+device's public key, and the device would open it without a fault. So a device
+that opens an approval must not use the key in it until a person has checked
+the matching code (7.4).
+
+### 7.4 The matching code
+
+The new device and the approving device each work out the same short code from
+the same bytes, and show it. The person compares the two. The new device does
+not use the vault key from an approval until the person says the codes match
+(in Nexus's plugin, by typing the code the approving device shows).
+
+The new device made a key pair for this approval and sent its public key
+(`N`, 32 bytes) when it asked to be approved. The approving device made a key
+pair of its own for this approval and sent its public key (`A`, 32 bytes) with
+the approval. `S` is the sealed approval, exactly as the approving device made
+it, and `kid` is the number of the vault key in it. Then:
+
+```
+digest = SHA-256( "nexus v1 approval code" || N || A || kid (4) || SHA-256(S) )
+code   = the first 50 bits of digest, as 10 symbols of the alphabet in section 8
+```
+
+The label is the 22 ASCII bytes of `nexus v1 approval code`. The code is written
+in two groups of five symbols joined by a hyphen, for example `ENBRP-QJF17`.
+Reading what a person typed is as in section 8: capitals or small letters, a
+hyphen, spaces or none, `O` as `0`, `I` or `L` as `1`.
+
+Why this stops a server that makes or swaps an approval:
+
+- The server sits between the two devices. It can change `N` (the new device's
+  key as the approving device sees it), `A` (the approving device's key as the
+  new device sees it) and `S` (the approval the new device is handed). Any one
+  change makes the two devices work out different codes, because each of the
+  three is in the hash.
+- The `kid` is read by the new device from inside the approval after it opens
+  it, and by the approving device from its own key. A different `kid` gives a
+  different code. (The vault id and the vault key are not in the hash on their
+  own, but `S` carries them, and `S` is in the hash.)
+- The server cannot choose the approving device's code. That code depends on
+  `S`, and `S` holds a fresh random ephemeral key every time, so the approving
+  device's code cannot be known before it seals. To match it, the server has to
+  seal approvals of its own until one has the same code at the new device, a
+  guess that comes right once in 2^50 tries, inside the minutes the approval
+  lasts. Each try is a sealed box, which costs one X25519 operation.
+- The code is **not** a secret. The server may see it. It only has to differ
+  when the approval differs.
+
+Both devices keep their private keys to themselves. The new device keeps its
+private key only until it has opened the approval, and does not store it.
 
 ## 8. Writing the Recovery Key down
 
@@ -281,6 +330,10 @@ Password wrap (102 bytes; `00010000` = 65536 KiB, `00000003` = 3 passes, `000000
 
 The Recovery Key as written: `40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-CDSR-74X3-PF1X-7RZG-2M48`
 
+The matching code (section 7.4) from `N` = bytes `10 11 ... 2f`, `A` = bytes
+`50 51 ... 6f`, `kid` = 1 and `S` = 91 bytes `90 91 ... ea`. The hash does not look inside `S`, so
+these bytes need not be a real sealed approval: `ENBRP-QJF17`.
+
 An implementation is correct if it makes these exact bytes from these inputs and
 opens them again. `packages/crypto/tests/noble-cross-check.test.ts` builds all three a second
 way, with `@noble/ciphers` and `@noble/hashes` written from this document, and
@@ -307,6 +360,10 @@ checks that the bytes are the same.
 - **Padding:** a record of any length up to 255 bytes gives a blob of one size.
 - The sealed approval has no second implementation in the tests (libsodium's
   sealed box is the one implementation); it has round-trip and refusal tests.
+- **The matching code:** the code is built a second way with `@noble/hashes`, written from
+  section 7.4, and it is pinned by the worked example in section 10. A swapped
+  approval, a changed key on either side, a changed `kid` and any one changed byte of
+  the approval each give a different code.
 
 ## 12. What this format does not do
 
@@ -314,7 +371,7 @@ checks that the bytes are the same.
   is; Padmé blurs the size, nothing hides the rest.
 - It does not rotate keys, re-encrypt notes, or store anything. Those belong to
   the callers.
-- It does not authenticate who sealed an approval (section 7.3).
+- It does not authenticate who sealed an approval. The matching code (7.4) does that, once a person has compared it; this package only works it out.
 
 ## 13. Changing the format
 

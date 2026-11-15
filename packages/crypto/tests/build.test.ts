@@ -52,9 +52,9 @@ describe("the build", () => {
     expect(Object.keys(built).sort()).toEqual(
       [
         "ERROR_CODES", "FORMAT_VERSION", "NexusCryptoError", "PASSWORD_KDF", "PASSWORD_KDF_LIMITS", "RECOVERY_ALPHABET",
-        "createPasswordWrap", "decryptNote", "encryptNote", "formatRecoveryKey", "generateDeviceKeyPair",
+        "approvalCode", "createPasswordWrap", "decryptNote", "encryptNote", "formatRecoveryKey", "generateDeviceKeyPair",
         "generateRecoveryKey", "generateVaultKey", "openApproval", "openPasswordWrap", "padmeLength",
-        "parseRecoveryKey", "sealApproval", "unwrapVaultKeyWithRecoveryKey", "wrapVaultKeyWithRecoveryKey",
+        "parseRecoveryKey", "readApprovalCode", "sealApproval", "unwrapVaultKeyWithRecoveryKey", "wrapVaultKeyWithRecoveryKey",
       ].sort(),
     );
     // The pinned blob (made from the source) opens with the built file.

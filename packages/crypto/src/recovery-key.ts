@@ -61,7 +61,8 @@ export async function parseRecoveryKey(text: string): Promise<Uint8Array> {
   return key;
 }
 
-function normalise(text: string): string {
+/** What a person types, read as symbols: capitals, no hyphens, spaces or line breaks, and O as 0 and I or L as 1. */
+export function normalise(text: string): string {
   return text
     .toUpperCase()
     .replace(/[\s-]/g, "")
@@ -69,7 +70,8 @@ function normalise(text: string): string {
     .replace(/[IL]/g, "1");
 }
 
-function symbolsFromBits(bytes: Uint8Array, count: number): string {
+/** The first `count` symbols of the bytes, five bits each, most significant bit first. */
+export function symbolsFromBits(bytes: Uint8Array, count: number): string {
   let out = "";
   let buffer = 0;
   let bits = 0;
