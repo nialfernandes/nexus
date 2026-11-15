@@ -27,7 +27,7 @@ const forbidden: Array<[string, RegExp]> = [
 
 describe("the library's source", () => {
   it("finds the files", () => {
-    expect(library.sort()).toEqual(["base64.ts", "errors.ts", "index.ts", "nexus.ts", "paths.ts", "vault.ts"]);
+    expect(library.sort()).toEqual(["base64.ts", "errors.ts", "index.ts", "nexus.ts", "paths.ts", "setup.ts", "vault.ts"]);
   });
 
   for (const [what, pattern] of forbidden) {
@@ -36,11 +36,11 @@ describe("the library's source", () => {
     });
   }
 
-  it("takes its randomness only from the runtime's crypto, for a note's id, and from libsodium for everything else", () => {
+  it("takes its randomness only from the runtime's crypto, for a note's id and a new vault's id, and from libsodium for everything else", () => {
     for (const file of library) {
       const code = withoutComments(readFileSync(join(sourceDirectory, file), "utf8"));
       const uses = code.match(/getRandomValues/g)?.length ?? 0;
-      expect(uses, file).toBe(file === "vault.ts" ? 1 : 0);
+      expect(uses, file).toBe(file === "vault.ts" || file === "setup.ts" ? 1 : 0);
     }
   });
 

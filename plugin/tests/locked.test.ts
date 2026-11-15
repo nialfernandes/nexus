@@ -1,5 +1,5 @@
 // With no key unlocked, the plugin syncs nothing and says so. The key comes from the unlock port (src/unlock.ts), which the setup
-// screens will fill in a later piece of work; until they do, the plugin as it is shipped is given a port that never holds one. A
+// controller fills (src/vault-setup.ts); the plugin as it is shipped is given a key holder (src/key-holder.ts) that starts empty. A
 // vault that is locked sends nothing and reads nothing from Nexus, keeps what is edited meanwhile, and carries on when the key is
 // there. If the key goes away in the middle of a sync, the sync stops where it is and the cursor does not move past what was not read.
 // Against the real server (see real-nexus.ts).
@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { NEVER_UNLOCKED } from "../src/unlock";
+import { KeyHolder } from "../src/key-holder";
 import { emptyNexus, forbidFetch, known, loadSync, makeDevice, nexusTexts, openWorld, syncedDevice, type Device, type Http, type World } from "./world";
 
 let world: World;
@@ -47,10 +47,10 @@ describe("a vault that is locked", () => {
     expect(await nexusTexts(world), "Nexus holds only what was already there").toEqual({ "Ideas/there.md": "already in Nexus\n" });
   });
 
-  it("is what the plugin is shipped with: its entry hands the engine a port that never holds a key", () => {
-    expect(NEVER_UNLOCKED.keys()).toBeNull();
+  it("is what the plugin starts as: its entry hands the engine a key holder, which holds no key until the setup puts one there", () => {
+    expect(new KeyHolder().keys()).toBeNull();
     const entry = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");
-    expect(entry, "main.ts gives the engine the port that never holds a key, until the setup screens are there").toMatch(/unlock:\s*NEVER_UNLOCKED/);
+    expect(entry, "main.ts gives the engine the key holder, which starts locked").toMatch(/unlock:\s*this\.keyHolder/);
     expect(entry, "and has no other way to make a key").not.toMatch(/generateVaultKey|vaultKey/);
   });
 

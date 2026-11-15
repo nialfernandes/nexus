@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/types/index.d.ts",
       "default": "./dist/nexus-agent.js"
+    },
+    "./setup": {
+      "types": "./src/setup.ts",
+      "default": "./src/setup.ts"
     }
   },
   "bin": {

@@ -133,6 +133,9 @@ export async function signInForKey(deps: KeySignInDeps): Promise<KeySignIn> {
 
 // ── the approving device ─────────────────────────────────────────────────────
 
+/** What is said when Nexus cannot be reached. */
+export const UNREACHABLE = "Nexus could not be reached. Check you are online.";
+
 /** Why a device could not be approved, in words a person can read. `reason` is for a screen that wants to act on it. */
 export class ApprovalError extends Error {
   constructor(
@@ -183,7 +186,7 @@ export async function approveDevice(deps: ApproveDeps, signInCode: string, typed
     try {
       return await deps.http({ ...request, headers, throw: false });
     } catch {
-      throw new ApprovalError("unreachable", "Nexus could not be reached. Check you are online.");
+      throw new ApprovalError("unreachable", UNREACHABLE);
     }
   };
 
