@@ -2,7 +2,7 @@
   "name": "nexus",
   "version": "0.1.0",
   "private": true,
-  "description": "Nexus: end-to-end encrypted notes and sync. This is the root of the workspace that holds the encryption, the merge, the server, the Obsidian plugin and the agent library and command; the probe is standalone.",
+  "description": "Nexus: end-to-end encrypted notes and sync. This is the root of the workspace that holds the encryption, the merge, the server, the Obsidian plugin, the agent library and command and the linking job; the probe is standalone.",
   "license": "MIT",
   "engines": {
     "node": ">=22.13"
@@ -12,14 +12,15 @@
     "packages/merge",
     "packages/test-sqlite",
     "packages/agent",
+    "packages/linker",
     "server",
     "plugin"
   ],
   "scripts": {
-    "build": "npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run build --workspace nexus-obsidian",
+    "build": "npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run build --workspace @nexus/linker && npm run build --workspace nexus-obsidian",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "check:actions": "bash .github/check-pinned-actions.test.sh && bash .github/check-pinned-actions.sh",
-    "check": "npm run check:actions && npm run build --workspace @nexus/crypto && npm run typecheck && npm run build --workspace @nexus/agent && npm run build --workspace nexus-obsidian && npm run test"
+    "check": "npm run check:actions && npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run typecheck && npm run build --workspace @nexus/linker && npm run build --workspace nexus-obsidian && npm run test"
   }
 }
