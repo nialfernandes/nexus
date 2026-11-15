@@ -51,10 +51,12 @@ function startWorker(credentials: AgentCredentials): { worker: Miniflare; seen: 
     compatibilityDate: "2026-07-01",
     cf: false,
     defaultPersistRoot: scratch,
-    outboundService: async (request) => {
+    outboundService: async (request: Request) => {
+      const headers: Record<string, string> = {};
+      request.headers.forEach((value, name) => (headers[name] = value));
       const answer = await fetch(request.url, {
         method: request.method,
-        headers: Object.fromEntries(request.headers),
+        headers,
         ...(request.method === "GET" ? {} : { body: await request.text() }),
       });
       return new Response(await answer.text(), { status: answer.status, headers: { "content-type": "application/json" } });

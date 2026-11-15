@@ -13,6 +13,7 @@
       "types": "./dist/types/index.d.ts",
       "default": "./dist/nexus-agent.js"
     },
+    "./nexus-agent.wasm": "./dist/nexus-agent.wasm",
     "./setup": {
       "types": "./src/setup.ts",
       "default": "./src/setup.ts"

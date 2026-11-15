@@ -118,8 +118,14 @@ interface Tally {
   opened: number;
 }
 
-/** Changes asked for at a time: the most Nexus sends (a page can still be shorter, which the loop copes with). */
-const PAGE = 500;
+/**
+ * Notes (or changes) asked for at a time. A page is read, opened and dropped before the next is asked for, so this is what sets how much of the
+ * vault is held at once: 100 notes of a transcript's size is under 3 MB of blobs. Nexus's own default, and a page can still be shorter, which
+ * the loop copes with.
+ */
+const PAGE = 100;
+/** Notes asked for at a time while `connect` looks for one that opens with the key. */
+const KEY_CHECK_PAGE = 10;
 /** How many times a write looks again at a note that keeps changing under it. */
 const WRITE_ROUNDS = 6;
 /** How many notes' paths `updateNote` remembers, so an update of a note it has just saved or read does not read it again. */
@@ -170,13 +176,20 @@ export class AgentVault {
   }
 
   /**
-   * Opens the approval and checks that it is for the vault the server holds, and reads no note. `createNote`, `readNote` and
-   * `updateNote` then work on one note each and never look at the rest of the vault. The calls that go by path (`list`, `read`,
-   * `write`, `remove`) still work: the first of them looks at the vault then. Refuses as `open` does, but cannot tell a wrong key
-   * until a note is opened with it.
+   * Opens the approval and checks it against the server, and does not look at the vault: it asks for the vault's id and then for a few notes
+   * at a time (10), only until one of them opens with the key, which is the proof that the key is the vault's. `createNote`, `readNote` and
+   * `updateNote` then work on one note each and never look at the rest of the vault. The calls that go by path (`list`, `read`, `write`,
+   * `remove`) still work: the first of them looks at the vault then. Refuses as `open` does, and a vault with no note cannot show a wrong key.
    */
-  static connect(options: AgentOptions): Promise<AgentVault> {
-    return AgentVault.#approved(options);
+  static async connect(options: AgentOptions): Promise<AgentVault> {
+    const vault = await AgentVault.#approved(options);
+    try {
+      await vault.#proveKey();
+    } catch (error) {
+      vault.close();
+      throw error;
+    }
+    return vault;
   }
 
   static async #approved(options: AgentOptions): Promise<AgentVault> {
@@ -400,24 +413,49 @@ export class AgentVault {
     // The place is kept only once everything before it has been opened, so a fault half way is met again by the next look.
     this.#cursor = cursor;
     // A key that opens none of the notes there are is the wrong key: better told now than by a note written under it.
-    if (checkKey && tally.live > 0 && tally.opened === 0) {
-      throw new AgentError("wrong-key", "The approval's key opens none of the notes in this vault, so it is not this vault's key. Ask for a new approval.");
-    }
+    if (checkKey && tally.live > 0 && tally.opened === 0) throw wrongKey();
   }
 
-  /** Asks for a route's pages from `after` to the end, and hands each page to `each`, which is done with it before the next is asked for. Gives the cursor at the end. */
-  async #pages(route: "changes" | "heads", after: string | undefined, each: (page: Change[]) => Promise<void>): Promise<string> {
+  /**
+   * Asks for a route's pages from `after` to the end, `limit` at a time, and hands each page to `each`, which is done with it before the next is
+   * asked for. When `each` answers true no more is asked for. Gives the cursor at the end.
+   */
+  async #pages(route: "changes" | "heads", after: string | undefined, each: (page: Change[]) => Promise<boolean | void>, limit = PAGE): Promise<string> {
     let cursor = after;
     for (;;) {
-      const reply = await this.#nexus.get(route, { after: cursor, limit: PAGE });
+      const reply = await this.#nexus.get(route, { after: cursor, limit });
       if (route === "heads" && reply.status === 404) throw new NoHeadsRoute();
       const page: unknown = reply.json[route];
       if (reply.status !== 200 || !Array.isArray(page) || typeof reply.json.next !== "string") throw refusal(reply, "list its changes");
       const next: string = reply.json.next;
       if (page.length === 0) return next;
-      await each(page as Change[]);
+      if ((await each(page as Change[])) === true) return next;
       cursor = next;
     }
+  }
+
+  /**
+   * A key that opens none of the notes there are is the wrong key: better told before anything is written under it than after. Asks for a few
+   * notes at a time, only until one opens, so a vault of any size costs one small page. A vault with no note cannot show a wrong key.
+   */
+  async #proveKey(): Promise<void> {
+    let live = 0;
+    let proved = false;
+    const look = async (page: Change[]): Promise<boolean> => {
+      for (const change of page) {
+        if (change.kind === "delete") continue;
+        live++;
+        if ((await this.#open(change)).entry.opened) return (proved = true);
+      }
+      return false;
+    };
+    try {
+      await this.#pages("heads", undefined, look, KEY_CHECK_PAGE);
+    } catch (error) {
+      if (!(error instanceof NoHeadsRoute)) throw error;
+      await this.#pages("changes", undefined, look, KEY_CHECK_PAGE);
+    }
+    if (live > 0 && !proved) throw wrongKey();
   }
 
   /** Opens the newest version of each note in a page that is newer than what the index holds, and puts what it keeps of them in the index. */
@@ -602,6 +640,7 @@ export class AgentVault {
 }
 
 const notFound = (path: string): AgentError => new AgentError("not-found", `There is no note at ${path}.`);
+const wrongKey = (): AgentError => new AgentError("wrong-key", "The approval's key opens none of the notes in this vault, so it is not this vault's key. Ask for a new approval.");
 const noNoteWithId = (): AgentError => new AgentError("not-found", "There is no note with that id, or it was deleted.");
 const unreadable = (what: string): AgentError => new AgentError("unreadable", `The note ${what} could not be opened with this vault's key, or names a path the plugin would refuse.`);
 

@@ -107,6 +107,7 @@ const vault = await AgentVault.open({
   privateKey: env.NEXUS_AGENT_PRIVATE_KEY,  // base64 (or the 32 bytes)
   approval: env.NEXUS_AGENT_APPROVAL,       // base64 (or the bytes)
   // fetch: the runtime's own is used when left out
+  // wasm: in a Cloudflare Worker, the compiled module of nexus-agent.wasm, see "In a Cloudflare Worker"
 });
 
 await vault.write("Agent/2026-11-15 First.md", "# First\n");
@@ -114,6 +115,19 @@ const text = await vault.read("Agent/2026-11-15 First.md");
 const paths = await vault.list();
 await vault.remove("Agent/2026-11-15 First.md");
 vault.close(); // overwrites the key
+```
+
+A writer that keeps its own note ids does not need the paths, and does not have to look at the vault. `connect` opens the
+approval and checks it against the server (the vault id, and that the key opens a note: it asks for 10 notes at a time and stops
+at the first that opens), and then each call sends or reads **one** note, whatever the vault holds:
+
+```ts
+const vault = await AgentVault.connect({ address, token, privateKey, approval });
+
+const made = await vault.createNote("Agent/2026-11-15 First.md", "# First\n"); // { id, path, version: 1 }: keep the id
+const done = await vault.updateNote(made.id, made.version, "# First\n\nMore.\n"); // { result: "saved", id, path, version: 2 }
+const late = await vault.updateNote(made.id, made.version, "# Stale\n");           // { result: "changed-since", id, current: 2 }
+const note = await vault.readNote(made.id);                                         // { id, path, version: 2, text }
 ```
 
 It uses no Node module: only `fetch`, `atob`/`btoa`, `TextEncoder` and `crypto.getRandomValues`,
@@ -127,12 +141,26 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   does not open the approval, when the approval is for another vault than the one the server
   holds, and when the key opens none of the notes the vault already holds. It writes nothing.
   A vault with no note in it cannot show a wrong key, so the first note written there is the
-  first proof.
+  first proof. `connect` refuses all three the same way, before anything is written, without looking at the whole vault.
+  A single note that does not open, or whose path the plugin would refuse, is `unreadable` to `readNote` and `updateNote`.
 - **Notes are found by path.** The server knows a note only by a random id: the path is inside
-  the encrypted note. The first `open` reads and opens every note once, to learn the paths, and
-  every later call asks only for what changed. A note that does not open, or has a path the plugin
+  the encrypted note. The first look at a vault asks Nexus for the newest version of each note
+  (`GET /heads`), 100 notes at a time, opens each note to learn its path and keeps only its
+  id, its version and its path: the note's text is not kept, and at most one page of encrypted
+  notes is held at once, so a vault of thousands of long notes can be opened inside a Worker's
+  memory. Every later call asks only for what changed (`GET /changes`). A text is read from Nexus
+  when a call needs it (`read`, and the comparison a `write` makes), one note at a time. A server
+  that has no `/heads` route is read through its changes feed instead, which gives the same answer
+  and is slower and heavier. A note that does not open, or has a path the plugin
   would refuse, is left out of `list` (`unreadableNotes()` says which ids). When two notes share a
-  path, the one saved last is the one a path means.
+  path, the one saved last is the one a path means. `listNotes()` is `list` with each note's id and version.
+- **By id, nothing else is touched.** `createNote(path, text)` sends one new note and does not look to see
+  whether another note is already at that path: two notes at one path are two ids, and the plugin gives the path to
+  the one with the smaller id and moves the other aside (`write`, which does look, does the same). `readNote(id)` reads one
+  note, and `updateNote(id, version, text)` saves the next version **only if the note is still at `version`**: when it
+  is not, the answer is `changed-since` with the version it is at, and nothing is changed, merged or overwritten. A note
+  that was deleted is at a newer version, so `updateNote` never brings one back. The note keeps its path;
+  `updateNote` reads the version it is given once to learn the path, unless this vault made, read or saved the note just before.
 - **A write never overwrites a newer text blind.** A save names the version it started from. When
   Nexus says the note is at another version (409) the library reads that version and puts the
   agent's change on top of it with the same three-way line merge the plugin uses, from the text
@@ -156,17 +184,39 @@ npm run build --workspace @nexus/agent     # after @nexus/crypto is built; the r
 ```
 
 makes `dist/nexus-agent.js`: the library as **one ES module that imports nothing** (the
-encryption, libsodium's WebAssembly and the merge are inside it) and `dist/cli.js`, the
-command. The build prints the library file's SHA-256 in the form `sha256sum -c` reads:
+encryption, libsodium's WebAssembly and the merge are inside it), `dist/nexus-agent.wasm`: that same
+WebAssembly as a file of its own, and `dist/cli.js`, the command. The build prints the SHA-256 of each
+file in the form `sha256sum -c` reads:
 
 ```
 <64 hex characters>  nexus-agent.js
+<64 hex characters>  nexus-agent.wasm
+<64 hex characters>  cli.js
 ```
 
-Another repository can copy `nexus-agent.js`, pin it, and check it against that checksum. The same
-sources always make the same file. The tests build it, check that it names no Node module, run it
-in a V8 context with only a Worker's web platform (no `require`, `process` or `Buffer`) and round-trip
-a note against the real server code.
+Another repository can copy `nexus-agent.js` and `nexus-agent.wasm`, pin them, and check them against those
+checksums. The same sources always make the same files, and the build test pins the checksums, so a change to
+what is copied is a change someone has looked at. The tests build the files, check that the library names no
+Node module, run it in a V8 context with only a Worker's web platform (no `require`, `process` or `Buffer`),
+round-trip a note against the real server code, and run it in workerd, the runtime Cloudflare's Workers run on.
+
+### In a Cloudflare Worker
+
+A Worker will not make code from bytes: `WebAssembly.instantiate(bytes)` fails there with "Wasm code generation
+disallowed by embedder". libsodium inside the library does exactly that when it is left to itself, so the library
+takes its WebAssembly as a module that was compiled before the Worker started, which is what importing a `.wasm`
+file gives a Worker:
+
+```ts
+import { AgentVault } from "./nexus-agent.js";
+import wasm from "./nexus-agent.wasm"; // a WebAssembly.Module, in a Worker
+
+const vault = await AgentVault.connect({ address, token, privateKey, approval, wasm });
+```
+
+The `.wasm` file is the very bytes that are also inside the library as text (the build test compares them), so
+the two cannot differ. Without `wasm` the library starts libsodium from the text inside the file, as it always
+did, which is what Node does. Only the first vault opened in a runtime uses `wasm`: libsodium starts once.
 
 ## The key steps the plugin shares
 
@@ -181,7 +231,9 @@ library: an agent imports the vault, and a person's tools import the steps.
 
 - One vault per server, and one vault key per agent approval. An agent sees every note its person
   sees: there is no folder-only agent in version 1.
-- The first `open` of a large vault reads and opens every note. A path index kept in the vault is later work.
+- The first `open` of a vault still reads and opens every note once, to learn the paths, a page at a time. It holds only the
+  ids, versions and paths, not the texts, but it takes a request for every 100 notes, so a Worker that has a limit on
+  subrequests needs `connect` and its own note ids for a very large vault. A path index kept in the vault is later work.
 - `create-vault` needs a terminal. It will not run piped or redirected, so the Recovery Key is never
   written anywhere by the command.
 - Revoking an agent's token stops it reading and writing from then on. It does not make the agent

@@ -96,17 +96,17 @@ describe("opening a vault", () => {
     await aVaultOfEveryKind();
     const { vault, seen } = await open();
     expect(routesOf(seen)).toEqual(["wraps", "heads", "heads"]);
-    expect(seen[1]!.route).toBe("heads?limit=500");
+    expect(seen[1]!.route).toBe("heads?limit=100");
     await vault.list();
     expect(routesOf(seen).slice(3)).toEqual(["changes"]);
-    expect(seen[3]!.route, "from the place the heads ended at").toMatch(/^changes\?after=\d+&limit=500$/);
+    expect(seen[3]!.route, "from the place the heads ended at").toMatch(/^changes\?after=\d+&limit=100$/);
     vault.close();
   });
 
-  it("reads a vault of more than a page in pages of 500, and one more to see the end", async () => {
+  it("reads a vault of more than a page in pages of 100, and one more to see the end", async () => {
     for (let n = 0; n < 1100; n++) await world.elsewhere.create(`Bulk/${String(n).padStart(4, "0")}.md`, `note ${n}\n`);
     const { vault, seen } = await open();
-    expect(routesOf(seen)).toEqual(["wraps", "heads", "heads", "heads", "heads"]);
+    expect(routesOf(seen)).toEqual(["wraps", ...Array(12).fill("heads")]);
     expect((await vault.list()).length).toBe(1100);
     expect(await vault.listNotes()).toEqual((await worked()).notes);
     vault.close();

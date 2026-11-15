@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -24,9 +24,9 @@ const TEXT = "written by the built file\n";
  * someone has looked at it and written the new values in. The build prints them: `node scripts/build.mjs <outdir>`.
  */
 const PINNED: Record<string, string> = {
-  "nexus-agent.js": "0000000000000000000000000000000000000000000000000000000000000000",
-  "nexus-agent.wasm": "0000000000000000000000000000000000000000000000000000000000000000",
-  "cli.js": "0000000000000000000000000000000000000000000000000000000000000000",
+  "nexus-agent.js": "461b0e39a39183cfe9353fba797e22c19013c29ac594014cc52f3f093cd9f771",
+  "nexus-agent.wasm": "29dd7daf12daec2afdf7b73101e50679bfe9c38861aa1f0de50ae505ccba99bd",
+  "cli.js": "6e84f43e4942a738c77a2ec772f31286c457b4e0aa97d977ef6b2cc28e4f38de",
 };
 
 let directory = "";
@@ -65,6 +65,12 @@ describe("the build", () => {
   it("makes the files whose checksums are pinned in this test", () => {
     const printedSums = Object.fromEntries(printed.trim().split("\n").map((line) => line.split("  ").reverse() as [string, string]));
     expect(printedSums, "the build printed the pinned files' checksums: if this fails on purpose, the new values are the printed ones").toEqual(PINNED);
+  });
+
+  it("is named by the package: it ships in dist, and `@nexus/agent/nexus-agent.wasm` is the file the build wrote", () => {
+    const manifest = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf8")) as { files: string[]; exports: Record<string, unknown> };
+    expect(manifest.files).toContain("dist");
+    expect(manifest.exports["./nexus-agent.wasm"]).toBe(`./dist/${basename(wasmFile)}`);
   });
 
   it("writes the WebAssembly beside the library as a module of its own, and it is the very bytes that are inside the library", () => {

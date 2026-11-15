@@ -76,7 +76,7 @@ describe("the gate libsodium waits at", () => {
     const foreign = vm.runInNewContext("new WebAssembly.Module(bytes)", { bytes: EMPTY }) as WebAssembly.Module;
     expect(foreign instanceof WebAssembly.Module).toBe(false);
     expect(() => gate.startLibsodium(foreign)).not.toThrow();
-    const options: { instantiateWasm?: unknown } = {};
+    const options: Parameters<Gate["chooseWasm"]>[0] = {};
     await gate.chooseWasm(options, {});
     expect(typeof options.instantiateWasm).toBe("function");
   });

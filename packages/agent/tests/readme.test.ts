@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ENV } from "../src/cli/labels";
+import { AgentVault } from "../src/index";
 
 const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const WORDS = README.replace(/\s+/g, " ");
@@ -39,7 +40,24 @@ describe("the package README", () => {
     expect(WORDS).toMatch(/Save them in your secrets manager now: they are shown once/);
   });
 
-  it("prints the checksum line the build prints", () => {
-    expect(README).toContain("<64 hex characters>  nexus-agent.js");
+  it("prints the checksum lines the build prints, one for each file it makes", () => {
+    for (const file of ["nexus-agent.js", "nexus-agent.wasm", "cli.js"]) expect(README).toContain(`<64 hex characters>  ${file}`);
+  });
+
+  it("names every call the library has for a note by its id, and for the vault by path, and the option that takes the WebAssembly", () => {
+    const methods = Object.entries(Object.getOwnPropertyDescriptors(AgentVault.prototype)).filter(([name, d]) => name !== "constructor" && typeof d.value === "function").map(([name]) => name);
+    expect(methods.sort(), "the library's calls").toEqual(["close", "createNote", "list", "listNotes", "read", "readNote", "remove", "unreadableNotes", "updateNote", "write"]);
+    for (const name of methods) expect(README, name).toContain(name);
+    for (const name of ["open", "connect"]) expect(typeof AgentVault[name as "open" | "connect"], name).toBe("function");
+    expect(README).toContain("AgentVault.connect(");
+    expect(WORDS).toMatch(/`wasm`/);
+    expect(WORDS).toMatch(/Wasm code generation disallowed by embedder/);
+  });
+
+  it("says how the first look at a vault is made and what it keeps, and that a stale update changes nothing", () => {
+    expect(WORDS).toMatch(/GET \/heads/);
+    expect(WORDS).toMatch(/keeps only its id, its version and its path: the note's text is not kept/);
+    expect(WORDS).toMatch(/changed-since/);
+    expect(WORDS).toMatch(/nothing is changed, merged or overwritten/);
   });
 });

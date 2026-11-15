@@ -4,7 +4,7 @@
 
 import { generateDeviceKeyPair, generateVaultKey, sealApproval } from "@nexus/crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { makeDevice, nexusNotes, nexusTexts, TestUnlock } from "../../../plugin/tests/world";
+import { blobFor, makeDevice, nexusNotes, nexusTexts, TestUnlock } from "../../../plugin/tests/world";
 import { encodeBase64 } from "../src/base64";
 import { AgentVault } from "../src/index";
 import { ADDRESS, agentCredentials, fetchOverNexus, openWorld, setUpVault, type AgentCredentials, type Seen, type World } from "./world";
@@ -27,14 +27,63 @@ const connect = async () => {
 /** What was asked, as `GET changes`, `POST save -> 200`: the route's first word, without its query. */
 const asked = (seen: Seen[]) => seen.map((s) => `${s.method} ${s.route.split("?")[0]} -> ${s.status}`);
 
-/** The routes that look at more than one note. A call that goes by id must never use them. */
+/** The routes that look at more than one note. A call that goes by id must never use them (but for the small page `connect` asks for, to see that the key opens a note). */
 const WHOLE_VAULT = /^(changes|heads|list|history)/;
 
 describe("connecting without opening the vault", () => {
-  it("opens the approval and asks which vault the server holds, and asks for no note", async () => {
+  it("opens the approval and asks which vault the server holds, and for a few notes only to see that the key opens one: in a vault with no note, nothing more", async () => {
     const { vault, seen } = await connect();
     expect(vault.vaultId).toBe(world.keys.vaultId);
-    expect(asked(seen)).toEqual(["GET wraps -> 200"]);
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET heads -> 200"]);
+    expect(seen[1]!.route).toBe("heads?limit=10");
+    vault.close();
+  });
+
+  it("stops at the first note that opens with the key: a vault of any size costs one small page", async () => {
+    for (let n = 0; n < 25; n++) await world.elsewhere.create(`Other/note-${n}.md`, `note ${n}\n`);
+    const { vault, seen } = await connect();
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET heads -> 200"]);
+    vault.close();
+  });
+
+  it("refuses a key that opens none of the vault's notes, before anything is written under it, and does not take a deleted note for one that should open", async () => {
+    await world.elsewhere.create("Daily/a.md", "a\n");
+    const gone = await world.elsewhere.create("Daily/gone.md", "gone\n");
+    await world.elsewhere.remove(gone.id);
+    const { fetch, seen } = fetchOverNexus();
+    const wrong = { ...credentials, ...(await approvalFor(await generateVaultKey(), world.keys.vaultId)), fetch };
+    await expect(AgentVault.connect(wrong)).rejects.toMatchObject({ name: "AgentError", code: "wrong-key" });
+    expect(seen.filter((s) => s.method === "POST"), "nothing was written").toEqual([]);
+
+    // A vault whose only notes are deleted ones has no note to show a wrong key with.
+    const bare = await openWorld();
+    await setUpVault(bare);
+    const only = await bare.elsewhere.create("Daily/only.md", "x\n");
+    await bare.elsewhere.remove(only.id);
+    const fresh = await agentCredentials(bare);
+    const again = fetchOverNexus();
+    const connected = await AgentVault.connect({ ...fresh, ...(await approvalFor(await generateVaultKey(), bare.keys.vaultId)), fetch: again.fetch });
+    connected.close();
+  });
+
+  it("looks past notes it cannot open to one it can, a page at a time, and does not take them for a wrong key", async () => {
+    // Twelve notes made under another key come first, so the first page of 10 holds no note that opens; the 13th does.
+    const foreign = { vaultKey: await generateVaultKey(), vaultId: world.keys.vaultId, kid: world.keys.kid };
+    for (let n = 0; n < 12; n++) await world.agents.save(`foreign-${n}`, await blobFor(foreign, `foreign-${n}`, `Foreign/${n}.md`, "x\n"), { base: 0, kid: foreign.kid });
+    await world.elsewhere.create("Daily/mine.md", "mine\n");
+    const { vault, seen } = await connect();
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET heads -> 200", "GET heads -> 200"]);
+    vault.close();
+  });
+
+  it("asks the changes feed instead, in the same way, of a server that has no heads route", async () => {
+    await world.elsewhere.create("Daily/a.md", "a\n");
+    const { fetch, seen } = fetchOverNexus();
+    const older: typeof fetch = async (url, init) => (/\/heads(\?|$)/.test(url) ? { status: 404, text: async () => JSON.stringify({ error: "Nexus has no such route." }) } : fetch(url, init));
+    const vault = await AgentVault.connect({ ...credentials, fetch: older });
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET changes -> 200"]);
+    const wrong = { ...credentials, ...(await approvalFor(await generateVaultKey(), world.keys.vaultId)), fetch: older };
+    await expect(AgentVault.connect(wrong)).rejects.toMatchObject({ code: "wrong-key" });
     vault.close();
   });
 
@@ -57,8 +106,8 @@ describe("a note made, updated and read by its id", () => {
     const { vault, seen } = await connect();
     const made = await vault.createNote("Agent/2026-11-15 First.md", "# First\n");
     expect(made).toEqual({ id: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/), path: "Agent/2026-11-15 First.md", version: 1 });
-    expect(asked(seen), "the vault id, and the one save").toEqual(["GET wraps -> 200", "POST save -> 200"]);
-    expect(seen[1]!.body).toMatchObject({ id: made.id, base: 0 });
+    expect(asked(seen), "the vault id, a look for a note that opens, and the one save").toEqual(["GET wraps -> 200", "GET heads -> 200", "POST save -> 200"]);
+    expect(seen[2]!.body).toMatchObject({ id: made.id, base: 0 });
 
     expect(await nexusTexts(world)).toEqual({ "Agent/2026-11-15 First.md": "# First\n" });
     const device = await makeDevice(world, { unlock: new TestUnlock(world.keys) });
@@ -154,13 +203,18 @@ describe("a note made, updated and read by its id", () => {
     vault.close();
   });
 
-  it("says a note it cannot open is unreadable, and does not take a note's text for another vault's", async () => {
-    const made = await world.elsewhere.create("Ideas/shared.md", "from a device\n");
-    const { fetch } = fetchOverNexus();
-    // A vault key of its own that opens none of the notes: the approval is for the vault the server holds, with another key.
-    const vault = await AgentVault.connect({ ...credentials, ...(await approvalFor(await generateVaultKey(), world.keys.vaultId)), fetch });
-    await expect(vault.readNote(made.id)).rejects.toMatchObject({ code: "unreadable" });
-    await expect(vault.updateNote(made.id, 1, "x")).rejects.toMatchObject({ code: "unreadable" });
+  it("says a note it cannot open is unreadable: one made under another key, or at a path the plugin would refuse", async () => {
+    const mine = await world.elsewhere.create("Ideas/mine.md", "this key opens it\n");
+    const refused = await world.elsewhere.create("../outside.md", "a path the plugin refuses\n");
+    const foreign = { vaultKey: await generateVaultKey(), vaultId: world.keys.vaultId, kid: world.keys.kid };
+    await world.agents.save("foreign-note", await blobFor(foreign, "foreign-note", "Ideas/foreign.md", "sealed with another key\n"), { base: 0, kid: foreign.kid });
+
+    const { vault } = await connect();
+    expect(await vault.readNote(mine.id)).toMatchObject({ path: "Ideas/mine.md", version: 1 });
+    for (const id of ["foreign-note", refused.id]) {
+      await expect(vault.readNote(id), id).rejects.toMatchObject({ code: "unreadable" });
+      await expect(vault.updateNote(id, 1, "x"), id).rejects.toMatchObject({ code: "unreadable" });
+    }
     vault.close();
   });
 });
@@ -173,8 +227,8 @@ describe("a vault with many notes", () => {
     await vault.updateNote(made.id, 1, "# First\n\nMore.\n");
     await vault.updateNote(made.id, 1, "# Stale\n");
     await vault.readNote(made.id);
-    expect(seen.filter((s) => WHOLE_VAULT.test(s.route)), "no call asked for more than one note").toEqual([]);
-    expect(asked(seen)).toEqual(["GET wraps -> 200", "POST save -> 200", "POST save -> 200", "POST save -> 409", "GET note -> 200"]);
+    expect(seen.filter((s) => WHOLE_VAULT.test(s.route) && !s.route.startsWith("heads?limit=10")), "no call asked for more than one note").toEqual([]);
+    expect(asked(seen)).toEqual(["GET wraps -> 200", "GET heads -> 200", "POST save -> 200", "POST save -> 200", "POST save -> 409", "GET note -> 200"]);
     vault.close();
   });
 
@@ -182,7 +236,7 @@ describe("a vault with many notes", () => {
     await world.elsewhere.create("Other/a.md", "a\n");
     const { vault, seen } = await connect();
     const made = await vault.createNote("Agent/2026-11-15 First.md", "# First\n");
-    expect(seen.filter((s) => WHOLE_VAULT.test(s.route))).toEqual([]);
+    expect(seen.filter((s) => WHOLE_VAULT.test(s.route) && !s.route.startsWith("heads?limit=10"))).toEqual([]);
     expect(await vault.list()).toEqual(["Agent/2026-11-15 First.md", "Other/a.md"]);
     expect(await vault.listNotes()).toEqual([
       { path: "Agent/2026-11-15 First.md", id: made.id, version: 1 },
