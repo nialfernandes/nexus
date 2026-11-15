@@ -376,7 +376,8 @@ describe("nexus-agent read, write and list", () => {
   it("names the settings it is missing, and is refused with a key that is not the agent's", async () => {
     const none = await run(["list"], { env: {} });
     expect(none.code).toBe(1);
-    for (const name of Object.values(ENV)) expect(none.stderr).toContain(name);
+    for (const name of [ENV.address, ENV.token, ENV.privateKey, ENV.approval]) expect(none.stderr).toContain(name);
+    expect(none.stderr, "the agent's commands never ask for the owner's secret").not.toContain(ENV.ownerSecret);
     const wrong = await nexusAgent(["list"], { env: { ...env, [ENV.privateKey]: encodeBase64((await generateDeviceKeyPair()).privateKey) } });
     expect(wrong.code).toBe(1);
     expect(wrong.stderr).toMatch(/could not be opened with this private key/);

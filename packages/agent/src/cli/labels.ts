@@ -11,6 +11,8 @@ export const ENV = {
   privateKey: "NEXUS_AGENT_PRIVATE_KEY",
   /** The agent's approval, as `approve-agent` printed it. */
   approval: "NEXUS_AGENT_APPROVAL",
+  /** The owner's secret, for the owner's commands (make-identity, allow, deny, owner-sign-in, set-up-agent). When it is not set they ask for it at a hidden prompt. */
+  ownerSecret: "NEXUS_OWNER_SECRET",
 } as const;
 
 /** What stands before each value on its own line of the command's output. A value that is a secret says so. */
