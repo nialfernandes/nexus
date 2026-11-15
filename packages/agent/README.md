@@ -131,14 +131,14 @@ const note = await vault.readNote(made.id);                                     
 ```
 
 A call whose answer was lost (a timeout, a Worker cut off mid-request) may have been kept by Nexus all the same. Made again, `createNote`
-would save a second copy under a new id nobody kept. A writer that can make its note's id again from its own data (a hash of its own
-episode id, say) gives it, and then the call can safely be repeated:
+would save a second copy under a new id nobody kept. A writer that can make a **key** again from its own data (its own episode's id,
+say) gives it, and then the call can safely be repeated:
 
 ```ts
-const id = "ep-123"; // 1 to 128 letters, digits, hyphens or underscores, made again from the writer's own data (in use, a hash of it: Nexus sees the id)
-await vault.createNote("Agent/First.md", "# First\n", { id }); // the answer is lost ...
-await vault.createNote("Agent/First.md", "# First\n", { id }); // ... { id: "ep-123", path, version: 1 }: the note that is there, nothing saved
-await vault.createNote("Agent/First.md", "# Other\n", { id }); // throws AgentError "id-taken": read it (readNote) and update it (updateNote)
+const key = "episode-123"; // any text of 1 to 1024 bytes the writer can make again; the note's id is made from it
+await vault.createNote("Agent/First.md", "# First\n", { key }); // the answer is lost ...
+await vault.createNote("Agent/First.md", "# First\n", { key }); // ... { id, path, version: 1 }: the note that is there, nothing saved
+await vault.createNote("Agent/First.md", "# Other\n", { key }); // throws AgentError "key-taken": read it (readNote) and update it (updateNote)
 ```
 
 It uses no Node module: only `fetch`, `atob`/`btoa`, `TextEncoder` and `crypto.getRandomValues`,
@@ -154,7 +154,7 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   A vault with no note in it cannot show a wrong key, so the first note written there is the
   first proof. `connect` refuses all three the same way, before anything is written, without looking at the whole vault.
   A single note that does not open, or whose path the plugin would refuse, is `unreadable` to `readNote` and `updateNote`.
-- **Notes are found by path.** The server knows a note only by an id (random, unless the caller chose it): the path is inside
+- **Notes are found by path.** The server knows a note only by an id (random, or made from a key the caller keeps, which says nothing about the key): the path is inside
   the encrypted note. The first look at a vault asks Nexus for the newest version of each note
   (`GET /heads`), 100 notes at a time, opens each note to learn its path and keeps only its
   id, its version and its path: the note's text is not kept, and at most one page of encrypted
@@ -172,14 +172,18 @@ so one file runs in Node 22 and in a Cloudflare Worker. A Worker's secrets are s
   is not, the answer is `changed-since` with the version it is at, and nothing is changed, merged or overwritten. A note
   that was deleted is at a newer version, so `updateNote` never brings one back. The note keeps its path;
   `updateNote` reads the version it is given once to learn the path, unless this vault made, read or saved the note just before.
-- **A create can be repeated safely when the caller chooses the id.** Without an id, `createNote` makes a new random one on every
-  call, so a call whose answer was lost and is made again leaves a second copy. `createNote(path, text, { id })` saves the note
-  under the id given (the same rule as any note id: 1 to 128 letters, digits, hyphens or underscores). Nexus sees a note's id, so make it from a hash
-  of the writer's own data, never a name, a path or any text that says what the note holds. When a note with that id is
+- **A create can be repeated safely when the caller gives a key.** Without a key, `createNote` makes a new random id on every
+  call, so a call whose answer was lost and is made again leaves a second copy. `createNote(path, text, { key })` makes the note's id
+  from the key: the same key is always the same id in this vault. Nexus sees every note's id, so the id is **not** the key: it is 16 bytes of
+  an HMAC of the key, under a key derived from the vault key (`noteIdFromKey` in `@nexus/crypto`, written in [docs/FORMAT.md](../../docs/FORMAT.md) section 7.6 with a
+  pinned example), written as 22 characters like any other id. Nexus cannot tell what key an id was made from, or test a guess at it, so the key may be
+  a readable episode number. It is never sent, never stored and never in an error message. The key is 1 to 1024 bytes of well-formed text; an
+  option other than `key` is refused (`bad-settings`), so an old `{ id }` is never taken to be no key. When a note with that id is
   already there **at the same path with the same text**, it is the first call's own note: the call answers it (`{ id, path, version }`,
-  version 1 unless it has been updated since) and saves nothing. When the note there is any other (another text or path, a deleted
-  note, or one this key cannot open) the call throws an `AgentError` with the code `id-taken` and nothing is changed or brought
-  back; the caller reads the note with `readNote` and updates it with `updateNote`. The repeat costs one more read of that note.
+  version 1 unless it has been updated since, when it is the version now) and saves nothing. When the note there is any other (another text or path, a deleted
+  note, or one this vault's key cannot open) the call throws an `AgentError` with the code `key-taken` and nothing is changed or brought
+  back; the caller reads the note with `readNote` (the id is in the answer of the first call) and updates it with `updateNote`. The repeat costs one more
+  read of that note.
 - **A write never overwrites a newer text blind.** A save names the version it started from. When
   Nexus says the note is at another version (409) the library reads that version and puts the
   agent's change on top of it with the same three-way line merge the plugin uses, from the text

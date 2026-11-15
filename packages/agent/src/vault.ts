@@ -7,7 +7,7 @@
 // `close()` overwrites it. Nothing in this file touches a file, a clock other than the one it is given, or a Node module: it runs
 // in Node and in a Cloudflare Worker, over the `fetch` it is given or the runtime's.
 //
-// BY PATH. The server knows a note only by an id (random, unless the caller chose it): the path is inside the encrypted record. So the vault reads what Nexus
+// BY PATH. The server knows a note only by an id (random, or made from a key the caller keeps, which says nothing about the key): the path is inside the encrypted record. So the vault reads what Nexus
 // holds, opens the newest version of each note, and keeps a small index in memory: for each note its id, its version and its path.
 // It does NOT keep a note's text: a vault of thousands of long notes would not fit in a Worker's memory. The first look at a vault
 // asks Nexus for the newest version of each note (`heads`), a page at a time, and holds at most one page of blobs while it decrypts
@@ -23,7 +23,7 @@
 // kept as a second note beside the first ("<name> (duplicate agent <date>).md"), so both survive. `updateNote` does not merge: when
 // the note is not at the version the caller names it answers "changed-since" and changes nothing.
 
-import { decryptNote, devicePublicKey, encryptNote, NexusCryptoError, openApproval } from "@nexus/crypto";
+import { decryptNote, devicePublicKey, encryptNote, NexusCryptoError, noteIdFromKey, openApproval } from "@nexus/crypto";
 import { mergeText } from "@nexus/merge";
 import { decodeBase64, encodeBase64, encodeBase64Url } from "./base64";
 import { AgentError } from "./errors";
@@ -70,10 +70,11 @@ export interface WriteResult {
 /** What `createNote` may be told besides the path and the text. */
 export interface CreateOptions {
   /**
-   * The note's id, one the caller can make again from its own data (1 to 128 letters, digits, hyphens or underscores). A repeat of the same
-   * call, with the same path and text, answers the note that is there and saves nothing. Left out, the note gets a new random id.
+   * A key the caller can make again from its own data (an episode's id, say): 1 to 1024 bytes of text. The note's id is made from it and the
+   * vault key (`noteIdFromKey`), so the same key is the same id in this vault and Nexus, which sees the id, learns nothing from it. A repeat of the
+   * same call, with the same path and text, answers the note that is there and saves nothing. Left out, the note gets a new random id.
    */
-  id?: string;
+  key?: string;
 }
 
 /** One note as the vault knows it without its text: the id Nexus knows it by, the version it is at, and its path. */
@@ -302,21 +303,25 @@ export class AgentVault {
    * the one with the smaller id and moves the other to a duplicate path (see `write`, which looks first). Keep the id: `readNote`
    * and `updateNote` take it.
    *
-   * With no id, each call makes a note under a new random id, so a call whose answer was lost and is made again leaves a second copy
-   * under an id nobody kept. A caller that can make its id again from its own data (a hash of its own episode id) gives it as
-   * `options.id`, and then a repeat is safe: when a note with that id is already there with the same path and the same text, it is the
-   * first call's own note, so its id and version are answered and nothing is saved. When the note there differs (another text or path,
-   * or it was deleted, or this key cannot open it) the call is refused as "id-taken" and changes nothing: the caller reads the note
-   * (`readNote`) and updates it (`updateNote`) if that is what it wants.
+   * With no key, each call makes a note under a new random id, so a call whose answer was lost and is made again leaves a second copy
+   * under an id nobody kept. A caller that can make a key again from its own data gives it as `options.key`, and the id is made from the
+   * key and the vault key (an HMAC under a key derived from the vault key: docs/FORMAT.md section 7.6), so the same key is always the same
+   * id in this vault, and Nexus, which sees ids, cannot tell what the key was. Then a repeat is safe: when a note with that id is already
+   * there with the same path and the same text, it is the first call's own note, so its id and version are answered and nothing is saved.
+   * When the note there differs (another text or path, or it was deleted, or this vault's key cannot open it) the call is refused as
+   * "key-taken" and changes nothing: the caller reads the note (`readNote`) and updates it (`updateNote`) if that is what it wants.
    */
   createNote(path: string, text: string, options: CreateOptions = {}): Promise<NoteRef> {
     return this.#serially(async () => {
       this.#checkPath(path);
       if (typeof text !== "string") throw new AgentError("bad-settings", "A note's text has to be text.");
-      if (options.id !== undefined) this.#checkId(options.id);
-      const id = options.id ?? newNoteId();
+      // An option that is not known is refused: a caller that still passes an `id` would otherwise get a random one and no safe repeat.
+      if (typeof options !== "object" || options === null || Object.keys(options).some((name) => name !== "key")) {
+        throw new AgentError("bad-settings", "createNote takes one option, `key`: the key its note's id is made from.");
+      }
+      const id = options.key === undefined ? newNoteId() : await this.#idOfKey(options.key);
       const reply = await this.#nexus.post("save", { id, base: 0, kid: this.#kid, blob: await this.#seal(id, path, text) });
-      if (reply.status === 409 && options.id !== undefined && typeof reply.json.current === "number") return this.#sameNote(id, path, text);
+      if (reply.status === 409 && options.key !== undefined && typeof reply.json.current === "number") return this.#sameNote(id, path, text);
       if (reply.status !== 200 || reply.json.result !== "saved") throw refusal(reply, "save the note");
       this.#rememberPath(id, reply.json.version, path);
       return { id, path, version: reply.json.version };
@@ -393,17 +398,30 @@ export class AgentVault {
   /** A note id is what Nexus accepts: 1 to 128 letters, digits, hyphens or underscores. Checked here so a wrong one is told plainly and is never sent. */
   #checkId(id: string): void {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
-      throw new AgentError("bad-settings", "A note id is 1 to 128 letters, digits, hyphens or underscores: the id `createNote` told, or the one it was given.");
+      throw new AgentError("bad-settings", "A note id is 1 to 128 letters, digits, hyphens or underscores: the id `createNote` told.");
     }
   }
 
+  /** The id a caller's key makes in this vault. A key that cannot make one is told plainly, and is never repeated in what is said. */
+  async #idOfKey(key: string): Promise<string> {
+    let id: string;
+    try {
+      id = await noteIdFromKey(this.#vaultKey, key);
+    } catch (error) {
+      if (!(error instanceof NexusCryptoError)) throw error;
+      throw new AgentError("bad-settings", "A note's key is 1 to 1024 bytes of text, with no half of a surrogate pair.");
+    }
+    this.#checkId(id);
+    return id;
+  }
+
   /**
-   * A `createNote` with an id found the id already used. When the note there is at this path with this text it is the caller's own note, made
-   * by an earlier call whose answer was lost: answer it as it is now and save nothing. Anything else is another note under the caller's id.
+   * A `createNote` with a key found the id already used. When the note there is at this path with this text it is the caller's own note, made
+   * by an earlier call whose answer was lost: answer it as it is now and save nothing. Anything else is another note under the id the caller's key makes.
    */
   async #sameNote(id: string, path: string, text: string): Promise<NoteRef> {
     const there = await this.#fetch(id, undefined);
-    if (there === null || there.entry.path !== path || there.text !== text) throw idTaken();
+    if (there === null || there.entry.path !== path || there.text !== text) throw keyTaken();
     this.#rememberPath(id, there.entry.version, path);
     return { id, path, version: there.entry.version };
   }
@@ -671,7 +689,7 @@ export class AgentVault {
 const notFound = (path: string): AgentError => new AgentError("not-found", `There is no note at ${path}.`);
 const wrongKey = (): AgentError => new AgentError("wrong-key", "The approval's key opens none of the notes in this vault, so it is not this vault's key. Ask for a new approval.");
 const noNoteWithId = (): AgentError => new AgentError("not-found", "There is no note with that id, or it was deleted.");
-const idTaken = (): AgentError => new AgentError("id-taken", "A note with that id is already there, and it is not the note this call would make (its text or path differs, it was deleted, or this key cannot open it), so nothing was saved. Read it with readNote and update it with updateNote if that is what you want.");
+const keyTaken = (): AgentError => new AgentError("key-taken", "A note with that key's id is already there, and it is not the note this call would make (its text or path differs, it was deleted, or this vault's key cannot open it), so nothing was saved. Read it with readNote and update it with updateNote if that is what you want.");
 const unreadable = (what: string): AgentError => new AgentError("unreadable", `The note ${what} could not be opened with this vault's key, or names a path the plugin would refuse.`);
 
 /** A random id for a note, made the first time it is saved: 16 random bytes in url-safe base64, as the plugin makes them. */
