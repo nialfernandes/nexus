@@ -46,7 +46,7 @@ describe("the package README", () => {
 
   it("names every call the library has for a note by its id, and for the vault by path, and the option that takes the WebAssembly", () => {
     const methods = Object.entries(Object.getOwnPropertyDescriptors(AgentVault.prototype)).filter(([name, d]) => name !== "constructor" && typeof d.value === "function").map(([name]) => name);
-    expect(methods.sort(), "the library's calls").toEqual(["close", "createNote", "list", "listNotes", "read", "readNote", "remove", "unreadableNotes", "updateNote", "write"]);
+    expect(methods.sort(), "the library's calls").toEqual(["close", "createNote", "list", "listNotes", "noteIdForKey", "read", "readNote", "remove", "unreadableNotes", "updateNote", "write"]);
     for (const name of methods) expect(README, name).toContain(name);
     for (const name of ["open", "connect"]) expect(typeof AgentVault[name as "open" | "connect"], name).toBe("function");
     expect(README).toContain("AgentVault.connect(");
@@ -62,6 +62,13 @@ describe("the package README", () => {
     expect(WORDS, "the operator sees an id, so the id is not the key").toMatch(/Nexus sees every note's id, so the id is \*\*not\*\* the key: it is 16 bytes of an HMAC of the key, under a key derived from the vault key/);
     expect(WORDS).toContain("[docs/FORMAT.md](../../docs/FORMAT.md) section 7.6");
     expect(WORDS).toMatch(/an option other than `key` is refused/);
+  });
+
+  it("says how a writer that lost a note's id finds it again from its key, and that the refusal carries the id", () => {
+    expect(README).toContain("noteIdForKey(key)");
+    expect(WORDS).toMatch(/`readNote\(await vault\.noteIdForKey\(key\)\)` and then `updateNote` at the version that read tells/);
+    expect(WORDS).toMatch(/The error's `id` field is the note's id/);
+    expect(WORDS).toMatch(/with no request to Nexus/);
   });
 
   it("says how the first look at a vault is made and what it keeps, and that a stale update changes nothing", () => {
