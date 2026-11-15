@@ -1,0 +1,25 @@
+# Asks GitHub to propose dependency updates as pull requests, so none is applied without the check in
+# .github/workflows/check.yml running on it first and a person reading it before it is merged.
+#
+# github-actions: the actions in .github/workflows are named by a full commit hash, with the tag in a trailing
+# comment. Dependabot keeps that shape: it writes the new full hash and updates the comment, so the pinning check in
+# .github/check-pinned-actions.sh still passes on its pull requests.
+#
+# npm: the root folder holds the one workspace and the one lockfile that cover every package except the probe, which
+# is standalone. All of its updates come as a single pull request each week, so the encryption libraries' security
+# fixes arrive together with the rest instead of as a stream of small ones.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
