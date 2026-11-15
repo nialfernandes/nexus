@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES, FORMAT_VERSION, PASSWORD_KDF, PASSWORD_KDF_LIMITS, RECOVERY_ALPHABET, encryptNote,
 } from "../src/index.js";
-import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, DEVICE_KEY_CODE_LABEL, MAX_ID_BYTES, MIN_PADDED_RECORD_BYTES, RECOVERY_CHECK_LABEL, RECOVERY_KDF_LABEL, Kind } from "../src/constants.js";
+import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, DEVICE_KEY_CODE_LABEL, MAX_ID_BYTES, MIN_PADDED_RECORD_BYTES, NOTE_ID_BYTES, NOTE_ID_KDF_LABEL, RECOVERY_CHECK_LABEL, RECOVERY_KDF_LABEL, Kind } from "../src/constants.js";
 import { MIN_NOTE_BLOB_BYTES } from "../src/note.js";
 import { PASSWORD_WRAP_BYTES, RECOVERY_WRAP_BYTES } from "../src/wraps.js";
 import * as format from "../src/format.js";
 import { fromHex } from "./helpers.js";
-import { APPROVAL_CODE_TEXT, DEVICE_KEY_CODE_TEXT, NOTE_BLOB_HEX, NOTE_CONTEXT, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX, VAULT_KEY } from "./fixtures.js";
+import { APPROVAL_CODE_TEXT, DEVICE_KEY_CODE_TEXT, NOTE_ID_FROM_KEY_TEXT, NOTE_ID_KEY_HEX, NOTE_ID_KEY_TEXT, NOTE_ID_MAC_HEX, NOTE_BLOB_HEX, NOTE_CONTEXT, PASSWORD_WRAP_HEX, RECOVERY_KEY_TEXT, RECOVERY_WRAP_HEX, VAULT_KEY } from "./fixtures.js";
 
 const doc = readFileSync(new URL("../../../docs/FORMAT.md", import.meta.url), "utf8");
 const docWithoutLineBreaks = doc.replace(/\n/g, "");
@@ -32,6 +32,14 @@ describe("docs/FORMAT.md says what the code does", () => {
     expect(doc).toContain(`The label is the ${DEVICE_KEY_CODE_LABEL.length} ASCII bytes of \`${DEVICE_KEY_CODE_LABEL}\``);
     expect(doc).toContain('digest = SHA-256( "nexus v1 device key code" || N )');
     expect(doc).toContain('digest = SHA-256( "nexus v1 approval code" || N || A || kid (4) || SHA-256(S) )');
+  });
+
+  it("writes the derivation of a note id made from a key: its label, how much of the HMAC it keeps, and the pinned example", () => {
+    expect(doc).toContain(`info = "${NOTE_ID_KDF_LABEL}"`);
+    expect(doc).toContain(`The label is the ${NOTE_ID_KDF_LABEL.length} ASCII bytes of \`${NOTE_ID_KDF_LABEL}\``);
+    expect(doc).toContain(`the first ${NOTE_ID_BYTES} bytes of HMAC-SHA-256(IDK, the UTF-8 bytes of key)`);
+    expect(doc).toContain("IDK = HKDF-SHA-256(IKM = VK, salt = empty,");
+    for (const value of [NOTE_ID_KEY_TEXT, NOTE_ID_KEY_HEX, NOTE_ID_MAC_HEX, NOTE_ID_FROM_KEY_TEXT]) expect(doc, value).toContain(value);
   });
 
   it("states the version, labels, alphabet and limits the code uses", () => {

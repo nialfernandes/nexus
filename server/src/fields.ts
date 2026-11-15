@@ -20,7 +20,8 @@ export const MAX_VAULT_ID_BYTES = 1024;
 export const MAX_ID_LENGTH = 128;
 
 /**
- * A note id is chosen by the device, at random, and says nothing about the note. Letters, digits, `_` and `-` are
+ * A note id is chosen by the device and says nothing about the note: random bytes, or, for an agent that makes a note again after a lost
+ * answer, an HMAC of a key it keeps (docs/FORMAT.md section 7.6). Nexus cannot tell which, and takes either. Letters, digits, `_` and `-` are
  * what url-safe base64, hex and a UUID are written in. A `/` or a `.` is left out on purpose: a path has them, and
  * a path must never be used as an id.
  */
@@ -35,7 +36,7 @@ export function onlyFields(input: Record<string, unknown>, allowed: readonly str
 
 export function noteId(value: unknown): string {
   if (typeof value !== "string" || !NOTE_ID.test(value)) {
-    throw new Refusal(400, `A note id is 1 to ${MAX_ID_LENGTH} letters, digits, hyphens or underscores, chosen at random by the device. It is never a path.`);
+    throw new Refusal(400, `A note id is 1 to ${MAX_ID_LENGTH} letters, digits, hyphens or underscores, chosen by the device (random, or made from a key it keeps). It is never a path.`);
   }
   return value;
 }
