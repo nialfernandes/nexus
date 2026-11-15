@@ -322,6 +322,40 @@ which vendors treat as out of scope [S67]. Nexus
 treats an attested enclave as an optional place to run the server, for people who
 need it.
 
+### 3.7 The linking job and its language model
+
+The linking job (`packages/linker`) is an agent (3.5) with a key of its own. It reads transcript notes and
+joins them to the books, websites, quotes and people they mention. To find what is **said**, it has to read
+the words, so it **decrypts the transcript text on the machine it runs on** (a Cloudflare Worker, or a terminal)
+and **sends that text to a language-model endpoint that the owner chooses**. The address, the key and the model's
+name are the owner's settings, and the job has no default endpoint and no default model. This part is this
+document's own reasoning.
+
+**What the endpoint sees.** The spoken text of each transcript note the job takes on, sent in parts when it is long
+(for a note with no transcript heading, everything below its front matter). It also sees what any caller shows: the
+address the call came from, when it was made, and how long it was. It is given the key the owner set for it, and
+nothing else of Nexus's: not the vault key, not the agent's key or token, not a note's path or id, not any note the job
+is not reading, and not the links in the show notes, which the job reads itself and never visits. Nexus's server sees none of
+this, because the call does not go through it.
+
+**What it does not protect.** Once the text is at the endpoint, what its operator does with it (keeps it, logs it, trains
+on it) is theirs to decide, and nothing in Nexus can stop it. This is the same limit as for a cloud assistant (3.6). If the
+endpoint is run by a company, that company sees the transcripts.
+
+**The owner can keep the text at home.** The endpoint is only an address. The owner can point it at a model running on their
+own machine or network, one that answers the same chat form, and then the transcript text goes no further than that machine. A
+terminal command run on that machine can reach it directly. A Cloudflare Worker cannot reach a machine at home unless the owner
+makes it reachable from outside, which has its own risks, so someone who wants the text to stay at home should run the command
+there on a timer.
+
+**What a wrong or hostile answer can do.** The job does not trust what the model says. It reads the answer as a list, checks each
+item against a fixed shape and drops what does not fit, and it takes the characters a link or a path reads as syntax out of every
+title before it is a note's name. A hostile endpoint, or a transcript written to talk the model into something, can therefore at worst
+make the job write wrong or unwanted notes into `Mentions/` (at most 100 for one transcript note) and wrong links into that
+transcript note. It cannot make the job read or change any other note, delete a note, or write outside `Mentions/`: the job has no call
+that deletes, and the only things it changes in a note outside `Mentions/` are one `## Mentions` section and one front matter line. The notes
+it writes are encrypted like any other, so the server sees only their ids and sizes.
+
 ## 4. What is out of scope
 
 These are not defended against. They are stated so you do not assume otherwise.
@@ -340,6 +374,7 @@ These are not defended against. They are stated so you do not assume otherwise.
   store yourself plus approving each new device from one you already have.
 - **A lost key.** Lose all devices and the Recovery Key and the vault is gone.
 - **What an assistant company does with text it is given** (3.6).
+- **What the operator of a language-model endpoint does with the transcript text the linking job sends it** (3.7).
 - **The web page's delivered code and other plugins on your device** (3.2, 3.5).
 - **Mistakes in our own code or the libraries we use.** That is what testing and
   an outside audit are for, and neither is finished (section 7). If you find

@@ -10,7 +10,8 @@ It is part of Nexus, not of any one writer of transcript notes. It reads and wri
 it runs two ways: as a **Cloudflare Worker on a cron trigger**, and as a **command** in a terminal.
 
 **Nexus encryption has not yet been independently audited.** See the [threat model](../../docs/THREAT-MODEL.md). The job
-sends the text of a transcript to the model endpoint you choose, so that endpoint sees what the job reads.
+sends the text of a transcript to the model endpoint you choose, so that endpoint sees what the job reads; section 3.7 of the threat model says
+what it sees and how to keep it on your own machine.
 
 ## What it does to a note
 
@@ -27,7 +28,7 @@ For each transcript note in the folders you name that has not been linked yet:
      model. It is asked for a JSON list of `{ "type": "book" | "website" | "quote" | "person", "title", "author"?, "url"? }`.
      The answer is **checked against that shape and anything that does not fit is dropped**. A transcript longer than
      the model's window (`LINKER_MODEL_WINDOW_CHARS`) is sent in parts, cut between paragraphs, and the lists are joined.
-2. **Makes sure each thing has its one note**, `Mentions/<title>.md`, straight in the one folder (no subfolders), with its kind
+2. **Makes sure each thing has its one note** (made with its normalised title as the key of its id, so a repeat is never a second note), `Mentions/<title>.md`, straight in the one folder (no subfolders), with its kind
    in its details:
 
    ```
@@ -114,9 +115,11 @@ its WebAssembly file.
   as two notes, which a person can join. A page with no title in its address (a short link) is a website named by its address.
 - **A note that fails every run** (a model that cannot read that transcript) is taken on each run and fills one of its places.
   The job keeps no record of failures: it adds nothing to a note it did not link.
-- **One run at a time.** Two runs at once (a slow run still going when the next cron trigger wakes, or a command run beside the
-  Worker) can each make a note for a thing the other has not yet made, and the vault then holds two notes at one path, which the
-  plugin tells apart as it does any two notes made at once. Leave a gap between triggers longer than a run takes.
+- **Two runs at once** (a slow run still going when the next cron trigger wakes, or a command run beside the Worker) are safe for the
+  Mentions notes: each note is made with its normalised title as the key of its id (`createNote`'s `key` in the agent library), so two runs
+  that make the note for one thing at the same moment make the same note, and a run that finds the other's note, even under another
+  capitalisation, uses it. They may both do the same transcript note, but only one save of it succeeds, because each is at the version it read.
+  The other is left for the next run, which finds it linked. They do each ask the model, so it costs twice.
 - **A note that mentions a great deal** (a transcript that talks the model into a long list, or show notes of hundreds of links) is linked
   to the first 100 things found, and the run logs that it was cut.
 - **A transcript note edited mid-run** has the Mentions notes the run made kept; the next run uses them and does not make them again.

@@ -3,6 +3,7 @@
 // Mentions/ changes except by the section and the one line.
 
 import { afterEach, describe, expect, it } from "vitest";
+import { nexusNotes } from "../../../plugin/tests/world";
 import { MENTIONS_FOLDER } from "../src/titles";
 import { hushPath, transcriptNote } from "./fixtures";
 import { listOf, openLab, type Lab } from "./lab";
@@ -243,5 +244,61 @@ describe("what is never touched", () => {
     await l.run();
     const linked = (await l.texts())[path]!;
     expect(linked.replace("mentions: linked\r\n", "").replace("## Mentions\r\n\r\n- [[b.example page]]\r\n- [[Ada Lovelace]]\r\n\r\n", "")).toBe(original);
+  });
+});
+
+describe("two runs started together", () => {
+  /** A model that answers only once both runs have asked it, so both have looked at the vault before either has made a note. */
+  function bothAsk(l: Lab, answerFor: (call: number) => string): void {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    l.model.answer(async (_, call) => {
+      if (l.model.asked.length >= 2) release();
+      await gate;
+      return answerFor(call);
+    });
+  }
+
+  /** The notes in Mentions/, counted by the id Nexus holds them under, so two notes at one path are two. */
+  async function mentionNotes(l: Lab): Promise<Array<{ path: string; text: string }>> {
+    return Object.values(await nexusNotes(l.world)).filter((note) => note.path.startsWith(MENTIONS_FOLDER));
+  }
+
+  it("make one note for a thing, not two, and the transcript note is linked once", async () => {
+    const l = await lab();
+    const path = hushPath("One");
+    await l.seed(path, withLink("One"));
+    bothAsk(l, () => BOOK);
+    const [a, b] = await Promise.all([l.run(), l.run()]);
+    expect(l.model.asked).toHaveLength(2);
+    // Each saved its Mentions notes; only one could save the transcript note, at the version both read.
+    expect([...a.report.linked, ...b.report.linked]).toEqual([path]);
+    expect([...a.report.changedMeanwhile, ...b.report.changedMeanwhile]).toEqual([path]);
+    expect([...a.report.failed, ...b.report.failed]).toEqual([]);
+
+    expect((await mentionNotes(l)).map((note) => note.path).sort()).toEqual(["Mentions/Atomic Habits.md", "Mentions/James Clear.md"]);
+    expect((await l.texts())[path]).toContain("- [[Atomic Habits]]\n");
+    // The next run finds it linked, and changes nothing.
+    const before = await l.refs();
+    expect((await l.run()).report.tried).toBe(0);
+    expect(await l.refs()).toEqual(before);
+  });
+
+  it("make one note when they name the thing in different capitals, and link to the note that is there", async () => {
+    const l = await lab();
+    const path = hushPath("One");
+    await l.seed(path, transcriptNote({ title: "One", spoken: ["Said."] }));
+    // One run hears "the atomic habits", the other "Atomic Habits.": two paths, one title.
+    bothAsk(l, (call) => listOf({ type: "book", title: call === 1 ? "the atomic habits" : "Atomic Habits.", ...(call === 1 ? {} : { author: "James Clear" }) }));
+    const [a, b] = await Promise.all([l.run(), l.run()]);
+    expect([...a.report.failed, ...b.report.failed]).toEqual([]);
+
+    const notes = await mentionNotes(l);
+    const books = notes.filter((note) => /^Mentions\/(the )?atomic habits/i.test(note.path));
+    expect(books).toHaveLength(1);
+    const name = books[0]!.path.slice(MENTIONS_FOLDER.length, -".md".length);
+    // Whichever run's name won, the transcript note links to a note that exists.
+    expect((await l.texts())[path]).toContain(`- [[${name}]]\n`);
+    expect(notes.filter((note) => note.path === "Mentions/James Clear.md")).toHaveLength(1);
   });
 });

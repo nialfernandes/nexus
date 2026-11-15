@@ -21,8 +21,12 @@ export interface NoteStore {
   listNotes(): Promise<NoteRef[]>;
   /** One note, as it is now. */
   readNote(id: string): Promise<NoteContent>;
-  /** A new note at `path`. */
-  createNote(path: string, text: string): Promise<NoteRef>;
+  /**
+   * A new note at `path`. With a `key`, its id is made from the key and the vault key: the same key is always the same id, so a second call
+   * with it makes no second note. It answers the note that is there when its path and text are the same, and is refused with the code
+   * `key-taken` when they are not.
+   */
+  createNote(path: string, text: string, options?: { key: string }): Promise<NoteRef>;
   /** The next version of a note, only when it is still at `version`. */
   updateNote(id: string, version: number, text: string): Promise<SaveResult>;
 }

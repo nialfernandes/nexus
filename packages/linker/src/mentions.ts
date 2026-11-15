@@ -41,6 +41,11 @@ export class MentionNotes {
 
   constructor(store: NoteStore, paths: ReadonlyArray<{ id: string; path: string }>) {
     this.#store = store;
+    this.#add(paths);
+  }
+
+  /** Takes in the notes of Mentions/ among `paths` that are not known yet. */
+  #add(paths: ReadonlyArray<{ id: string; path: string }>): void {
     for (const ref of [...paths].sort((a, b) => (a.path < b.path ? -1 : 1))) {
       const name = mentionName(ref.path);
       if (name === null) continue;
@@ -77,10 +82,23 @@ export class MentionNotes {
     return name;
   }
 
+  /**
+   * Makes the note, with the title's key as the key of its id: another run (a cron trigger that came while a run was still going, a command
+   * beside the Worker) that makes the note for the same title at the same moment makes the SAME note, not a second one. When that run's note
+   * is at another path or has other text, the vault says `key-taken`: the note is there, so this run looks for it and uses it as one that existed.
+   */
   async #create(mention: Mention, name: string, authorName: string | null): Promise<string> {
-    const made = await this.#store.createNote(mentionPath(name), newText(mention, name, authorName));
-    this.#byKey.set(titleKey(name), { id: made.id, name });
-    return name;
+    try {
+      const made = await this.#store.createNote(mentionPath(name), newText(mention, name, authorName), { key: titleKey(name) });
+      this.#byKey.set(titleKey(name), { id: made.id, name });
+      return name;
+    } catch (error) {
+      if (!(error instanceof Error) || (error as { code?: unknown }).code !== "key-taken") throw error;
+      this.#add(await this.#store.listNotes());
+      const known = this.#find([name]);
+      if (known === undefined) throw error;
+      return this.#fill(known, mention, authorName);
+    }
   }
 
   /** Adds the author or the address to a note that has none, and nothing else. A note that changed meanwhile keeps what it has: the link works all the same. */
