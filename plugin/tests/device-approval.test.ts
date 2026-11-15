@@ -10,7 +10,7 @@
 
 import { generateDeviceKeyPair, generateVaultKey, sealApproval } from "@nexus/crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApprovalError, approveDevice, signInForKey, type KeySignIn, type PendingApproval } from "../src/approval";
+import { ApprovalError, MATCHING_CODE_TRIES, approveDevice, signInForKey, type KeySignIn, type PendingApproval } from "../src/approval";
 import { encodeBase64 } from "../src/base64";
 import { foundIn } from "./leaks";
 import {
@@ -170,6 +170,26 @@ describe("device A approves a new device B", () => {
     expect(await checkCode(outcome).confirm(approved.code.toLowerCase().replace("-", " "))).toBe("unlocked");
   });
 
+  it("closes after three wrong codes, as a refusal does: the right code is then too late, and no key or token was kept", async () => {
+    const a = await deviceA();
+    const b = await newDevice();
+    let approved!: { code: string };
+    const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
+      if (wait === 0) approved = await approveDevice(approver(a), shown.code, shown.keyCode);
+    });
+    const pending = checkCode(outcome);
+    expect(MATCHING_CODE_TRIES).toBe(3);
+    const other = approved.code === "00000-00000" ? "11111-11111" : "00000-00000";
+    for (const left of [2, 1, 0]) {
+      expect(await pending.confirm(other)).toBe("mismatch");
+      expect(pending.triesLeft).toBe(left);
+    }
+    expect(await pending.confirm(approved.code), "the right code after the third wrong one").toBe("closed");
+    expect(await pending.confirm(other), "and a wrong one").toBe("closed");
+    expect(b.unlock.keys()).toBeNull();
+    expect(hasToken(b), "no token was kept").toBe(false);
+  });
+
   it("is not unlocked by a wrong code, which leaves the approval waiting for the right one, and a refusal forgets everything", async () => {
     const a = await deviceA();
     const b = await newDevice();
@@ -179,9 +199,11 @@ describe("device A approves a new device B", () => {
     });
     const pending = checkCode(outcome);
     const other = approved.code === "00000-00000" ? "11111-11111" : "00000-00000";
-    for (const typed of [other, "", "not a code", approved.code.slice(0, 9)]) {
+    expect(pending.triesLeft).toBe(MATCHING_CODE_TRIES);
+    for (const typed of [other, "not a code"]) {
       expect(await pending.confirm(typed), `typed "${typed}"`).toBe("mismatch");
     }
+    expect(pending.triesLeft, "two wrong codes used two tries").toBe(MATCHING_CODE_TRIES - 2);
     expect(b.unlock.keys()).toBeNull();
     expect(hasToken(b)).toBe(false);
 

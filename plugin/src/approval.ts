@@ -38,6 +38,9 @@ export interface KeySignInDeps extends SignInDeps {
   unlock: KeyReceiver;
 }
 
+/** How many wrong matching codes an approval takes: the third one closes it, as `refuse` does, and a new approval has to be asked for. */
+export const MATCHING_CODE_TRIES = 3;
+
 /** What was handed to the new device, held back until the person has checked the code. */
 export interface PendingApproval {
   /** The matching code this device worked out. A screen may show it for the person to compare. */
@@ -46,10 +49,14 @@ export interface PendingApproval {
    * The person typed the code the approving device shows. If it is the one worked out here, the token is kept and the key is put
    * in the unlock port: "unlocked". If it is not (or is not a code), nothing happens and the person may try again: "mismatch".
    * "changed" means the address or user name was changed meanwhile, so everything is dropped. "closed" means it was refused already.
+   * A wrong code uses up one of MATCHING_CODE_TRIES: the last one answers "mismatch" and closes the approval, the key overwritten, so
+   * every later call answers "closed". A mismatch is a typing mistake or an approval a server swapped, and a swapped one never matches.
    */
   confirm(typed: string): Promise<"unlocked" | "mismatch" | "changed" | "closed">;
   /** The person says the codes did not match, or gives up: the token and the key are forgotten. */
   refuse(): void;
+  /** How many wrong codes are still allowed: MATCHING_CODE_TRIES at first, 0 once the approval is closed. */
+  readonly triesLeft: number;
 }
 
 export type KeySignIn =
@@ -106,9 +113,11 @@ export async function signInForKey(deps: KeySignInDeps): Promise<KeySignIn> {
   }
 
   let open = true;
+  let triesLeft = MATCHING_CODE_TRIES;
   const refuse = (): void => {
     if (!open) return;
     open = false;
+    triesLeft = 0;
     opened.vaultKey.fill(0);
   };
   return {
@@ -117,7 +126,10 @@ export async function signInForKey(deps: KeySignInDeps): Promise<KeySignIn> {
       code,
       async confirm(typed) {
         if (!open) return "closed";
-        if (readApprovalCode(typed) !== code) return "mismatch";
+        if (readApprovalCode(typed) !== code) {
+          if (--triesLeft <= 0) refuse();
+          return "mismatch";
+        }
         if (!(await keepToken())) {
           refuse();
           return "changed";
@@ -127,6 +139,9 @@ export async function signInForKey(deps: KeySignInDeps): Promise<KeySignIn> {
         return "unlocked";
       },
       refuse,
+      get triesLeft() {
+        return triesLeft;
+      },
     },
   };
 }

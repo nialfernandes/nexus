@@ -56,6 +56,7 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(WORDS).toMatch(/key holder \(`src\/key-holder\.ts`\)/);
     expect(WORDS).toMatch(/setup controller \(`src\/vault-setup\.ts`\)/);
     expect(WORDS).toMatch(/no second copy of any of them in this plugin/i);
+    expect(WORDS).toMatch(/overwrites its bytes with zeros, and so does signing out/i);
     expect(WORDS, 'and no longer says the plugin is given a port that never holds a key').not.toMatch(/never holds a key/i);
   });
 

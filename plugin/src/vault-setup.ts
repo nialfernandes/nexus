@@ -63,12 +63,9 @@ import {
   openRecoveryWrap, publicKeyCode, readAgentPublicKey, recoveryWrapRequest,
   type NewVault, type RecoveryWrapRequest,
 } from "@nexus/agent/setup";
-import { ApprovalError, UNREACHABLE, approveDevice as approveWithKeyCode, signInForKey, type PendingApproval } from "./approval";
+import { ApprovalError, MATCHING_CODE_TRIES, UNREACHABLE, approveDevice as approveWithKeyCode, signInForKey, type PendingApproval } from "./approval";
 import type { KeyHolder } from "./key-holder";
 import type { Http, PluginData } from "./types";
-
-/** How many times the matching code may be typed before the approval is thrown away. The same as for the check characters. */
-export const MATCHING_CODE_TRIES = TYPE_BACK_TRIES;
 
 /** What a `working` step is doing. */
 export type Doing = "looking" | "starting-sign-in" | "saving" | "opening" | "approving";
@@ -333,8 +330,8 @@ export class VaultSetup {
       this.#pending = null;
       return this.#stop(flow, "bad-approval", SETUP_WORDS.badApproval);
     }
-    const triesLeft = shown.triesLeft - 1;
-    if (triesLeft > 0) return this.#set({ step: "type-matching-code", triesLeft, message: SETUP_WORDS.wrongMatchingCode });
+    // The approval counts the wrong codes and closes itself on the last one (approval.ts), so every caller gets the same limit.
+    if (pending.triesLeft > 0) return this.#set({ step: "type-matching-code", triesLeft: pending.triesLeft, message: SETUP_WORDS.wrongMatchingCode });
     this.#dropPending();
     this.#stop(flow, "codes-differ", SETUP_WORDS.codesDiffer);
   }

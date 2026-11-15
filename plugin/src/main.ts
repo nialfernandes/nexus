@@ -161,6 +161,8 @@ export default class NexusPlugin extends Plugin {
       this.keyedFor = this.serverKey();
       this.setup?.lock();
     }
+    // Signing out (the settings button, or a token Nexus no longer knows) locks the vault too: a signed-out device holds no key.
+    if (this.state.token === null && this.keyHolder.isUnlocked) this.setup?.lock();
     if (shared.address !== this.savedAddress) {
       this.savedAddress = shared.address;
       this.saving = this.saving.then(() => this.saveData(shared)).catch((error) => console.error("Nexus plugin: could not save its data:", error));

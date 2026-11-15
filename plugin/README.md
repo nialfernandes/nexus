@@ -121,8 +121,8 @@ The sync engine never makes or stores a key. It asks the unlock port
 has to encrypt or open a note. The port is the key holder (`src/key-holder.ts`): one
 object that starts locked. The key is held in memory only while unlocked, and nothing
 in this plugin writes it to disk. Locking the vault, or the plugin unloading, drops
-the key and overwrites its bytes with zeros, and so does changing the Nexus address
-or the user name, because the key belonged to the other vault.
+the key and overwrites its bytes with zeros, and so does signing out, and so does changing the
+Nexus address or the user name, because the key belonged to the other vault.
 
 The setup controller (`src/vault-setup.ts`) is what puts the key in the holder. It
 is a plain state machine with no look and no screen of its own: a screen reads its
@@ -170,7 +170,8 @@ unlocks the vault with no Recovery Key typed.
 - The new device works out the matching code from both devices' keys and what it was handed. It uses nothing
   it was handed, not the token and not the key, until the person types the approving device's code on
   it and it is the same. An approval a server made or swapped gives a different code and is refused. The
-  setup controller allows three tries at the matching code, then throws the approval away.
+  approval itself (`src/approval.ts`) allows three wrong matching codes and then closes, key and all, so the setup
+  controller and any other caller get the same limit.
 
 The derivation of both codes is in [docs/FORMAT.md](../docs/FORMAT.md) section 7.4. The vault key goes to the
 unlock port and nowhere else; nothing here writes a key or an approval to disk.

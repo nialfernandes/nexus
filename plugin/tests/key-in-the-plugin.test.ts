@@ -110,6 +110,27 @@ describe("the plugin's entry", () => {
     expect(again.vaultKey.every((byte) => byte === 0)).toBe(true);
   });
 
+  it("lets go of the key when the device is signed out (the settings button, or a token Nexus no longer knows): the key holder is empty and the engine does not sync; signing in again does not bring the key back", async () => {
+    const { plugin } = await loadedPlugin();
+    const keys = KEY();
+    plugin.keyHolder.unlock(keys);
+    expect(plugin.engine.status()).not.toMatch(/locked|signed out/i);
+
+    // What the settings tab's Sign out button does.
+    plugin.state.token = null;
+    await plugin.save();
+    expect(plugin.keyHolder.keys()).toBeNull();
+    expect(keys.vaultKey.every((byte) => byte === 0), "overwritten, not only forgotten").toBe(true);
+    expect(plugin.setup.state).toEqual({ step: "locked" });
+    expect(plugin.engine.status()).toMatch(/signed out/i);
+
+    plugin.state.token = "nx_a_token_this_device_holds";
+    await plugin.save();
+    expect(plugin.keyHolder.keys(), "signed in again: still locked").toBeNull();
+    expect(plugin.engine.status()).toMatch(/locked/i);
+    expect(requested, "and nothing was asked of Nexus").toEqual([]);
+  });
+
   it("never writes the key where the plugin saves its data", async () => {
     const { plugin, local, stored } = await loadedPlugin();
     plugin.keyHolder.unlock(KEY());
