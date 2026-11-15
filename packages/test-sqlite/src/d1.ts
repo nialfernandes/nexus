@@ -1,11 +1,14 @@
 // A stand-in for a Cloudflare D1 binding, made from an in-memory SQLite database (node:sqlite), so Nexus's tests
 // run on a plain machine and need no Cloudflare runtime. It speaks only the part of the D1 API that the Cloudflare
-// plug uses (plugs/cloudflare/d1.ts): prepare, bind, first, all, run and batch.
+// plug uses (server/src/plugs/cloudflare/d1.ts): prepare, bind, first, all, run and batch.
 //
 // It keeps D1's two behaviours that Nexus relies on:
 //   - a batch is ONE TRANSACTION: every statement is applied or none is (a failure rolls the whole batch back);
 //   - foreign keys are enforced, as D1 enforces them.
 // A row comes back as a plain object keyed by column name and a count as a JS number, the same as D1 gives.
+//
+// It names no Cloudflare type, so a package without @cloudflare/workers-types can use it. A test that has to hand it
+// to code that wants a `D1Database` says so with one cast, where it does.
 
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
@@ -59,9 +62,9 @@ export function statementsOf(sql: string): string[] {
     .filter(Boolean);
 }
 
-export function memoryD1(): D1Database & MemoryD1 {
+export function memoryD1(): MemoryD1 {
   const db = new DatabaseSync(":memory:");
-  const world: MemoryD1 = {
+  return {
     prepare: (sql) => new Prepared(db, sql),
     async batch(statements) {
       db.exec("BEGIN");
@@ -78,5 +81,4 @@ export function memoryD1(): D1Database & MemoryD1 {
       for (const statement of statementsOf(sql)) db.exec(statement);
     },
   };
-  return world as unknown as D1Database & MemoryD1;
 }

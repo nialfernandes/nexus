@@ -1,0 +1,23 @@
+{
+  "name": "nexus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nexus: end-to-end encrypted notes and sync. This is the root of the workspace that holds the encryption, the merge, the server and the Obsidian plugin; the probe is standalone.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "packages/crypto",
+    "packages/merge",
+    "packages/test-sqlite",
+    "server",
+    "plugin"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @nexus/crypto && npm run build --workspace nexus-obsidian",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run build --workspace @nexus/crypto && npm run typecheck && npm run build --workspace nexus-obsidian && npm run test"
+  }
+}

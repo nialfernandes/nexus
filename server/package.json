@@ -5,15 +5,16 @@
   "description": "The Nexus sync server: every version of every note, kept as the encrypted blob a device made, in a SQL database, behind a small HTTP API. It cannot read a note. Runs on Cloudflare today and is written to run on any host.",
   "license": "MIT",
   "type": "module",
-  "engines": {
-    "node": ">=22.13"
-  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@nexus/crypto": "0.1.0"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260925.2",
+    "@nexus/test-sqlite": "0.1.0",
     "@types/node": "26.6.6",
     "typescript": "7.0.2",
     "vitest": "5.1.0"

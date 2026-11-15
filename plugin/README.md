@@ -79,23 +79,27 @@ the settings tab), with no Node or Electron module, so it runs on an iPhone.
 ## Build and test
 
 ```
-cd plugin
-npm ci
-npm run check
+npm ci                # at the repository root: installs every package, this one included
+npm run check         # at the root: builds the encryption package, then checks every package
 ```
 
-`npm run check` builds the two packages the plugin depends on (`packages/crypto`,
-which needs its own `npm ci` and a build, and `packages/merge`), type-checks,
-builds `main.js` from the TypeScript in `src/` and runs the tests. Run
-`npm run packages` once before `npm test` or `npm run build` on their own, since the
-encryption package has to be built first. `npm run build` alone makes `main.js`.
+The plugin is one workspace of the repository's root `package.json`, with the
+encryption package (`packages/crypto`), the merge package (`packages/merge`) and the
+server, so one `npm ci` at the root installs them all. `npm run check` at the root
+builds the encryption package, type-checks every package, builds `main.js` from the
+TypeScript in `src/`, and runs every package's tests, the plugin's among them. The
+encryption package has to be built before the plugin's own `npm run typecheck`, `npm
+test` or `npm run build`, since the plugin takes it from its built file: run `npm run
+build --workspace @nexus/crypto` at the root once. `npm run build` in this folder
+alone makes `main.js`.
 Obsidian loads three files: `manifest.json` (kept in this folder), `main.js` (built)
 and `styles.css` (this plugin has none).
 
 - `npm test` runs the tests. They run the sync engine and the sign-in against the
   real Nexus server from this repository's `server/` folder, running inside the test
-  over an in-memory SQLite database (`tests/real-nexus.ts`), so no server has to be
-  running. They need Node 22.13 or later, for `node:sqlite`, which prints an
+  over an in-memory SQLite database (`tests/real-nexus.ts`, which takes the SQL port
+  over node:sqlite from the shared test package, `packages/test-sqlite`), so no server has
+  to be running. They need Node 22.13 or later, for `node:sqlite`, which prints an
   "experimental" warning that can be ignored. The tests are pinned to the server as
   it is in this repository: when the server changes what it holds or answers, they
   move along with it. The server holds only blobs, so the tests make and open blobs

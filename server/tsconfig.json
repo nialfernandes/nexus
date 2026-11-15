@@ -1,17 +1,10 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    // The Workers types, which describe Cloudflare's runtime. The Node types are for the tests.
     "types": ["@cloudflare/workers-types", "node"],
-    "strict": true,
-    "noEmit": true,
     // The tests import sibling .ts files by their full name; nothing is emitted, so the extension is safe.
-    "allowImportingTsExtensions": true,
-    // The Workers types and the Node types both describe a few globals (fetch, Response, crypto) and disagree about
-    // some of them. Only our own .ts files are checked, so the two can sit side by side.
-    "skipLibCheck": true
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts", "vitest.config.ts"]
 }

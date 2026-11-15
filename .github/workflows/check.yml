@@ -1,0 +1,30 @@
+# Runs every package's checks on every pull request and every push to main. It needs no secret and deploys nothing.
+#
+# `npm run check` at the root builds the encryption package, type-checks every package, builds the plugin and runs every
+# package's tests. A package added to the workspaces in the root package.json is checked here without a change to this file.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install every package
+        run: npm ci
+      - name: Check every package
+        run: npm run check
+      - name: Check the citations in the docs
+        run: bash docs/check-citations.sh

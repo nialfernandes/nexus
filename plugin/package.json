@@ -9,10 +9,10 @@
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "check": "npm run packages && npm run typecheck && npm run build && npm run test",
-    "packages": "npm ci --prefix ../packages/crypto && npm run build --prefix ../packages/crypto && npm ci --prefix ../packages/merge"
+    "check": "npm run typecheck && npm run build && npm run test"
   },
   "devDependencies": {
+    "@nexus/test-sqlite": "0.1.0",
     "@types/node": "26.6.6",
     "esbuild": "0.28.2",
     "obsidian": "1.14.4",
@@ -20,7 +20,7 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
-    "@nexus/crypto": "file:../packages/crypto",
-    "@nexus/merge": "file:../packages/merge"
+    "@nexus/crypto": "0.1.0",
+    "@nexus/merge": "0.1.0"
   }
 }
