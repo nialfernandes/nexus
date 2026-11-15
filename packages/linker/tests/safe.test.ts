@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { nexusNotes } from "../../../plugin/tests/world";
+import { DEFAULT_STATE_NOTE } from "../src/settings";
 import { MENTIONS_FOLDER } from "../src/titles";
 import { hushPath, transcriptNote } from "./fixtures";
 import { listOf, openLab, type Lab } from "./lab";
@@ -20,6 +21,12 @@ async function lab(env: Record<string, string> = {}): Promise<Lab> {
 
 const BOOK = listOf({ type: "book", title: "Atomic Habits", author: "James Clear" });
 const AMAZON = "https://www.amazon.com/Atomic-Habits-Proven-Build-Break/dp/0735211299";
+
+/** What the vault holds apart from the job's own state note, which is the one note a failure writes: the notes the job leaves as they were are these. */
+async function vaultWithoutState(l: Lab): Promise<{ texts: Record<string, string>; refs: Awaited<ReturnType<Lab["refs"]>>; state: string | undefined }> {
+  const { [DEFAULT_STATE_NOTE]: state, ...texts } = await l.texts();
+  return { texts, refs: (await l.refs()).filter((ref) => ref.path !== DEFAULT_STATE_NOTE), state };
+}
 
 /** A note with a link in its show notes, so a job that wrote from the links alone, before the model answered, would show. */
 const withLink = (name: string, spoken = "He talks about habits.") => transcriptNote({ title: name, description: "Atomic Habits by James Clear.", links: [AMAZON], spoken: [spoken] });
@@ -45,9 +52,12 @@ describe("a model that fails", () => {
       expect(failed.logs).toHaveLength(1);
       expect(failed.logs[0]).toContain(path);
       expect(failed.logs[0]).toMatch(reason);
-      // Not the note, and not a note made from its links either: nothing was written.
-      expect(await l.texts()).toEqual(before.texts);
-      expect(await l.refs()).toEqual(before.refs);
+      // Not the note, and not a note made from its links either: nothing was written but the line in the state note.
+      const after = await vaultWithoutState(l);
+      expect(after.texts).toEqual(before.texts);
+      expect(after.refs).toEqual(before.refs);
+      expect(after.state).toContain(`failed 1 | `);
+      expect(after.state).toContain(` | ${path}\n`);
 
       l.model.answer(() => BOOK);
       const next = await l.run();
@@ -67,8 +77,10 @@ describe("a model that fails", () => {
     const { report } = await l.run();
     expect(l.model.asked.length).toBeGreaterThanOrEqual(3);
     expect(report.failed).toHaveLength(1);
-    expect(await l.texts()).toEqual(before.texts);
-    expect(await l.refs()).toEqual(before.refs);
+    const after = await vaultWithoutState(l);
+    expect(after.texts).toEqual(before.texts);
+    expect(after.refs).toEqual(before.refs);
+    expect(after.state).toContain(` | ${path}\n`);
 
     // A model that works: the note is sent in parts, the lists are joined, and the same book said in two parts is one link.
     l.model.asked.length = 0;

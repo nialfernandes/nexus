@@ -27,8 +27,8 @@ export interface Lab {
   writer: AgentVault;
   /** Puts a note in the vault at version 1. */
   seed(path: string, text: string): Promise<NoteRef>;
-  /** One pass of the job, with the lines it logged. */
-  run(env?: Record<string, string>): Promise<{ report: RunReport; logs: string[] }>;
+  /** One pass of the job, with the lines it logged. `fetchNexus` is how this pass reaches Nexus when it is not the lab's own. */
+  run(env?: Record<string, string>, how?: { fetchNexus?: FetchLike }): Promise<{ report: RunReport; logs: string[] }>;
   /** What the vault holds, by path. */
   texts(): Promise<Record<string, string>>;
   /** Every note's id and version, by path. */
@@ -45,6 +45,9 @@ export async function openLab(env: Record<string, string> = {}): Promise<Lab> {
   const open = () =>
     AgentVault.open({ address: credentials.address, token: credentials.token, privateKey: credentials.privateKey, approval: credentials.approval, fetch: fetchNexus });
   const writer = await open();
+  // The clock the job is given: every look at it is a second later than the last, so the order of two tries is never a tie.
+  let seconds = Date.parse("2026-11-16T00:00:00.000Z");
+  const now = () => new Date((seconds += 1000));
   const base: Record<string, string> = {
     [VAULT_SETTING.address]: credentials.address,
     [VAULT_SETTING.token]: credentials.token,
@@ -65,9 +68,9 @@ export async function openLab(env: Record<string, string> = {}): Promise<Lab> {
     seen,
     writer,
     seed: (path, text) => writer.createNote(path, text),
-    run: async (more = {}) => {
+    run: async (more = {}, how = {}) => {
       const logs: string[] = [];
-      const report = await runJob({ env: { ...base, ...more }, log: (line) => logs.push(line), fetchNexus, fetchModel: realFetch });
+      const report = await runJob({ env: { ...base, ...more }, log: (line) => logs.push(line), fetchNexus: how.fetchNexus ?? fetchNexus, fetchModel: realFetch, now });
       return { report, logs };
     },
     texts: () => nexusTexts(world),

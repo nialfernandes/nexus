@@ -23,6 +23,10 @@ LINKER_MODEL_NAME = "the-name-of-your-model"
 # Optional. These are the values used when they are left out.
 # LINKER_MAX_NOTES = "10"
 # LINKER_MAX_CHECKS = "20"
+# The note the job keeps its record of notes it could not link in (in a folder of its own, not Mentions/, not a hidden folder), and how many
+# times a note may fail before it is skipped until its line is taken out of that note.
+# LINKER_STATE_NOTE = "Linker/State.md"
+# LINKER_MAX_FAILURES = "5"
 # LINKER_MODEL_WINDOW_CHARS = "12000"
 # LINKER_MODEL_TIMEOUT_SECONDS = "60"
 

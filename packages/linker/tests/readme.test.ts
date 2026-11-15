@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_NOTES, DEFAULT_TIMEOUT_SECONDS, DEFAULT_WINDOW_CHARS, SETTING, VAULT_SETTING } from "../src/settings";
+import { DEFAULT_MAX_CHECKS, DEFAULT_MAX_FAILURES, DEFAULT_MAX_NOTES, DEFAULT_STATE_NOTE, DEFAULT_TIMEOUT_SECONDS, DEFAULT_WINDOW_CHARS, SETTING, VAULT_SETTING } from "../src/settings";
 
 const here = new URL("../", import.meta.url).pathname;
 const readme = readFileSync(join(here, "README.md"), "utf8");
@@ -19,6 +19,8 @@ describe("the README", () => {
   it("says the defaults the code has", () => {
     expect(readme).toContain(`| \`LINKER_MAX_NOTES\` | The most notes a run takes on | no, ${DEFAULT_MAX_NOTES} |`);
     expect(readme).toContain(`| no, ${DEFAULT_MAX_CHECKS} |`);
+    expect(readme).toContain(`| no, ${DEFAULT_MAX_FAILURES} |`);
+    expect(readme).toContain(`| no, \`${DEFAULT_STATE_NOTE}\` |`);
     expect(readme).toContain(`| no, ${DEFAULT_WINDOW_CHARS} |`);
     expect(readme).toContain(`| no, ${DEFAULT_TIMEOUT_SECONDS} |`);
   });

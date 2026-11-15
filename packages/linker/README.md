@@ -55,9 +55,10 @@ For each transcript note in the folders you name that has not been linked yet:
 - **A model that fails, times out or answers with something that is not a list leaves the note as it was**, with the
   reason logged once, and the next run tries it again. Nothing is written for that note, not even from its links.
 - **At most `LINKER_MAX_NOTES` notes a run** (10 unless set). A note that fails counts, so a failing model is asked no
-  more than that a run.
+  more than that a run. A note that fails is written in the job's own state note (see Failed notes), so the notes that
+  fail never keep the notes that have not been tried from being linked.
 - **It never deletes a note**, and the code has no call that would. It **never changes a note outside `Mentions/`
-  except the `## Mentions` section and the one front matter line**; a `## Mentions` section that is already there keeps
+  except the `## Mentions` section and the one front matter line, and its own state note** (see Failed notes); a `## Mentions` section that is already there keeps
   its lines and gains only the links it lacks. Line endings and everything else in the note stay as they were.
 - The model's text is never trusted: a title has the characters a link or a path reads as syntax taken out before it is a
   note's name, so nothing it says can name a note outside `Mentions/`.
@@ -80,6 +81,8 @@ The same names are the environment of the command and the variables and secrets 
 | `LINKER_MODEL_NAME` | The model's name on that endpoint. There is no default | yes |
 | `LINKER_MAX_NOTES` | The most notes a run takes on | no, 10 |
 | `LINKER_MAX_CHECKS` | The most notes at a later version than the first that a run reads to see whether they were linked (see Limits) | no, 20 |
+| `LINKER_STATE_NOTE` | The path of the note the job keeps its record of notes it could not link in, such as `Linker/State.md`. In a folder of its own: not `Mentions/`, not a hidden folder (the plugin does not sync those) | no, `Linker/State.md` |
+| `LINKER_MAX_FAILURES` | How many times a note may fail before it is skipped, until its line is taken out of the state note | no, 5 |
 | `LINKER_MODEL_WINDOW_CHARS` | The most characters of transcript sent in one call, 500 or more | no, 12000 |
 | `LINKER_MODEL_TIMEOUT_SECONDS` | How long one call may take | no, 60 |
 
@@ -103,6 +106,33 @@ the four secrets named at the end of it with `wrangler secret put`. It wakes on 
 call it. Build the repository's packages first (`npm run build` at the root), since the Worker takes the agent's built library and
 its WebAssembly file.
 
+## Failed notes
+
+A note the model cannot read would be tried first on every run and, ten of them, would fill every run, so that no new note was ever
+linked. The job keeps its own record in **one note of its own, in a folder of its own**: `Linker/State.md` unless `LINKER_STATE_NOTE`
+says another path. It is not in `Mentions/`, and not in a hidden folder, which the plugin does not sync. Each note that failed has one line:
+
+```
+# Linker state
+...
+- 7JfCv0aTq2mGx5Zb1nWk4A | failed 2 | 2026-11-16T09:30:00.000Z | The model answered with status 503. | Transcripts/2026_11_10 - A Show - One.md
+```
+
+That is the note's id (what Nexus knows it by), how many times it has failed, when it was last tried, why, and its path. The job
+writes a line on every failure (a model that fails, an answer that is no list, a note that cannot be read) and takes the line out when the
+note is linked.
+
+- **Each run takes the notes never tried first**, as before (the ones at their first version, then up to `LINKER_MAX_CHECKS` of the later
+  ones), **then the notes that failed, the one tried longest ago first**. A failing note is tried again only when there is room for it,
+  and each takes its turn.
+- **A note that has failed `LINKER_MAX_FAILURES` times (5 unless set) is skipped**, and each run logs that it is. **Delete its line** from the
+  state note, and it is tried again (its count starts again from nothing). Lines that are not in the form above are left as they are.
+- **Do not delete the state note itself**: Nexus never brings a deleted note back, so the job could not make it again. Delete its lines.
+- **A state note that cannot be read** is logged, and every note is tried as if none had failed, which is how the job was before it kept one.
+- **Two runs at once** keep each other's lines. The note is made with a key (`createNote`'s `key`), so two runs that make it at the same
+  moment make the same note, and every change is read, made, and saved at the version read (`updateNote`): a save that finds the note
+  has moved on reads it again and makes its change again.
+
 ## Limits
 
 - **Which notes are looked at.** A note's text is inside its encrypted note, so whether it is linked cannot be told without reading it.
@@ -113,8 +143,10 @@ its WebAssembly file.
   subtitle; the show notes' own wording is used when it is there, and the first words of the address's title are also tried against the
   notes already in `Mentions/`. A book mentioned by link in one episode and by a different form of its name in another can still end up
   as two notes, which a person can join. A page with no title in its address (a short link) is a website named by its address.
-- **A note that fails every run** (a model that cannot read that transcript) is taken on each run and fills one of its places.
-  The job keeps no record of failures: it adds nothing to a note it did not link.
+- **A note that fails every run** (a model that cannot read that transcript) is not left to fill the run. The job may write nothing
+  into a note but its `## Mentions` section and its one front matter line, so it keeps its record of failures in a note of its own
+  (see Failed notes). A model that is down for a while does not skip every note: each run takes the notes never tried first, so a short
+  outage marks each note at most once.
 - **Two runs at once** (a slow run still going when the next cron trigger wakes, or a command run beside the Worker) are safe for the
   Mentions notes: each note is made with its normalised title as the key of its id (`createNote`'s `key` in the agent library), so two runs
   that make the note for one thing at the same moment make the same note, and a run that finds the other's note, even under another

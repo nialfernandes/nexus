@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { joined, notesToLookAt, runLinker } from "../src/run";
 import { readSettings } from "../src/settings";
+import type { Failure } from "../src/state";
 import type { NoteContent, NoteRef, NoteStore } from "../src/store";
 import { hushPath, transcriptNote } from "./fixtures";
 
@@ -32,6 +33,35 @@ describe("notesToLookAt", () => {
 
   it("is nothing for a folder with no note in it", () => {
     expect(notesToLookAt([ref("Daily/a.md")], ["Hush/"])).toEqual([]);
+  });
+});
+
+describe("notesToLookAt when some notes have failed", () => {
+  const failure = (path: string, tries: number, at: string): [string, Failure] => [`id-${path}`, { id: `id-${path}`, tries, at, reason: "Why.", path }];
+  const failures = new Map([
+    failure("Hush/b.md", 2, "2026-11-16T10:00:00.000Z"),
+    failure("Hush/a.md", 1, "2026-11-16T12:00:00.000Z"),
+    failure("Hush/d.md", 1, "2026-11-16T09:00:00.000Z"),
+    failure("Hush/f.md", 5, "2026-11-16T08:00:00.000Z"),
+  ]);
+  const refs = ["a", "b", "c", "d", "e", "f"].map((name) => ref(`Hush/${name}.md`));
+
+  it("is the notes never tried first, then the ones that failed, the one tried longest ago first, and not the ones that failed too often", () => {
+    expect(notesToLookAt(refs, ["Hush/"], failures, 5).map((one) => one.path)).toEqual(["Hush/c.md", "Hush/e.md", "Hush/d.md", "Hush/b.md", "Hush/a.md"]);
+  });
+
+  it("puts a failed note after every never-tried one whatever its version, the later versions among them", () => {
+    const edited = [ref("Hush/a.md", 3), ref("Hush/b.md", 4), ref("Hush/c.md", 2), ref("Hush/d.md")];
+    expect(notesToLookAt(edited, ["Hush/"], failures, 5).map((one) => one.path)).toEqual(["Hush/c.md", "Hush/d.md", "Hush/b.md", "Hush/a.md"]);
+  });
+
+  it("keeps the order of the lines for notes tried at the same moment, and takes a time it cannot read as the longest ago", () => {
+    const same = new Map([failure("Hush/b.md", 1, "2026-11-16T10:00:00.000Z"), failure("Hush/a.md", 1, "2026-11-16T10:00:00.000Z"), failure("Hush/c.md", 1, "not a time")]);
+    expect(notesToLookAt(refs.slice(0, 3), ["Hush/"], same, 5).map((one) => one.path)).toEqual(["Hush/c.md", "Hush/b.md", "Hush/a.md"]);
+  });
+
+  it("is as it was with no failures to go by", () => {
+    expect(notesToLookAt(refs, ["Hush/"]).map((one) => one.path)).toEqual(refs.map((one) => one.path));
   });
 });
 
