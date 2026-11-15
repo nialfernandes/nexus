@@ -31,7 +31,7 @@ Each thing mentioned gets one note in Mentions/, found again by its title the ne
 The vault is read and written as an agent, so these are set in the environment:
   ${VAULT_SETTING.address}, ${VAULT_SETTING.token}, ${VAULT_SETTING.privateKey}, ${VAULT_SETTING.approval}
 and so is the job's own:
-  ${SETTING.folders}            the folders of transcript notes, comma separated, such as Hush/
+  ${SETTING.folders}            the folders of transcript notes, comma separated, such as Transcripts/
   ${SETTING.modelAddress}      the chat endpoint's address, such as https://models.example.org/v1
   ${SETTING.modelKey}          its key
   ${SETTING.modelName}         the model's name (there is no default)
@@ -47,7 +47,8 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
     return command === undefined ? 2 : 0;
   }
   if (command !== "run" || rest.length > 0) {
-    io.stderr.write(`nexus-linker: ${argv.join(" ")} is not a command.\n\n${USAGE}`);
+    // What was typed is not repeated: a key given as an argument by mistake would be printed back.
+    io.stderr.write(`nexus-linker: that is not a command.\n\n${USAGE}`);
     return 2;
   }
   try {

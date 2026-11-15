@@ -2,7 +2,7 @@
 // a stand-in model server on a port of this machine, a writer that puts transcript notes in the vault the way the writer of
 // transcript notes does (an agent that makes a note), and a reader that sees what the vault holds with the plugin's own way of reading.
 
-import { AgentVault, type NoteRef } from "@nexus/agent";
+import { AgentVault, type FetchLike, type NoteRef } from "@nexus/agent";
 import { nexusTexts } from "../../../plugin/tests/world";
 import { agentCredentials, fetchOverNexus, openWorld, setUpVault, type AgentCredentials, type World } from "../../agent/tests/world";
 import { runJob } from "../src/job";
@@ -19,6 +19,8 @@ export interface Lab {
   credentials: AgentCredentials;
   /** The environment the job is run with. */
   env: Record<string, string>;
+  /** How Nexus is reached: the real server code, as the agent's own tests reach it. */
+  fetchNexus: FetchLike;
   /** Every call made to Nexus, in order. */
   seen: ReturnType<typeof fetchOverNexus>["seen"];
   /** A second writer of the vault: puts notes in, and edits them as a person would. */
@@ -59,6 +61,7 @@ export async function openLab(env: Record<string, string> = {}): Promise<Lab> {
     model,
     credentials,
     env: base,
+    fetchNexus,
     seen,
     writer,
     seed: (path, text) => writer.createNote(path, text),

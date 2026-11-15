@@ -5,7 +5,7 @@ import { MENTIONS_FOLDER } from "./titles";
 
 /** The settings of the job itself. */
 export const SETTING = {
-  /** The folders whose notes are read, one or more, as a comma-separated list: `Hush/` is an example. */
+  /** The folders whose notes are read, one or more, as a comma-separated list: `Transcripts/` is an example. */
   folders: "LINKER_FOLDERS",
   /** The most notes a run takes on. */
   maxNotes: "LINKER_MAX_NOTES",

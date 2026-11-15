@@ -1,0 +1,34 @@
+# An example of running the linking job as a Cloudflare Worker that wakes on a schedule. Copy it to wrangler.toml in this folder, change the
+# values to your own, and put the secrets in with `wrangler secret put <NAME>`. There is no real id, address or key in this file, and a
+# real wrangler.toml with yours in it is not something to commit.
+#
+# The Worker imports the agent library's built file, so build the packages first: `npm run build` at the root of the repository.
+
+name = "nexus-linker"
+main = "src/worker.ts"
+compatibility_date = "2026-07-01"
+
+# How often it wakes. Each run takes on at most LINKER_MAX_NOTES notes, so a short gap clears a backlog sooner.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# Where Nexus's routes sit.
+NEXUS_ADDRESS = "https://nexus.example.org/nexus/api"
+# The folders of transcript notes to read, comma separated.
+LINKER_FOLDERS = "Transcripts/"
+# A chat endpoint that speaks the common chat-completions form, and the name of the model on it. There is no default model.
+LINKER_MODEL_ADDRESS = "https://models.example.org/v1"
+LINKER_MODEL_NAME = "the-name-of-your-model"
+# Optional. These are the values used when they are left out.
+# LINKER_MAX_NOTES = "10"
+# LINKER_MAX_CHECKS = "20"
+# LINKER_MODEL_WINDOW_CHARS = "12000"
+# LINKER_MODEL_TIMEOUT_SECONDS = "60"
+
+# Secrets, each put in with `wrangler secret put <NAME>`:
+#   NEXUS_TOKEN                the agent's sign-in token
+#   NEXUS_AGENT_PRIVATE_KEY    the agent's private key
+#   NEXUS_AGENT_APPROVAL       the approval a person sealed to the agent's public key
+#   LINKER_MODEL_KEY           the key the model endpoint wants as a bearer token
+# The agent's token, key and approval are the four values `nexus-agent set-up-agent` prints (see packages/agent/README.md).

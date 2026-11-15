@@ -123,7 +123,7 @@ function reasonOf(error: unknown): string {
 /** What a run did, as lines for a terminal or a Worker's log. */
 export function summaryOf(report: RunReport): string[] {
   const count = (n: number) => `${n} ${n === 1 ? "note" : "notes"}`;
-  const lines = [`Linked ${count(report.linked.length)} of ${count(report.tried)} taken on.`];
+  const lines = [`Linked ${report.linked.length} of ${count(report.tried)} taken on.`];
   if (report.changedMeanwhile.length > 0) lines.push(`${count(report.changedMeanwhile.length)} edited meanwhile, left for the next run.`);
   if (report.failed.length > 0) lines.push(`${count(report.failed.length)} could not be linked, left for the next run.`);
   return lines;
