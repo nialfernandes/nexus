@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildBundle } from "../scripts/build.mjs";
-import { NOTE_BLOB_HEX, NOTE_CONTEXT, RECORD, VAULT_KEY } from "./fixtures.js";
+import { NOTE_BLOB_HEX, NOTE_CONTEXT, NOTE_ID_FROM_KEY_TEXT, NOTE_ID_KEY_TEXT, RECORD, VAULT_KEY } from "./fixtures.js";
 import { fromHex } from "./helpers.js";
 
 let directory = "";
@@ -53,10 +53,12 @@ describe("the build", () => {
       [
         "ERROR_CODES", "FORMAT_VERSION", "NexusCryptoError", "PASSWORD_KDF", "PASSWORD_KDF_LIMITS", "RECOVERY_ALPHABET",
         "approvalCode", "createPasswordWrap", "decryptNote", "devicePublicKey", "deviceKeyCode", "encryptNote", "formatRecoveryKey", "generateDeviceKeyPair",
-        "generateRecoveryKey", "generateVaultKey", "normaliseRecoveryText", "openApproval", "openPasswordWrap", "padmeLength",
+        "generateRecoveryKey", "generateVaultKey", "normaliseRecoveryText", "noteIdFromKey", "openApproval", "openPasswordWrap", "padmeLength",
         "parseRecoveryKey", "readApprovalCode", "sealApproval", "unwrapVaultKeyWithRecoveryKey", "wrapVaultKeyWithRecoveryKey",
       ].sort(),
     );
+    // The pinned note id (made from the source) is what the built file makes.
+    expect(await built.noteIdFromKey(VAULT_KEY, NOTE_ID_KEY_TEXT)).toBe(NOTE_ID_FROM_KEY_TEXT);
     // The pinned blob (made from the source) opens with the built file.
     expect(await built.decryptNote(VAULT_KEY, NOTE_CONTEXT, fromHex(NOTE_BLOB_HEX))).toEqual(RECORD);
     const blob = await built.encryptNote(VAULT_KEY, NOTE_CONTEXT, RECORD);

@@ -5,7 +5,7 @@ import type { Sodium } from "./sodium.js";
 const HASH_BYTES = 32;
 
 /** HMAC-SHA-256 using libsodium's incremental interface, which takes a key of any length. */
-function hmacSha256(sodium: Sodium, key: Uint8Array, message: Uint8Array): Uint8Array {
+export function hmacSha256(sodium: Sodium, key: Uint8Array, message: Uint8Array): Uint8Array {
   const state = sodium.crypto_auth_hmacsha256_init(key);
   sodium.crypto_auth_hmacsha256_update(state, message);
   return sodium.crypto_auth_hmacsha256_final(state);

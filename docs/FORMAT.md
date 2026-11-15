@@ -278,6 +278,32 @@ a wrap sent with another id is refused, and the wraps are answered with it (`GET
 device that has only the Recovery Key reads the vault id and the wrap from the server and opens
 the wrap with `unwrapVaultKeyWithRecoveryKey`.
 
+### 7.6 A note id made from a key the caller keeps
+
+A note's id is not secret from the server: the server keeps it beside every version. Devices make
+it at random (the plugin does). A writer that must make the same note again after an answer was
+lost (a transcript writer that sends its notes again) needs an id it can make again from its own
+data, and an id such as `episode-123` would tell the server what the note is. So the agent library
+(`createNote(path, text, { key })`) makes the id from the writer's `key` and the vault key:
+
+```
+IDK = HKDF-SHA-256(IKM = VK, salt = empty, info = "nexus v1 note id key", L = 32)
+id  = base64url( the first 16 bytes of HMAC-SHA-256(IDK, the UTF-8 bytes of key) ), with no = padding
+```
+
+The label is the 20 ASCII bytes of `nexus v1 note id key`, and an empty salt is 32 zero bytes as in 7.1.
+`key` is a string of the kind section 2 calls an id: non-empty, at most 1024 UTF-8 bytes, no
+unpaired surrogate (`invalid-argument` otherwise). `base64url` is RFC 4648 section 5. The id is 22
+characters of `A-Z a-z 0-9 - _`, as long as a random id, so Nexus takes it as it takes any id.
+
+- The same key gives the same id in the same vault, so the second call finds the first call's note.
+- A different key, or a different vault key, gives a different id. Two ids collide as 128-bit
+  values do.
+- The server holds neither `VK` nor `IDK`. It cannot tell what key an id was made from, and cannot
+  test a guess at the key, whatever the key looks like.
+- `IDK` is used for nothing else. The vault id is not part of the derivation: two vaults with the same vault key would
+  give the same id, and vault keys are random.
+
 ## 8. Writing the Recovery Key down
 
 The 32 bytes of RK are written in the 32 symbols
@@ -368,6 +394,10 @@ Password wrap (102 bytes; `00010000` = 65536 KiB, `00000003` = 3 passes, `000000
 7e560d8eeb0f
 ```
 
+A note id made from a key (section 7.6): the vault key is `VK` = bytes `00 01 ... 1f` and the key is `episode-123`.
+`IDK` = `c875fbaa126ee4a10e7f123500f989a93e62a28407652b4be3de216c2e8d92cf`, the first 16 bytes of the
+HMAC are `1d7843795da6a287d651b4c6e0aabddf`, and the id is `HXhDeV2moofWUbTG4Kq93w`.
+
 The Recovery Key as written: `40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-CDSR-74X3-PF1X-7RZG-2M48`
 
 The device key code (section 7.4) of `N` = bytes `10 11 ... 2f`: `3X1TB-8BMC4`.
@@ -402,6 +432,9 @@ checks that the bytes are the same.
 - **Padding:** a record of any length up to 255 bytes gives a blob of one size.
 - The sealed approval has no second implementation in the tests (libsodium's
   sealed box is the one implementation); it has round-trip and refusal tests.
+- **The note id made from a key:** built a second way with `@noble/hashes`, written from section 7.6, and pinned by the worked
+  example in section 10. The same key gives the same id; another key or another vault key each give another id;
+  a key that is empty, too long or holds an unpaired surrogate is refused.
 - **The device key code and the matching code:** each code is built a second way with `@noble/hashes`, written from
   section 7.4, and each is pinned by the worked examples in section 10. A swapped
   approval, a changed key on either side, a changed `kid` and any one changed byte of
