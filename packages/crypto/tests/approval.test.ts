@@ -1,9 +1,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import {
-  approvalCode, generateDeviceKeyPair, generateVaultKey, NexusCryptoError, openApproval, readApprovalCode, RECOVERY_ALPHABET, sealApproval,
+  approvalCode, deviceKeyCode, generateDeviceKeyPair, generateVaultKey, NexusCryptoError, openApproval, readApprovalCode, RECOVERY_ALPHABET, sealApproval,
 } from "../src/index.js";
-import { APPROVAL_CODE_TEXT, VAULT_CONTEXT, VAULT_ID, VAULT_KEY } from "./fixtures.js";
+import { APPROVAL_CODE_TEXT, DEVICE_KEY_CODE_TEXT, VAULT_CONTEXT, VAULT_ID, VAULT_KEY } from "./fixtures.js";
 import { filled, flipBit, sequence, toHex } from "./helpers.js";
 
 async function refusal(promise: Promise<unknown>): Promise<NexusCryptoError> {
@@ -152,6 +152,25 @@ describe("the matching code of an approval", () => {
     expect((await refusal(approvalCode({ ...base, approverPublicKey: filled(33, 1) }))).code).toBe("invalid-argument");
     expect((await refusal(approvalCode({ ...base, kid: -1 }))).code).toBe("invalid-argument");
     expect((await refusal(approvalCode({ ...base, sealed: new Uint8Array(0) }))).code).toBe("invalid-argument");
+  });
+
+  it("has a code for the new device's key alone, which the approving device checks before it seals anything", async () => {
+    const key = sequence(32, 0x10);
+    const digest = sha256(Uint8Array.from([...new TextEncoder().encode("nexus v1 device key code"), ...key]));
+    const symbols = Array.from({ length: 10 }, (_, index) => {
+      const bit = index * 5;
+      const window = (digest[bit >> 3]! << 8) | digest[(bit >> 3) + 1]!;
+      return RECOVERY_ALPHABET[(window >> (11 - (bit & 7))) & 31];
+    }).join("");
+    const code = await deviceKeyCode(key);
+    expect(code, "a second implementation written from docs/FORMAT.md").toBe(`${symbols.slice(0, 5)}-${symbols.slice(5)}`);
+    expect(code, "the pinned example").toBe(DEVICE_KEY_CODE_TEXT);
+    expect(await deviceKeyCode(key)).toBe(code);
+    expect(await deviceKeyCode(sequence(32, 0x11)), "another key, another code").not.toBe(code);
+    expect(code, "and it is not the matching code of anything made from the key").not.toBe(
+      await approvalCode({ newDevicePublicKey: key, approverPublicKey: sequence(32, 0x50), kid: 1, sealed: sequence(91, 0x90) }),
+    );
+    expect((await refusal(deviceKeyCode(new Uint8Array(31)))).code).toBe("invalid-argument");
   });
 
   it("is read from what a person typed: capitals or small letters, hyphen or space, O for 0 and I or L for 1; anything else is null", () => {

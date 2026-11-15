@@ -24,3 +24,6 @@ export const RECOVERY_KEY_TEXT = "40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-C
 
 /** The matching code of docs/FORMAT.md section 10: N = 0x10.., A = 0x50.., kid 1, S = 91 bytes from 0x90. */
 export const APPROVAL_CODE_TEXT = "ENBRP-QJF17";
+
+/** The device key code of docs/FORMAT.md section 10: the key is 32 bytes from 0x10. */
+export const DEVICE_KEY_CODE_TEXT = "3X1TB-8BMC4";

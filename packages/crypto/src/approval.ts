@@ -10,7 +10,7 @@ import {
   u32be,
   utf8,
 } from "./bytes.js";
-import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, FORMAT_VERSION, KEY_BYTES, Kind, MAX_ID_BYTES, RECOVERY_ALPHABET } from "./constants.js";
+import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, DEVICE_KEY_CODE_LABEL, FORMAT_VERSION, KEY_BYTES, Kind, MAX_ID_BYTES, RECOVERY_ALPHABET } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
 import { normalise, symbolsFromBits } from "./recovery-key.js";
 import { loadSodium } from "./sodium.js";
@@ -152,17 +152,32 @@ export async function approvalCode(input: ApprovalCodeInput): Promise<string> {
   const digest = sodium.crypto_hash_sha256(
     concatBytes(utf8(APPROVAL_CODE_LABEL), input.newDevicePublicKey, input.approverPublicKey, u32be(input.kid), sodium.crypto_hash_sha256(input.sealed)),
   );
-  const symbols = symbolsFromBits(digest, APPROVAL_CODE_SYMBOLS);
-  return `${symbols.slice(0, APPROVAL_CODE_SYMBOLS / 2)}-${symbols.slice(APPROVAL_CODE_SYMBOLS / 2)}`;
+  return writeCode(symbolsFromBits(digest, APPROVAL_CODE_SYMBOLS));
 }
 
 /**
- * What a person typed from the other device's screen, written the way `approvalCode` writes it, or null when it is
+ * The code a new device shows for its own public key, such as `4TQ8M-W2K0B`: the first 50 bits of SHA-256 over a label
+ * and the key, written like the matching code. The approving device checks it before it seals anything: a server that
+ * gave the approving device a key of its own would be handed the vault key, sealed, and the matching code could only
+ * show it afterwards. The person reads this code off the new device's screen and types it on the approving device, which
+ * refuses unless it is the code of the key it was given.
+ */
+export async function deviceKeyCode(devicePublicKey: Uint8Array): Promise<string> {
+  const sodium = await loadSodium();
+  requireBytes(devicePublicKey, sodium.crypto_box_PUBLICKEYBYTES, "devicePublicKey");
+  return writeCode(symbolsFromBits(sodium.crypto_hash_sha256(concatBytes(utf8(DEVICE_KEY_CODE_LABEL), devicePublicKey)), APPROVAL_CODE_SYMBOLS));
+}
+
+/** Ten symbols, in two groups of five. */
+const writeCode = (symbols: string): string => `${symbols.slice(0, APPROVAL_CODE_SYMBOLS / 2)}-${symbols.slice(APPROVAL_CODE_SYMBOLS / 2)}`;
+
+/**
+ * What a person typed from the other device's screen, written the way `approvalCode` and `deviceKeyCode` write them, or null when it is
  * not a code. Capitals or small letters, a hyphen, spaces or none do not matter, and O reads as 0, I and L as 1.
  */
 export function readApprovalCode(text: string): string | null {
   if (typeof text !== "string") return null;
   const symbols = normalise(text);
   if (symbols.length !== APPROVAL_CODE_SYMBOLS || [...symbols].some((symbol) => !RECOVERY_ALPHABET.includes(symbol))) return null;
-  return `${symbols.slice(0, APPROVAL_CODE_SYMBOLS / 2)}-${symbols.slice(APPROVAL_CODE_SYMBOLS / 2)}`;
+  return writeCode(symbols);
 }

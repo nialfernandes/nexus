@@ -16,6 +16,7 @@ export {
   sealApproval,
   openApproval,
   approvalCode,
+  deviceKeyCode,
   readApprovalCode,
   type ApprovalCodeInput,
   type DeviceKeyPair,

@@ -192,12 +192,34 @@ device's public key, and the device would open it without a fault. So a device
 that opens an approval must not use the key in it until a person has checked
 the matching code (7.4).
 
-### 7.4 The matching code
+### 7.4 The device key code and the matching code
 
-The new device and the approving device each work out the same short code from
-the same bytes, and show it. The person compares the two. The new device does
-not use the vault key from an approval until the person says the codes match
-(in Nexus's plugin, by typing the code the approving device shows).
+A server sits between the two devices, so there are two things it could do, and
+each has a code that stops it.
+
+**Before the approving device seals anything: the device key code.** The new
+device sends its public key `N` to the server, and the approving device is given
+a key back by the server. A server that gave the approving device a key of its
+own would be sent the vault key, sealed to the server, and nothing the new device
+did afterwards could take that back. So the new device shows a code for its own
+key, and the approving device refuses to seal until a person has typed that code
+on it and it is the code of the key it was given:
+
+```
+digest = SHA-256( "nexus v1 device key code" || N )
+code   = the first 50 bits of digest, as 10 symbols of the alphabet in section 8
+```
+
+The label is the 24 ASCII bytes of `nexus v1 device key code`. If the server swapped
+`N`, the code of the key the approving device holds is not the code on the new
+device's screen. After the approving device has sealed, the matching code below
+checks what the new device is handed.
+
+**Before the new device uses the key: the matching code.** The new device and
+the approving device each work out the same short code from the same bytes, and
+show it. The person compares the two. The new device does not use the vault key
+from an approval until the person says the codes match (in Nexus's plugin, by
+typing the code the approving device shows).
 
 The new device made a key pair for this approval and sent its public key
 (`N`, 32 bytes) when it asked to be approved. The approving device made a key
@@ -210,7 +232,7 @@ digest = SHA-256( "nexus v1 approval code" || N || A || kid (4) || SHA-256(S) )
 code   = the first 50 bits of digest, as 10 symbols of the alphabet in section 8
 ```
 
-The label is the 22 ASCII bytes of `nexus v1 approval code`. The code is written
+The label is the 22 ASCII bytes of `nexus v1 approval code`. Both codes are written
 in two groups of five symbols joined by a hyphen, for example `ENBRP-QJF17`.
 Reading what a person typed is as in section 8: capitals or small letters, a
 hyphen, spaces or none, `O` as `0`, `I` or `L` as `1`.
@@ -330,6 +352,8 @@ Password wrap (102 bytes; `00010000` = 65536 KiB, `00000003` = 3 passes, `000000
 
 The Recovery Key as written: `40GJ-48S4-4MK2-EA19-58NJ-RB9E-5WR3-2CHK-6GTK-CDSR-74X3-PF1X-7RZG-2M48`
 
+The device key code (section 7.4) of `N` = bytes `10 11 ... 2f`: `3X1TB-8BMC4`.
+
 The matching code (section 7.4) from `N` = bytes `10 11 ... 2f`, `A` = bytes
 `50 51 ... 6f`, `kid` = 1 and `S` = 91 bytes `90 91 ... ea`. The hash does not look inside `S`, so
 these bytes need not be a real sealed approval: `ENBRP-QJF17`.
@@ -360,8 +384,8 @@ checks that the bytes are the same.
 - **Padding:** a record of any length up to 255 bytes gives a blob of one size.
 - The sealed approval has no second implementation in the tests (libsodium's
   sealed box is the one implementation); it has round-trip and refusal tests.
-- **The matching code:** the code is built a second way with `@noble/hashes`, written from
-  section 7.4, and it is pinned by the worked example in section 10. A swapped
+- **The device key code and the matching code:** each code is built a second way with `@noble/hashes`, written from
+  section 7.4, and each is pinned by the worked examples in section 10. A swapped
   approval, a changed key on either side, a changed `kid` and any one changed byte of
   the approval each give a different code.
 
