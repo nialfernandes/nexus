@@ -17,22 +17,24 @@ import { signIn } from "./sign-in";
 const USAGE = `nexus-agent: set up an encrypted Nexus vault for an agent that holds its own key.
 
 For the person, each step run in your own terminal:
-  owner-sign-in --identity <owner> your own token, made in one step with the owner secret (for create-vault and approve-agent)
-  create-vault                    set up a server that has no vault: shows the Recovery Key here, only here
-  set-up-agent --name <name>      the whole setup of an agent for a vault that exists: identity, key pair, token and approval,
-                                  printed as the four values the agent needs (asks for the Recovery Key, hidden)
+  owner-sign-in --identity <owner>   your own token, made in one step with the owner secret (for create-vault and approve-agent)
+  create-vault                       set up a server that has no vault: shows the Recovery Key here, only here
+  set-up-agent --name <name>         the whole setup of an agent for a vault that exists: identity, key pair, token and approval,
+                                     printed as the four values the agent needs (asks for the Recovery Key, hidden)
 
 The same steps one at a time:
-  make-identity --name <name> --kind agent|person|app   make an identity (the owner secret)
-  allow <code>                    allow a device's sign-in once you have typed yes (the owner secret); deny <code> turns it down
-  keygen                          make the agent's key pair (save the private key in your secrets manager)
-  sign-in --identity <name>       sign in as an identity: you allow it on the approval page, the token is shown once
-  approve-agent                   give an agent the vault key: asks for its public key and the Recovery Key (hidden)
+  make-identity --name <name> --kind agent|person|app
+                                     make an identity (needs the owner secret)
+  allow <code>                       allow a device's sign-in once you have typed yes (needs the owner secret)
+  deny <code>                        turn a device's sign-in down, once you have typed yes (needs the owner secret)
+  keygen                             make the agent's key pair (save the private key in your secrets manager)
+  sign-in --identity <name>          sign in as an identity: you allow it on the approval page, the token is shown once
+  approve-agent                      give an agent the vault key: asks for its public key and the Recovery Key (hidden)
 
 For the agent, with credentials from the environment:
-  read <path>                     print a note's text
-  write <path>                    save the text on standard input as the note
-  list                            print the paths of the notes
+  read <path>                        print a note's text
+  write <path>                       save the text on standard input as the note
+  list                               print the paths of the notes
 
 The environment variables are ${ENV.address}, ${ENV.token}, ${ENV.privateKey}, ${ENV.approval} and ${ENV.ownerSecret}. The owner secret is also asked
 for at a hidden prompt, or read from standard input, when it is not set. A key or a secret is never an argument.

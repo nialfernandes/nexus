@@ -482,3 +482,13 @@ describe("nexus-agent set-up-agent", () => {
     expect(ran.stdout).toBe("");
   });
 });
+
+describe("nexus-agent --help", () => {
+  it("lists each owner command and says the owner secret is never an argument", async () => {
+    const ran = await run(["--help"]);
+    expect(ran.code).toBe(0);
+    for (const command of ["owner-sign-in --identity", "set-up-agent --name", "make-identity --name", "allow <code>", "deny <code>"]) expect(ran.stdout, command).toContain(command);
+    expect(ran.stdout).toContain(ENV.ownerSecret);
+    expect(ran.stdout).toMatch(/A key or a secret is never an argument/);
+  });
+});

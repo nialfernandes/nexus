@@ -189,6 +189,10 @@ A Cloudflare Worker has no accounts, so the Cloudflare plug knows the owner by a
 cookie `nexus_owner` holding the value of `NEXUS_OWNER_SECRET` is the owner's, as the identity named by `NEXUS_OWNER`.
 The secret is compared by its hash. Everything else that calls Nexus brings a bearer token.
 
+The `nexus-agent` command makes these requests for you (`make-identity`, `allow`, `owner-sign-in` and `set-up-agent`,
+which sets an agent up end to end): see [the agent package's README](../packages/agent/README.md). The requests below are
+for any other client.
+
 To start, approve a device or make an identity with a plain request. Read the secret from a file or a password
 manager rather than typing it, so it does not stay in your shell history:
 
