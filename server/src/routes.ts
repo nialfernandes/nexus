@@ -19,10 +19,14 @@
 //   POST /token/revoke   { id }                        200 revoked, 404 no such token
 //
 //   DEVICE APPROVAL (a device asks, the owner allows it, the device is handed a token once)
-//   POST /device/start   { identity, label }           no credential: 200 { code, link, secret, expiresAt }
-//   POST /device/poll    { secret }                    no credential: 200 pending, or approved with the token once
-//   GET  /device/pending ?code=C                       owner only: what is being asked, for the approval page
-//   POST /device/approve { code }                      owner only
+//   POST /device/start   { identity, label[, deviceKey] }  no credential: 200 { code, link, secret, expiresAt }. `deviceKey` is the
+//                                                      device's public key (base64, 32 bytes) for a sealed approval to be made to
+//   POST /device/poll    { secret }                    no credential: 200 pending, or approved with the token once and, if the owner's
+//                                                      device left one, the sealed approval and its device's public key (`approval`,
+//                                                      `approverKey`, base64, else null), deleted as they are handed over
+//   GET  /device/pending ?code=C                       owner only: what is being asked, for the approval page, with its `deviceKey`
+//   POST /device/approve { code[, approval, approverKey] } owner only: the sealed approval and the approving device's public key go
+//                                                      together, and only to a sign-in that sent a `deviceKey`
 //   POST /device/deny    { code }                      owner only
 //
 // WHO IS CALLING. The owner's session (the host's sign-in plug, ports.ts) is the identity named by the `owner`
@@ -51,7 +55,7 @@ import type { Caller } from "./caller";
 const MAX_BODY_BYTES = base64Length(MAX_BLOB_BYTES) + 4096;
 
 /** What a route that needs no sign-in is handed as its caller: no name. None of them reads it. */
-const NOBODY: Caller = { name: "", owner: false };
+const NOBODY: Caller = { name: "", owner: false, writer: "" };
 
 /** Who may call a route: anyone (the device's own two), any identity, or only the owner. */
 type Who = "anyone" | "identity" | "owner";
@@ -100,7 +104,7 @@ const ROUTES: readonly Route[] = [
   { method: "POST", name: "device/start", who: "anyone", run: async (c) => ok(await devices.start(c.host, c.url.origin, await c.body())) },
   { method: "POST", name: "device/poll", who: "anyone", run: async (c) => ok(await devices.poll(c.host, (await c.body()).secret)) },
   { method: "GET", name: "device/pending", who: "owner", run: async (c) => ok(await devices.pending(c.host, param(c, "code"))) },
-  { method: "POST", name: "device/approve", who: "owner", run: async (c) => ok(await devices.approve(c.host, (await c.body()).code)) },
+  { method: "POST", name: "device/approve", who: "owner", run: async (c) => ok(await devices.approve(c.host, await c.body())) },
   { method: "POST", name: "device/deny", who: "owner", run: async (c) => ok(await devices.deny(c.host, (await c.body()).code)) },
 ];
 

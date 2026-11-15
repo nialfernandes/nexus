@@ -24,21 +24,25 @@
 //   only the owner calls the routes below, and any other identity is 403 on them.
 //
 //   DEVICE APPROVAL (a device asks, the owner allows it, the device is handed a token)
-//   POST device/start   { identity, label }       no credential needed
+//   POST device/start   { identity, label[, deviceKey] }   no credential needed
 //       200 { code, link, secret, expiresAt }     `code` is short (4 to 16 characters), `link` is
 //                                                 `<origin>/nexus/approve?code=<code>`, `secret` is long and
 //                                                 only the device knows it, `expiresAt` is unix ms, 10 minutes on
-//       404 no such identity    400 a label that is missing or blank
+//       404 no such identity    400 a label that is missing or blank, or a `deviceKey` that is not 32 bytes of base64
+//                                                 `deviceKey` is the device's X25519 public key, for an approval to be sealed to
 //   GET  device/pending ?code=C                   the owner only
-//       200 { code, identity, label, expiresAt }  what the approval page shows
+//       200 { code, identity, label, expiresAt, deviceKey }  what the approval page shows (`deviceKey` is null when none was sent)
 //       404 no such code        410 the code has expired, or has been allowed or denied already
-//   POST device/approve { code }                  the owner only
+//   POST device/approve { code[, approval, approverKey] }   the owner only
+//       `approval` is the sealed vault key (base64) and `approverKey` the approving device's public key (base64, 32 bytes): both or neither,
+//       and only for a sign-in that sent a `deviceKey` (else 400). The server keeps them until the device collects them or the code expires.
 //       200 { result: "approved", code, identity, label }
 //       401 nobody the owner's  403 someone who is signed in as another identity  404 / 410 as above
 //   POST device/deny    { code }                  the owner only, answers as approve does with result "denied"
 //   POST device/poll    { secret }                no credential needed
 //       200 { status: "pending" }                                       not decided yet
-//       200 { status: "approved", token, identity, label }              the first poll after approval, only once
+//       200 { status: "approved", token, identity, label, approval, approverKey }   the first poll after approval, only once
+//                                                 `approval` and `approverKey` are what the approving device left (else null), deleted as they are handed over
 //       403 denied   404 no such secret   410 expired, or the token was already handed over
 //
 //   MANAGING (only the identity `owner`: the owner's session, or a token made for `owner`; any other identity is 403)
@@ -131,9 +135,10 @@ export function manage(who: Who, env?: NexusEnv) {
 export function device(who: Who = null, env?: NexusEnv) {
   const post = (route: string, body: unknown) => sendAs("POST", `${API}/device/${route}`, who, body, env);
   return {
-    start: (identity: string, label: string) => post("start", { identity, label }),
+    start: (identity: string, label: string, deviceKey?: string) => post("start", { identity, label, ...(deviceKey === undefined ? {} : { deviceKey }) }),
     pending: (code: string) => sendAs("GET", `${API}/device/pending${query({ code })}`, who, undefined, env),
-    approve: (code: string) => post("approve", { code }),
+    /** `sealed` is the sealed approval and the approving device's public key, both base64, sent with the allow. */
+    approve: (code: string, sealed?: { approval?: unknown; approverKey?: unknown }) => post("approve", { code, ...sealed }),
     deny: (code: string) => post("deny", { code }),
     poll: (secret: string) => post("poll", { secret }),
   };
@@ -156,6 +161,17 @@ export async function issueToken(ownerCookie: string, identity: string, label: s
 export function tokenFor(ownerCookie: () => string, identity: string, label: string): Who {
   let made: Promise<Who> | undefined;
   return { lazy: () => (made ??= issueToken(ownerCookie(), identity, label).then((issued) => ({ bearer: issued.token }))) };
+}
+
+/**
+ * The writer a token's saves are kept under, `device:<the token's id>`: the id is read from the owner's list of tokens,
+ * by the label the token was made with (a test gives each token a label of its own).
+ */
+export async function writerOf(ownerCookie: string, label: string): Promise<string> {
+  const tokens = bodyOf(await manage({ cookie: ownerCookie }).tokens()).tokens as Array<{ id: string; label: string }>;
+  const found = tokens.filter((t) => t.label === label);
+  expect(found, `one token labelled ${label}`).toHaveLength(1);
+  return `device:${found[0]!.id}`;
 }
 
 /** The text of every row of every table in Nexus's own database, so a test can look for text that must not be there. */

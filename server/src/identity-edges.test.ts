@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import worker from "./plugs/cloudflare/worker";
 import { GARDEN_V1 } from "./__fixtures__/device-blobs";
 import { ORIGIN, appEnv, bodyOf, expectRefusal, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
-import { device, issueToken, manage, sendAs, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { device, issueToken, manage, sendAs, vaultAs, writerOf, type Who } from "./__fixtures__/identity-world";
 import { MAX_LABEL, MAX_WAITING } from "./devices";
 
 let ownerCookie: string;
@@ -62,7 +62,7 @@ describe("a request that carries two credentials", () => {
     expect((await saveWith({ cookie: ownerCookie }, "edge-cookie")).status, "the cookie alone").toBe(200);
     expect(bodyOf(await vaultAs(owner).note("edge-cookie")).writer, "the cookie alone is owner").toBe("owner");
     expect((await saveWith({ cookie: ownerCookie, authorization: `Bearer ${token}` }, "edge-both")).status).toBe(200);
-    expect(bodyOf(await vaultAs(owner).note("edge-both")).writer, "the owner's cookie beside the agents' token is the agents").toBe("agents");
+    expect(bodyOf(await vaultAs(owner).note("edge-both")).writer, "the owner's cookie beside the agents' token is the agents' device").toBe(await writerOf(ownerCookie, "edge-both"));
   });
 
   it("is turned away when the token is no good, with no falling back to the cookie", async () => {

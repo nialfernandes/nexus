@@ -16,7 +16,7 @@
 // number is only ever taken by the batch that finds it free.
 //
 // WHO MAY DO WHAT. Any caller may save, read and delete (caller.ts: there are no folder rights). The writer kept on a
-// version is the caller's name.
+// version is the caller's writer: the device that made the call (caller.ts).
 //
 // Everything here talks to a SqlDb, a Clock and Secrets and nothing else (ports.ts).
 
@@ -126,7 +126,7 @@ export async function save(host: NexusHost, caller: Caller, input: SaveInput): P
   const { text: blob, bytes } = bytesOf(input.blob, "blob", MAX_BLOB_BYTES);
   checkNoteBlob(bytes, kid);
   const hash = await blobHash(host.secrets, bytes);
-  const writer = caller.name;
+  const writer = caller.writer;
   const { sql } = host;
 
   return untilCommitted(async (attempt): Promise<SaveAnswer | undefined> => {
@@ -152,7 +152,7 @@ export async function remove(host: NexusHost, caller: Caller, input: { id?: unkn
   onlyFields(input as Record<string, unknown>, DELETE_FIELDS, "A delete");
   const id = noteId(input.id);
   const base = wholeNumber(input.base, "base", 0);
-  const writer = caller.name;
+  const writer = caller.writer;
   const { sql } = host;
 
   return untilCommitted(async (attempt): Promise<DeleteAnswer | undefined> => {

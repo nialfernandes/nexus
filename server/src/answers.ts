@@ -1,6 +1,7 @@
 // What Nexus says, in one place: the wire shape of every answer. A row of the database is never sent as it is; it
 // is turned into one of these, so the columns can change without the callers noticing. `at` is unix milliseconds,
-// `writer` is the name of the identity that wrote the version, `blob` and `wrap` are base64 of bytes the server cannot
+// `writer` is the device that wrote the version (`device:<token id>`, or the identity's name for the owner's own browser
+// session, caller.ts), `blob` and `wrap` are base64 of bytes the server cannot
 // read, and `hash` is SHA-256 of the blob (hash.ts).
 
 import type { ListedNote, VersionRow } from "./store";

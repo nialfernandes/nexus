@@ -6,7 +6,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GARDEN_V1, PODCAST_V1 } from "./__fixtures__/device-blobs";
 import { bodyOf, expectRefusal, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
-import { everythingStored, issueToken, manage, vaultAs, type Who } from "./__fixtures__/identity-world";
+import { everythingStored, issueToken, manage, vaultAs, writerOf, type Who } from "./__fixtures__/identity-world";
 
 let ownerCookie: string;
 let owner: Who;
@@ -73,18 +73,18 @@ describe("a token is kept only as a hash", () => {
 });
 
 describe("a bearer token is how an agent or a device is let in", () => {
-  it("lets the holder in as the identity it was made for, and the notes it saves are theirs", async () => {
+  it("lets the holder in as the identity it was made for, and the notes it saves are its device's", async () => {
     const { token } = await issueToken(ownerCookie, "agents", "lab-in");
     const agent: Who = { bearer: token };
     expect((await vaultAs(agent).list()).status).toBe(200);
     expect(bodyOf(await vaultAs(agent).save(GARDEN_V1, 0))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: "agents" });
+    expect(bodyOf(await vaultAs(owner).note(GARDEN_V1.id))).toMatchObject({ writer: await writerOf(ownerCookie, "lab-in") });
   });
 
-  it("lets a token made for owner write, as owner", async () => {
+  it("lets a token made for owner write, as owner, and as the device it is", async () => {
     const phone: Who = { bearer: (await issueToken(ownerCookie, "owner", "the owner's phone")).token };
     expect(bodyOf(await vaultAs(phone).save(PODCAST_V1, 0))).toMatchObject({ result: "saved" });
-    expect(bodyOf(await vaultAs(owner).note(PODCAST_V1.id))).toMatchObject({ writer: "owner" });
+    expect(bodyOf(await vaultAs(owner).note(PODCAST_V1.id))).toMatchObject({ writer: await writerOf(ownerCookie, "the owner's phone") });
   });
 
   it("answers 401 to a token nobody made, an empty one, and a scheme that is not Bearer", async () => {
