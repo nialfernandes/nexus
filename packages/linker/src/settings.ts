@@ -93,6 +93,21 @@ export function foldersOf(value: string): string[] {
   });
 }
 
+/**
+ * The environment of a Worker with the model's key as a string. A Worker's secret is a string, or it is a Cloudflare Secrets Store binding:
+ * an object whose `get()` answers the string. Both are taken, and nothing else is changed. A binding that cannot be read is a
+ * `SettingsError` that names the setting and says nothing of what the store answered.
+ */
+export async function withModelKeyRead(env: Environment): Promise<Environment> {
+  const binding = env[SETTING.modelKey];
+  if (typeof binding !== "object" || binding === null || typeof (binding as { get?: unknown }).get !== "function") return env;
+  try {
+    return { ...env, [SETTING.modelKey]: await (binding as { get(): Promise<unknown> }).get() };
+  } catch {
+    throw new SettingsError(`${SETTING.modelKey} is a Secrets Store binding that could not be read.`);
+  }
+}
+
 /** The path of the state note: a markdown note in a folder of its own, not in `Mentions/` and not in a hidden folder, which the plugin does not sync. */
 export function stateNoteOf(value: string): string {
   const steps = value.split("/");

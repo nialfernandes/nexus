@@ -77,7 +77,7 @@ The same names are the environment of the command and the variables and secrets 
 | `NEXUS_AGENT_APPROVAL` | The approval sealed to the agent's public key | yes (a secret) |
 | `LINKER_FOLDERS` | The folders of transcript notes, comma separated, such as `Transcripts/`. Not `Mentions/` | yes |
 | `LINKER_MODEL_ADDRESS` | The chat endpoint's address, such as `https://models.example.org/v1`. The job calls `<address>/chat/completions` | yes |
-| `LINKER_MODEL_KEY` | The key it is given as a bearer token | yes (a secret) |
+| `LINKER_MODEL_KEY` | The key it is given as a bearer token. In the Worker it is a secret (a string) or a Cloudflare Secrets Store binding (an object whose `get()` answers the key; see the example configuration) | yes (a secret) |
 | `LINKER_MODEL_NAME` | The model's name on that endpoint. There is no default | yes |
 | `LINKER_MAX_NOTES` | The most notes a run takes on | no, 10 |
 | `LINKER_MAX_CHECKS` | The most notes at a later version than the first that a run reads to see whether they were linked (see Limits) | no, 20 |

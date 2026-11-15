@@ -35,6 +35,12 @@ describe("the Worker's example configuration", () => {
     for (const name of everySetting.filter((one) => !(secrets as readonly string[]).includes(one))) expect(vars, name).toMatch(new RegExp(`^(# )?${name} = "`, "m"));
   });
 
+  it("shows the model's key as a Secrets Store binding, commented out and with no real id", () => {
+    expect(example).toMatch(/^# \[\[secrets_store_secrets\]\]\n# binding = "LINKER_MODEL_KEY"\n# store_id = "[^"]*example[^"]*"\n# secret_name = "[^"]+"$/m);
+    expect(example).not.toMatch(/^\[\[secrets_store_secrets\]\]/m);
+    expect(readme).toContain("Secrets Store binding");
+  });
+
   it("wakes on a cron trigger, and runs the Worker's source", () => {
     expect(example).toMatch(/^\[triggers\]\s*\ncrons = \["[^"]+"\]/m);
     expect(example).toMatch(/^main = "src\/worker\.ts"$/m);
