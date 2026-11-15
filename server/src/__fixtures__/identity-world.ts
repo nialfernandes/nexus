@@ -60,6 +60,7 @@
 //   `nexusAsApp(env, identity)`; see app-identity.test.ts for what it gives back.
 
 import { expect } from "vitest";
+import { VAULT_ID } from "./device-blobs";
 import type { NexusEnv } from "../plugs/cloudflare/host";
 import worker from "../plugs/cloudflare/worker";
 import { API, ORIGIN, appEnv, bodyOf, nexusDb, type Answer, type Sent } from "./nexus-world";
@@ -126,7 +127,7 @@ export function manage(who: Who, env?: NexusEnv) {
     createIdentity: (name: string, kind: string) => post("identity", { name, kind }),
     tokens: () => sendAs("GET", `${API}/tokens`, who, undefined, env),
     revoke: (id: string) => post("token/revoke", { id }),
-    setWrap: (kid: number, kind: string, wrap: string) => post("wrap", { kid, kind, wrap }),
+    setWrap: (kid: number, kind: string, wrap: string, vaultId: string = VAULT_ID) => post("wrap", { kid, kind, wrap, vaultId }),
     removeWrap: (kid: number, kind: string) => post("wrap/delete", { kid, kind }),
   };
 }

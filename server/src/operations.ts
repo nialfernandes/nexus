@@ -38,7 +38,7 @@ export const operations = {
     return ok(await store.remove(host, caller, input));
   },
   async wraps(host: NexusHost): Promise<Answered> {
-    return ok({ wraps: (await wraps.listWraps(host)).map(wrapEntry) });
+    return ok({ vaultId: await wraps.vaultId(host), wraps: (await wraps.listWraps(host)).map(wrapEntry) });
   },
   async setWrap(host: NexusHost, caller: Caller, input: Record<string, unknown>): Promise<Answered> {
     return ok(await wraps.setWrap(host, caller, input));

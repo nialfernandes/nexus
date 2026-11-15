@@ -13,6 +13,9 @@ export const MAX_WRAP_BYTES = 1024;
 /** The largest key number: the 4-byte `kid` of docs/FORMAT.md. */
 export const MAX_KID = 4_294_967_295;
 
+/** The longest vault id, in UTF-8 bytes: the format's own limit (docs/FORMAT.md section 2). */
+export const MAX_VAULT_ID_BYTES = 1024;
+
 /** The longest note id. */
 export const MAX_ID_LENGTH = 128;
 
@@ -54,6 +57,14 @@ export function optionalVersion(value: unknown): number | undefined {
 export function kidOf(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_KID) {
     throw new Refusal(400, `The kid has to be a whole number from 0 to ${MAX_KID}: the number of the vault key the data is under.`);
+  }
+  return value;
+}
+
+/** The id of the vault the wraps were made with. It is not secret, and the server never reads into it. */
+export function vaultIdOf(value: unknown): string {
+  if (typeof value !== "string" || value === "" || new TextEncoder().encode(value).length > MAX_VAULT_ID_BYTES) {
+    throw new Refusal(400, `A vault id is needed: text of 1 to ${MAX_VAULT_ID_BYTES} bytes, the one the wraps were made with.`);
   }
   return value;
 }

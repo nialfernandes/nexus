@@ -10,7 +10,7 @@
 // among the lines searched.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { GARDEN_V1, GARDEN_V2, PASSWORD_WRAP, PODCAST_V1, RECOVERY_WRAP } from "./__fixtures__/device-blobs";
+import { GARDEN_V1, GARDEN_V2, PASSWORD_WRAP, PODCAST_V1, RECOVERY_WRAP, VAULT_ID } from "./__fixtures__/device-blobs";
 import { everythingStored, issueToken, sendAs, type Who } from "./__fixtures__/identity-world";
 import { API, appEnv, bodyOf, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
 import { ROUTE_NAMES } from "./routes";
@@ -96,8 +96,8 @@ beforeAll(async () => {
   await call("GET", "changes", owner);
 
   // The wraps, and the owner's other routes.
-  await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: RECOVERY_WRAP });
-  await call("POST", "wrap", owner, { kid: 1, kind: "password", wrap: PASSWORD_WRAP });
+  await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: RECOVERY_WRAP, vaultId: VAULT_ID });
+  await call("POST", "wrap", owner, { kid: 1, kind: "password", wrap: PASSWORD_WRAP, vaultId: VAULT_ID });
   await call("GET", "wraps", agent);
   await call("POST", "wrap/delete", owner, { kid: 1, kind: "password" });
   await call("POST", "identity", owner, { name: "another", kind: "agent" });
@@ -118,7 +118,7 @@ beforeAll(async () => {
   // A device that forgot to encrypt, and sends the note's own text as a well-formed blob, or as a wrap: refused by the header, and kept nowhere.
   await call("POST", "save", owner, { id: "legacy-3", base: 0, kid: 1, blob: Buffer.from(GARDEN_V1.text.repeat(8)).toString("base64") });
   await call("POST", "save", owner, { id: "legacy-4", base: 0, kid: 1, blob: Buffer.from(JSON.stringify({ path: GARDEN_V1.path, text: GARDEN_V1.text })).toString("base64") });
-  await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: Buffer.from(GARDEN_V1.text).toString("base64") });
+  await call("POST", "wrap", owner, { kid: 1, kind: "recovery", wrap: Buffer.from(GARDEN_V1.text).toString("base64"), vaultId: VAULT_ID });
   await call("POST", "delete", owner, { path: GARDEN_V1.path });
   await call("POST", "identity", owner, { name: "wide", kind: "agent", rights: [{ path: `${GARDEN_V1.path.split("/")[0]}/`, access: "read" }] });
   await call("GET", `note?id=${encodeURIComponent(GARDEN_V1.path)}`, owner);

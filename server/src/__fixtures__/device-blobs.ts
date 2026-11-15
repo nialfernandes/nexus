@@ -12,6 +12,9 @@
 /** The vault key's number in every blob here. */
 export const KID = 1;
 
+/** The vault id every blob and wrap here was made with (the server keeps it beside the wraps). */
+export const VAULT_ID = "vault-1";
+
 /** Version 1 of note n-1. */
 export const GARDEN_V1 = {
   id: "n-1",

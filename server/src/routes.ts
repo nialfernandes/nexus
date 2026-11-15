@@ -9,10 +9,12 @@
 //   GET  /changes   [?after=CURSOR][&limit=N]          200 the versions after the cursor, oldest first, and `next`: a page ends at N versions or at the
 //                                                      size cap on its blobs, whichever is first (store.ts `changes`), so it can be short
 //   POST /delete    { id, base }                       200 deleted, 404 no such note, 409 the note is at another version
-//   GET  /wraps                                        200 the vault key's wraps (Recovery, password), each with its kid
+//   GET  /wraps                                        200 { vaultId, wraps }: the vault id the wraps were made with (null before the first wrap) and the
+//                                                      vault key's wraps (Recovery, password), each with its kid
 //
 //   MANAGING (the owner only; any other identity is 403)
-//   POST /wrap           { kid, kind, wrap }           200 kept (replaces the wrap of that kind for that kid), 400 with a `reason` if it does not begin as that wrap does
+//   POST /wrap           { kid, kind, wrap, vaultId }  200 kept (replaces the wrap of that kind for that kid), 400 with a `reason` if it does not begin as that wrap does,
+//                                                      409 if the server already holds a vault with another vault id (the first wrap sets it, and it never changes)
 //   POST /wrap/delete    { kid, kind }                 200 removed, 404 no such wrap
 //   POST /identity       { name, kind }                200 the identity, 400 a bad name or kind, 409 name taken
 //   GET  /tokens                                       200 the tokens that work (never the token), newest first

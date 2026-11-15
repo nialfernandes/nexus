@@ -30,6 +30,12 @@ A **wrap** is the vault key locked under the Recovery Key (`recovery`) or, if th
 (`password`): opaque base64 with its `kid`. A new device that has the Recovery Key or the password fetches the wrap and
 unlocks the vault key.
 
+A wrap opens only with the **vault id** it was made with, so the server keeps that id beside the wraps (table `nexus_vault`,
+migration 0005) and answers it with `GET /wraps`. The owner sends it with every wrap; the first one sets it, a wrap sent with
+another id is refused (`409`), and it stays when every wrap is removed, because it names the vault the notes belong to. It is
+not secret. Without it, a device or an agent that holds only the Recovery Key could not open the Recovery wrap. A wrap kept
+before migration 0005 has no vault id beside it: the owner keeps it again, with the id.
+
 **Nothing else about a note is kept or logged: no path, name, folder or text.** The server cannot search, and it has no
 folders to give rights over. `src/no-plaintext.test.ts` stores two notes, calls every route, and fails if any table
 row, log line or answer holds either note's path, folder, name or text (plain, escaped, or as base64).
@@ -89,8 +95,8 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `GET /list` | any | `200 { notes: [ { id, version, at, kid, hash } ] }`, the live notes |
 | `GET /changes[?after=C][&limit=N]` | any | `200 { changes: [ { id, version, kind, kid, writer, at, hash, blob } ], next }`, a delete has no blob. A page can hold fewer than `limit` versions: see "The changes feed" |
 | `POST /delete` `{ id, base }` | any | `200 { result: "deleted", id, version }`; `404`; `409 { error, current }` |
-| `GET /wraps` | any | `200 { wraps: [ { kid, kind, wrap, writer, at } ] }` |
-| `POST /wrap` `{ kid, kind, wrap }` | owner | Keeps a wrap, replacing the one of that kind for that `kid`; `400` with a `reason` when the wrap does not begin as that kind of wrap does |
+| `GET /wraps` | any | `200 { vaultId, wraps: [ { kid, kind, wrap, writer, at } ] }`: `vaultId` is the vault id the wraps were made with, `null` before the first wrap |
+| `POST /wrap` `{ kid, kind, wrap, vaultId }` | owner | Keeps a wrap, replacing the one of that kind for that `kid`; `400` with a `reason` when the wrap does not begin as that kind of wrap does; `409` when the server already holds a vault with another `vaultId` |
 | `POST /wrap/delete` `{ kid, kind }` | owner | Removes a wrap |
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
