@@ -50,7 +50,7 @@
 //       200 { wraps: [ { kid, kind, wrap, writer, at } ] }
 //
 //   `kind` is "save" or "delete". `hash` is SHA-256 of the blob, 64 lower case hex characters. `at` is unix
-//   milliseconds. `writer` is the name of the identity that wrote the version ("owner", "agents", "recorder", ...).
+//   milliseconds. `writer` is the device that wrote the version: `device:<the id of the token it called with>` (identity-world.ts `writerOf`), or "owner" for the owner's own browser session.
 //   A version number counts every version of the note, a delete included, from 1.
 //   Without the owner's sign-in or an identity's bearer token every route answers 401 (not a redirect, not a 404). How a
 //   token is got, and the routes only the owner may call, are in identity-world.ts.
