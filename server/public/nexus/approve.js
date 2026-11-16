@@ -21,8 +21,8 @@
   var MINUTE = 60 * 1000;
   var GROUP = 4;
 
-  // The words, in one place. The boards name the app ("Obsidian"); Nexus does not know which app a device is, so the
-  // page says "the device" and the label the device sent names it in the card.
+  // The words, in one place. The boards name the app a device is; Nexus is not told which app that is, so the page says
+  // "the device" and the label the device sent names it in the card.
   var WORDS = {
     checking: { title: 'new device', line: 'Checking the code…' },
     asking: { title: 'new device', line: 'A device wants to sign in.' },
