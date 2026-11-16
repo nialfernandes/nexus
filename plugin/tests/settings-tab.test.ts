@@ -16,11 +16,18 @@ import type { PluginData } from "../src/types";
 import type { FakeText, Setting } from "./fake-obsidian";
 
 /** The part of the plugin that the tab reads and calls. */
-function fakePlugin(state: PluginData) {
+function fakePlugin(state: PluginData, unlocked = false) {
   const saved: PluginData[] = [];
+  const opened: string[] = [];
   const plugin = {
     state,
     saved,
+    /** The screens the tab asked to open, in order. */
+    opened,
+    /** Whether the vault is unlocked, and whether the tab asked for it to be locked. */
+    keyHolder: { isUnlocked: unlocked },
+    setup: { lock: () => void (plugin.keyHolder.isUnlocked = false) },
+    openSetup: (entry: string) => void opened.push(entry),
     statusShown: 0,
     engine: { status: () => (state.address === "" || state.user === "" ? NOT_SET_UP : "Signed out. Open the Nexus settings and sign in."), sync: async () => undefined },
     http: async () => {
@@ -38,8 +45,8 @@ function fakePlugin(state: PluginData) {
   return plugin;
 }
 
-function openTab(state: PluginData) {
-  const plugin = fakePlugin(state);
+function openTab(state: PluginData, unlocked = false) {
+  const plugin = fakePlugin(state, unlocked);
   const tab = new NexusSettingTab({} as never, plugin as never);
   tab.display();
   const settings = (): Setting[] => (tab as unknown as { containerEl: { settings: Setting[] } }).containerEl.settings;
@@ -61,7 +68,7 @@ beforeEach(() => {
 describe("the settings tab of a fresh install", () => {
   it("asks for the server address and the user name, both empty, with an example address shown greyed", () => {
     const { named, field, settings } = openTab(joinState(null, null));
-    expect(settings().map((setting) => setting.name)).toEqual(["Status", "Nexus address", "User name", "Account", "Device name"]);
+    expect(settings().map((setting) => setting.name)).toEqual(["Status", "Nexus address", "User name", "Account", "Encryption", "Device name"]);
     expect(named("Status").desc).toBe(NOT_SET_UP);
     expect(field("Nexus address").value).toBe("");
     expect(field("Nexus address").placeholder).toBe(ADDRESS);
@@ -94,6 +101,40 @@ describe("the settings tab of a fresh install", () => {
     expect(named("Account").desc).toContain("demo");
     expect(field("Nexus address").value, "the tab shows the address as it was kept").toBe(ADDRESS);
     expect(field("User name").value).toBe("demo");
+  });
+});
+
+describe("the Encryption row, where the setup screens are opened from", () => {
+  const ready = (): PluginData => ({ ...joinState({ address: ADDRESS, user: "demo" }, null, () => "id"), token: "nx_TOKEN" });
+
+  it("says to enter the address and the user name first, and offers nothing, on a fresh install", () => {
+    const { named } = openTab(joinState(null, null));
+    expect(named("Encryption").desc).toMatch(/address and your user name/i);
+    expect(named("Encryption").buttons).toEqual([]);
+  });
+
+  it("offers Set up or unlock while the vault is locked, and it opens the screens to set up or unlock", () => {
+    const { plugin, named } = openTab(ready());
+    expect(named("Encryption").buttons.map((button) => button.text)).toEqual(["Set up or unlock"]);
+    expect(named("Encryption").buttons[0]!.cta).toBe(true);
+    expect(named("Encryption").desc).toMatch(/locked/i);
+    named("Encryption").buttons[0]!.clicked();
+    expect(plugin.opened).toEqual(["unlock"]);
+  });
+
+  it("offers Approve a device and Lock once the vault is unlocked: the first opens the screens to approve, the second locks it", () => {
+    const { plugin, named } = openTab(ready(), true);
+    expect(named("Encryption").buttons.map((button) => button.text)).toEqual(["Approve a device", "Lock"]);
+    expect(named("Encryption").desc).toMatch(/unlocked/i);
+    named("Encryption").buttons[0]!.clicked();
+    expect(plugin.opened).toEqual(["approve"]);
+    named("Encryption").buttons[1]!.clicked();
+    expect(plugin.keyHolder.isUnlocked).toBe(false);
+  });
+
+  it("offers Set up or unlock to a device that is not signed in as well: the screens say what to do first", () => {
+    const { named } = openTab({ ...ready(), token: null });
+    expect(named("Encryption").buttons.map((button) => button.text)).toEqual(["Set up or unlock"]);
   });
 });
 

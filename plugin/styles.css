@@ -396,7 +396,7 @@
   border: 2px solid var(--nx-red-line);
 }
 
-.nexus-screen .nx-box input {
+.nexus-screen .nx-box__input {
   appearance: none;
   width: 100%;
   height: 100%;
@@ -412,12 +412,12 @@
   caret-color: var(--nx-ink);
 }
 
-.nexus-screen .nx-box input::selection {
+.nexus-screen .nx-box__input::selection {
   background: transparent;
 }
 
 /* An empty box with the caret in it shows the caret as drawn: 2 px wide, in ink. */
-.nx-box--edit:focus-within:has(input:placeholder-shown)::after {
+.nx-box--edit:focus-within:has(.nx-box__input:placeholder-shown)::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -430,7 +430,7 @@
   pointer-events: none;
 }
 
-.nexus-screen .nx-box--edit:focus-within:has(input:placeholder-shown) input {
+.nexus-screen .nx-box--edit:focus-within:has(.nx-box__input:placeholder-shown) .nx-box__input {
   caret-color: transparent;
 }
 

@@ -107,6 +107,35 @@ export class Setting {
   }
 }
 
+/**
+ * Obsidian's modal, as far as the setup screens' modal uses it: an element to put things in (`contentEl`) and one around it (`modalEl`),
+ * each with the two helpers Obsidian adds to elements, and `open` and `close` that call `onOpen` and `onClose`. It needs a page, so it
+ * is only used by tests that run in a browser-like environment.
+ */
+export class Modal {
+  readonly modalEl: HTMLElement & { addClass: (name: string) => void };
+  readonly contentEl: HTMLElement & { empty: () => void };
+  isOpen = false;
+  constructor(readonly app: unknown) {
+    this.modalEl = Object.assign(document.createElement("div"), { addClass: (name: string) => this.modalEl.classList.add(name) });
+    this.contentEl = Object.assign(document.createElement("div"), { empty: () => this.contentEl.replaceChildren() });
+    this.modalEl.append(this.contentEl);
+  }
+  open(): void {
+    this.isOpen = true;
+    document.body.append(this.modalEl);
+    this.onOpen();
+  }
+  close(): void {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.onClose();
+    this.modalEl.remove();
+  }
+  onOpen(): void {}
+  onClose(): void {}
+}
+
 export class PluginSettingTab {
   readonly containerEl = new FakeContainer();
   constructor(

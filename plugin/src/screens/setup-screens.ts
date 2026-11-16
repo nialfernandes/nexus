@@ -226,9 +226,12 @@ export class SetupScreens {
   async start(entry: Entry): Promise<void> {
     this.#active = true;
     this.#lastStable = null;
+    let working: Promise<void> = Promise.resolve();
     if (entry === "approve") this.#deps.setup.startApprovingDevice();
-    else await this.#deps.setup.begin();
+    else working = this.#deps.setup.begin();
+    // What the controller did before its first wait is on screen at once; what it learns from Nexus arrives as its own changes.
     this.#changed();
+    await working;
   }
 
   /** The screen is closed: nothing that was going on goes on, and what the screen kept is forgotten. */
