@@ -208,7 +208,7 @@ describe("board 1: the page the owner is shown for a waiting sign-in", () => {
 
     expect(codeBoxes(page)).toEqual([characters.slice(0, 4), characters.slice(4)]);
     expect(page.el.code.attributes["aria-label"], "read out as one string").toBe(`Device code ${characters.join("")}`);
-    expect(page.el.code.children.map((group) => group.className)).toEqual(["code__group code__group--of-4", "code__group code__group--of-4"]);
+    expect(page.el.code.children.map((group: Element) => group.className)).toEqual(["code__group code__group--of-4", "code__group code__group--of-4"]);
     // Nothing is typed on this screen: there are two buttons, Allow and Deny, and no field or other button.
     expect(page.html.match(/<button\b/gi)).toHaveLength(2);
     expect(page.html).not.toMatch(/<(?:input|textarea|select)\b/i);
