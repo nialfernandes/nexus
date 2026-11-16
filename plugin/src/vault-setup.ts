@@ -10,20 +10,29 @@
 //   locked             The vault is locked and nothing is going on. This is where the plugin starts, and where lock and cancel end.
 //   unlocked           The vault is unlocked and nothing is going on. The plugin syncs.
 //   working            Something is being asked of Nexus or worked out; wait. `doing` says which: looking (what Nexus holds),
-//                      starting-sign-in, saving (the Recovery wrap), opening (the vault key with the Recovery Key), approving (a device).
+//                      starting-sign-in, saving (the wraps), opening (the vault key with the Recovery Key or the password), approving (a device).
 //   stopped            It cannot go on, and says why in `message` (and `reason`). Nothing was kept. `begin` starts again.
 //   signed-out         This device holds no sign-in, so it cannot ask Nexus what it holds. A new device can still ask another to approve it.
 //   no-vault           Nexus holds no vault yet: the person can make one (first run).
-//   has-vault          Nexus holds a vault. The person can type the Recovery Key, or ask another device. `message` is why the last try
-//                      was refused, or null.
-//   show-key           First run: the Recovery Key is shown (`recoveryKey`) and the person types back its last group. `triesLeft`
-//                      and the last refusal (`message`) are shown with it.
+//   has-vault          Nexus holds a vault. The person can type the Recovery Key, or the password when Nexus holds a password wrap
+//                      (`hasPassword`), or ask another device. `message` is why the last try was refused, or null, and `problem` says
+//                      what was wrong with what was typed: nothing typed (empty), a Recovery Key that is not whole or whose check group
+//                      does not agree (incomplete), a key or password that does not open the vault (wrong), or something else (other).
+//   show-key           First run: the Recovery Key is shown (`recoveryKey`) and the person types back three of its groups, those
+//                      numbered in `ask`. `wrong` is the groups of the last try that did not match (empty before a try).
+//   choose-password    First run: the key was typed back right. The person picks whether the vault also opens with a password. Nothing is
+//                      sent yet.
 //   save-failed        The check characters were right but Nexus did not take the Recovery wrap (it could not be reached, or was in
-//                      trouble). Nothing is unlocked; the same wrap can be sent again.
+//                      trouble). Nothing is unlocked; the same wraps can be sent again.
+//   set-up             First run is over and the vault is unlocked. `password` is whether a password wrap was kept, and `message` says so when
+//                      one was asked for and was not.
 //   waiting-for-device A new device has asked another to approve it, and shows the link, the sign-in code and the key code to be
 //                      typed on that device.
 //   type-matching-code The approval came. The person types, here, the matching code the approving device shows. `triesLeft`.
-//   approve-device     This device is unlocked and ready to approve another: the sign-in code and the key code the new device shows are typed.
+//   device-unlocked    A new device's matching code agreed: the vault is unlocked here.
+//   approve-device     This device is unlocked and ready to approve another: the sign-in code is typed first, and Nexus says which device
+//                      that is (`device`); then the key code the new device shows is typed. `problem` is the ApprovalError's reason
+//                      for the last refusal.
 //   device-approved    The other device was approved. `code` is the matching code to show here and type on the new device.
 //   approve-agent      This device is unlocked and ready to approve an agent: the agent's public key is pasted.
 //   agent-approved     The vault key is sealed to the agent's key. `approval` is for the person to save beside the agent's private key
@@ -33,37 +42,46 @@
 //   begin()                       From locked, stopped, signed-out, no-vault or has-vault: ask Nexus what it holds, and go to signed-out,
 //                                 no-vault, has-vault or stopped.
 //   startFirstRun()               From no-vault: check that only the owner can send the wrap, make the vault key, the vault id and the
-//                                 Recovery Key, and show the key (show-key). Nothing is sent yet.
-//   typeBack(text)                From show-key: the last four characters of the Recovery Key. Right: send the Recovery wrap with the
-//                                 vault id, and unlock. Wrong: another try, and after three, stopped with nothing sent.
-//   tryAgain()                    From save-failed: send the same Recovery wrap again.
+//                                 Recovery Key, pick three groups of it to be typed back, and show the key (show-key). Nothing is sent yet.
+//   typeBack(text)                From show-key: the asked groups, typed one after the other (twelve characters). Right: choose-password.
+//                                 Wrong: show-key again with the groups that did not match in `wrong`. There is no limit on tries.
+//   backToKey()                   From choose-password: show-key again, the same key and the same groups.
+//   finishSetup(choice)           From choose-password: `null` for no password, or the password typed twice. Two passwords that do not
+//                                 agree (NFKC) are refused. Then send the Recovery wrap with the vault id, then the password wrap if one
+//                                 was asked for, and unlock (set-up).
+//   tryAgain()                    From save-failed: send the same wraps again.
 //   typeRecoveryKey(text)         From has-vault: open the Recovery wrap with the key typed. Right: unlocked. Wrong: has-vault with a
-//                                 message, and nothing is kept.
+//                                 message and a problem, and nothing is kept.
+//   typePassword(text)            From has-vault with a password wrap held: open it with the password typed, as typeRecoveryKey.
 //   askAnotherDevice()            From locked, stopped, signed-out or has-vault: ask Nexus to sign this device in, and another device to send the vault key.
-//   typeMatchingCode(text)        From type-matching-code: the code the approving device shows. Right: signed in and unlocked. Wrong: another
+//   typeMatchingCode(text)        From type-matching-code: the code the approving device shows. Right: device-unlocked. Wrong: another
 //                                 try, and after three the approval is thrown away (stopped).
 //   refuseCode()                  From type-matching-code: the person says the codes do not match. The approval is thrown away (stopped).
 //   startApprovingDevice()        From unlocked: ready to approve another device (approve-device).
+//   lookUpDevice(code)            From approve-device: the sign-in code read off the new device. Nexus says which device waits under it.
 //   approveDevice(code, keyCode)  From approve-device: the sign-in code and the key code read off the new device. Right: device-approved.
 //                                 A key code that is not the key Nexus gave this device is refused with nothing sent, and the person tries again.
 //   startApprovingAgent()         From unlocked: ready to approve an agent (approve-agent).
 //   approveAgent(publicKey)       From approve-agent: the agent's public key as pasted. Right: agent-approved. Not a public key: refused.
-//   done()                        From approve-device, device-approved, approve-agent or agent-approved: back to unlocked.
+//   done()                        From set-up, device-unlocked, approve-device, device-approved, approve-agent or agent-approved: back to unlocked.
 //   cancel()                      From any step that is going on: leave it, throw away whatever it made, and go back to locked or unlocked.
 //   lock()                        Drop the key (the key holder overwrites it), cancel what is going on, and go to locked.
 //   unload()                      The plugin is unloading: the same as lock, and nothing is kept.
 //
-// Nothing is sent that could carry a key before the person has done what the step asks: the Recovery wrap goes only after the check
-// characters are typed back, a device is sent the vault key only after the key code it was asked for matches, and a new device uses
-// nothing of what it was handed until the matching code is typed.
+// Nothing is sent that could carry a key before the person has done what the step asks: the Recovery wrap goes only after the groups
+// are typed back and the password step is finished, a device is sent the vault key only after the key code it was asked for matches, and
+// a new device uses nothing of what it was handed until the matching code is typed.
 
 import { isSetUp, NOT_SET_UP } from "./state";
 import {
-  TYPE_BACK_TRIES, TYPE_BACK_WRONG, approvalForAgent, forgetNewVault, holdsAVault, isTypedBack, makeNewVault, newestRecoveryWrap,
-  openRecoveryWrap, publicKeyCode, readAgentPublicKey, recoveryWrapRequest,
-  type NewVault, type RecoveryWrapRequest,
+  TYPE_BACK_GROUPS, approvalForAgent, forgetNewVault, groupsToTypeBack, holdsAVault, holdsAWrap, makeNewVault, newestPasswordWrap,
+  newestRecoveryWrap, openPasswordWrapHeld, openRecoveryWrap, passwordWrapRequest, publicKeyCode, readAgentPublicKey, recoveryWrapRequest,
+  wrongGroups, type NewVault, type PasswordWrapRequest, type RecoveryWrapRequest,
 } from "@nexus/agent/setup";
-import { ApprovalError, MATCHING_CODE_TRIES, UNREACHABLE, approveDevice as approveWithKeyCode, signInForKey, type PendingApproval } from "./approval";
+import { NexusCryptoError } from "@nexus/crypto";
+import {
+  ApprovalError, MATCHING_CODE_TRIES, UNREACHABLE, approveDevice as approveWithKeyCode, findPendingDevice, signInForKey, type PendingApproval,
+} from "./approval";
 import type { KeyHolder } from "./key-holder";
 import type { Http, PluginData } from "./types";
 
@@ -72,8 +90,17 @@ export type Doing = "looking" | "starting-sign-in" | "saving" | "opening" | "app
 
 /** Why a setup stopped. */
 export type StoppedBecause =
-  | "not-set-up" | "unreachable" | "refused" | "not-owner" | "other-vault" | "type-back-failed"
+  | "not-set-up" | "unreachable" | "refused" | "not-owner" | "other-vault"
   | "denied" | "expired" | "changed" | "bad-approval" | "codes-differ" | "sign-in-failed";
+
+/** What was wrong with a Recovery Key or a password the person typed: see `has-vault` above. */
+export type OpenProblem = "empty" | "incomplete" | "wrong" | "other";
+
+/** The device a sign-in code belongs to, as Nexus says (the label is what the device sent, so it is shown as text and nothing else). */
+export interface DeviceAsking {
+  signInCode: string;
+  label: string;
+}
 
 export type SetupState =
   | { step: "locked" }
@@ -82,12 +109,15 @@ export type SetupState =
   | { step: "stopped"; reason: StoppedBecause; message: string }
   | { step: "signed-out" }
   | { step: "no-vault" }
-  | { step: "has-vault"; message: string | null }
-  | { step: "show-key"; recoveryKey: string; triesLeft: number; message: string | null }
+  | { step: "has-vault"; message: string | null; problem: OpenProblem | null; hasPassword: boolean }
+  | { step: "show-key"; recoveryKey: string; ask: number[]; wrong: number[]; message: string | null }
+  | { step: "choose-password"; message: string | null }
   | { step: "save-failed"; message: string }
+  | { step: "set-up"; password: boolean; message: string | null }
   | { step: "waiting-for-device"; link: string; code: string; keyCode: string }
   | { step: "type-matching-code"; triesLeft: number; message: string | null }
-  | { step: "approve-device"; message: string | null }
+  | { step: "device-unlocked" }
+  | { step: "approve-device"; message: string | null; problem: ApprovalError["reason"] | null; device: DeviceAsking | null }
   | { step: "device-approved"; code: string; label: string }
   | { step: "approve-agent"; message: string | null }
   | { step: "agent-approved"; approval: string; publicKeyCode: string };
@@ -110,7 +140,14 @@ export interface SetupDeps {
 /** The plain sentences a state carries. A screen replaces them with its own words. */
 export const SETUP_WORDS = {
   keyNeverShownAgain: "Nexus cannot show the Recovery Key again or reset it. Write it down before going on.",
-  typeBackFailed: "The check characters were not typed back, so the vault was not set up and nothing was sent. Start again for a new key.",
+  typeBackWrong: "Those groups do not match the Recovery Key. Look at the key you saved and type them again.",
+  passwordsDiffer: "The two passwords are not the same, or nothing was typed. Nothing was sent.",
+  passwordRefused: "That password cannot be used. Pick another. Nothing was sent.",
+  passwordNotKept: "Nexus did not keep the password, so the vault opens with the Recovery Key only. The vault is set up.",
+  wrongPassword: "That password does not open this vault. Nothing was kept.",
+  noPassword: "No password was typed. Nothing was kept.",
+  noPasswordWrap: "This server holds no password for this vault. Type the Recovery Key.",
+  badPasswordWrap: "The password Nexus holds asks for settings this plugin does not accept, so it was not tried. Type the Recovery Key.",
   notOwner: "This sign-in is not the owner's, and only the owner may set up the vault. Sign in as the owner.",
   otherVault: "This server already holds a vault with another vault id, so this one was not kept.",
   wouldNotSay: "Nexus would not say what it holds.",
@@ -155,7 +192,12 @@ export class VaultSetup {
   #listeners = new Set<() => void>();
   /** First run: the vault being made. Held here, in memory, from the moment the key is shown until it is sent, or thrown away. */
   #fresh: NewVault | null = null;
+  /** First run: the groups of the Recovery Key the person is asked to type back, by number. */
+  #asked: number[] = [];
   #pendingWrap: RecoveryWrapRequest | null = null;
+  #pendingPasswordWrap: PasswordWrapRequest | null = null;
+  /** Whether the server holds a password wrap, as the last answer to `GET /wraps` said. */
+  #hasPassword = false;
   /** A new device's approval that is waiting for the matching code. */
   #pending: PendingApproval | null = null;
   #unloaded = false;
@@ -194,7 +236,8 @@ export class VaultSetup {
     const held = await this.#ask(flow, "GET", "wraps");
     if (held === null) return;
     if (held.status !== 200) return this.#stop(flow, "refused", refusalText(held, SETUP_WORDS.wouldNotSay));
-    if (holdsAVault(held.json)) return this.#set({ step: "has-vault", message: SETUP_WORDS.holdsOne });
+    this.#hasPassword = holdsAWrap(held.json, "password");
+    if (holdsAVault(held.json)) return this.#hasVault(SETUP_WORDS.holdsOne, null);
     const owner = await this.#ask(flow, "GET", "tokens");
     if (owner === null) return;
     if (owner.status === 403) return this.#stop(flow, "not-owner", SETUP_WORDS.notOwner);
@@ -204,28 +247,52 @@ export class VaultSetup {
     const vault = await makeNewVault();
     if (flow.cancelled) return forgetNewVault(vault);
     this.#fresh = vault;
-    this.#set({ step: "show-key", recoveryKey: vault.recoveryKeyText, triesLeft: TYPE_BACK_TRIES, message: SETUP_WORDS.keyNeverShownAgain });
+    this.#asked = groupsToTypeBack(globalThis.crypto.getRandomValues(new Uint8Array(TYPE_BACK_GROUPS)));
+    this.#showKey(null);
   }
 
-  /** First run: the person types back the last group of the Recovery Key. */
-  async typeBack(text: string): Promise<void> {
+  /** First run: the person types back the groups of the Recovery Key they were asked for. There is no limit on tries. */
+  typeBack(text: string): void {
     const shown = this.#current;
     if (shown?.step !== "show-key" || this.#fresh === null) return;
+    const wrong = wrongGroups(text, shown.recoveryKey, shown.ask);
+    if (wrong.length > 0) return this.#set({ ...shown, wrong, message: SETUP_WORDS.typeBackWrong });
+    this.#set({ step: "choose-password", message: null });
+  }
+
+  /** First run: back from the password step to the key, which is the same key, with the same groups to type back. */
+  backToKey(): void {
+    if (this.#current?.step !== "choose-password" || this.#fresh === null) return;
+    this.#showKey(null);
+  }
+
+  /**
+   * First run: the person is done choosing. `choice` is null for no password, or the password typed twice. Then the Recovery wrap is
+   * sent with the vault id, the password wrap after it when one was asked for, and the vault is unlocked.
+   */
+  async finishSetup(choice: { password: string; again: string } | null): Promise<void> {
+    const shown = this.#current;
+    if (shown?.step !== "choose-password" || this.#fresh === null) return;
     const vault = this.#fresh;
-    if (!isTypedBack(text, vault.checkGroup)) {
-      const triesLeft = shown.triesLeft - 1;
-      if (triesLeft > 0) return this.#set({ step: "show-key", recoveryKey: shown.recoveryKey, triesLeft, message: TYPE_BACK_WRONG });
-      this.#forgetFresh();
-      return this.#stop(this.#start(), "type-back-failed", SETUP_WORDS.typeBackFailed);
+    if (choice !== null && (choice.password === "" || !passwordsAgree(choice.password, choice.again))) {
+      return this.#set({ step: "choose-password", message: SETUP_WORDS.passwordsDiffer });
     }
     const flow = this.#start();
     this.#set({ step: "working", doing: "saving" });
-    this.#pendingWrap = await recoveryWrapRequest(vault);
+    try {
+      this.#pendingWrap = await recoveryWrapRequest(vault);
+      this.#pendingPasswordWrap = choice === null ? null : await passwordWrapRequest(vault, choice.password);
+    } catch (error) {
+      if (!(error instanceof NexusCryptoError)) throw error;
+      if (flow.cancelled) return;
+      this.#pendingWrap = null;
+      return this.#set({ step: "choose-password", message: SETUP_WORDS.passwordRefused });
+    }
     if (flow.cancelled) return;
     await this.#sendWrap(flow);
   }
 
-  /** First run: the same Recovery wrap is sent again, after Nexus could not be reached or was in trouble. */
+  /** First run: the same wraps are sent again, after Nexus could not be reached or was in trouble. */
   async tryAgain(): Promise<void> {
     if (!this.#is("save-failed") || this.#fresh === null || this.#pendingWrap === null) return;
     const flow = this.#start();
@@ -235,26 +302,57 @@ export class VaultSetup {
 
   /** A vault exists: the person types the Recovery Key. */
   async typeRecoveryKey(text: string): Promise<void> {
-    if (!this.#is("has-vault")) return;
+    await this.#openWith("recovery", text);
+  }
+
+  /** A vault exists and Nexus holds a password wrap for it: the person types the password. */
+  async typePassword(text: string): Promise<void> {
+    await this.#openWith("password", text);
+  }
+
+  /** Opens the newest wrap of one kind that Nexus holds, with what was typed, and unlocks with the vault key that comes out. */
+  async #openWith(kind: "recovery" | "password", text: string): Promise<void> {
+    const shown = this.#current;
+    if (shown?.step !== "has-vault" || (kind === "password" && !shown.hasPassword)) return;
     const flow = this.#start();
     this.#set({ step: "working", doing: "opening" });
     const began = this.#began();
-    const held = await this.#ask(flow, "GET", "wraps", undefined, (message) => this.#set({ step: "has-vault", message }));
+    const held = await this.#ask(flow, "GET", "wraps", undefined, (message) => this.#hasVault(message, "other"));
     if (held === null) return;
     if (!this.#sameServer(began)) return this.#stop(flow, "changed", SETUP_WORDS.changed);
-    if (held.status !== 200) return this.#set({ step: "has-vault", message: refusalText(held, SETUP_WORDS.wouldNotSay) });
-    const found = newestRecoveryWrap(held.json);
-    if (!found.ok) return this.#set({ step: "has-vault", message: found.reason === "no-vault-id" ? SETUP_WORDS.noVaultId : found.reason === "bad-wrap" ? SETUP_WORDS.badWrap : SETUP_WORDS.noRecoveryWrap });
-    const opened = await openRecoveryWrap(found.held, text);
+    if (held.status !== 200) return this.#hasVault(refusalText(held, SETUP_WORDS.wouldNotSay), "other");
+    this.#hasPassword = holdsAWrap(held.json, "password");
+    const opened = await this.#openHeld(kind, held.json, text);
     if (flow.cancelled) {
       if (opened.ok) opened.keys.vaultKey.fill(0);
       return;
     }
-    if (!opened.ok) {
-      const message = opened.reason === "empty" ? SETUP_WORDS.noRecoveryKey : opened.reason === "incomplete" ? SETUP_WORDS.incompleteRecoveryKey : SETUP_WORDS.wrongRecoveryKey;
-      return this.#set({ step: "has-vault", message });
+    if (!opened.ok) return this.#hasVault(opened.message, opened.problem);
+    this.#unlockWith(opened.keys, null);
+  }
+
+  /** Reads the newest wrap of `kind` out of what `GET /wraps` answered and opens it with `text`. */
+  async #openHeld(kind: "recovery" | "password", wraps: any, text: string): Promise<{ ok: true; keys: { vaultKey: Uint8Array; vaultId: string; kid: number } } | { ok: false; message: string; problem: OpenProblem }> {
+    if (kind === "recovery") {
+      const found = newestRecoveryWrap(wraps);
+      if (!found.ok) return { ok: false, problem: "other", message: found.reason === "no-vault-id" ? SETUP_WORDS.noVaultId : found.reason === "bad-wrap" ? SETUP_WORDS.badWrap : SETUP_WORDS.noRecoveryWrap };
+      const opened = await openRecoveryWrap(found.held, text);
+      if (opened.ok) return opened;
+      return opened.reason === "empty"
+        ? { ok: false, problem: "empty", message: SETUP_WORDS.noRecoveryKey }
+        : opened.reason === "incomplete"
+          ? { ok: false, problem: "incomplete", message: SETUP_WORDS.incompleteRecoveryKey }
+          : { ok: false, problem: "wrong", message: SETUP_WORDS.wrongRecoveryKey };
     }
-    this.#unlockWith(opened.keys);
+    const found = newestPasswordWrap(wraps);
+    if (!found.ok) return { ok: false, problem: "other", message: found.reason === "no-vault-id" ? SETUP_WORDS.noVaultId : found.reason === "bad-wrap" ? SETUP_WORDS.badWrap : SETUP_WORDS.noPasswordWrap };
+    const opened = await openPasswordWrapHeld(found.held, text);
+    if (opened.ok) return opened;
+    return opened.reason === "empty"
+      ? { ok: false, problem: "empty", message: SETUP_WORDS.noPassword }
+      : opened.reason === "wrong"
+        ? { ok: false, problem: "wrong", message: SETUP_WORDS.wrongPassword }
+        : { ok: false, problem: "other", message: SETUP_WORDS.badPasswordWrap };
   }
 
   /** The sign-in's two-code exchange: this device asks another, which is unlocked, to send it the vault key. */
@@ -320,7 +418,7 @@ export class VaultSetup {
     if (flow.cancelled) return;
     if (answer === "unlocked") {
       this.#pending = null;
-      return this.#idle();
+      return this.#set({ step: "device-unlocked" });
     }
     if (answer === "changed") {
       this.#pending = null;
@@ -346,12 +444,31 @@ export class VaultSetup {
 
   startApprovingDevice(): void {
     if (!this.#is("unlocked")) return;
-    this.#set({ step: "approve-device", message: null });
+    this.#set({ step: "approve-device", message: null, problem: null, device: null });
+  }
+
+  /** This device is unlocked and the person has read the sign-in code off the new device: Nexus says which device waits under it. */
+  async lookUpDevice(signInCode: string): Promise<void> {
+    if (this.#current?.step !== "approve-device") return;
+    const flow = this.#start();
+    const code = signInCode.trim();
+    try {
+      const found = await findPendingDevice({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, code);
+      if (flow.cancelled) return;
+      this.#set({ step: "approve-device", message: null, problem: null, device: { signInCode: code, label: found.label } });
+    } catch (error) {
+      if (flow.cancelled) return;
+      if (!(error instanceof ApprovalError)) throw error;
+      if (error.reason === "locked") return this.#idle();
+      this.#set({ step: "approve-device", message: error.message, problem: error.reason, device: null });
+    }
   }
 
   /** This device is unlocked and approves a new device: the sign-in code and the key code the new device shows, typed here. */
   async approveDevice(signInCode: string, typedKeyCode: string): Promise<void> {
-    if (!this.#is("approve-device")) return;
+    const shown = this.#current;
+    if (shown?.step !== "approve-device") return;
+    const device = shown.device;
     const flow = this.#start();
     this.#set({ step: "working", doing: "approving" });
     try {
@@ -363,7 +480,7 @@ export class VaultSetup {
       if (!(error instanceof ApprovalError)) throw error;
       // Nothing that could carry the key was sent. A locked device has no key to give, so there is nothing to try again.
       if (error.reason === "locked") return this.#idle();
-      this.#set({ step: "approve-device", message: error.message });
+      this.#set({ step: "approve-device", message: error.message, problem: error.reason, device });
     }
   }
 
@@ -388,7 +505,7 @@ export class VaultSetup {
 
   /** Back to unlocked, from the end of an approval or from its form. */
   done(): void {
-    if (!this.#is("approve-device", "device-approved", "approve-agent", "agent-approved")) return;
+    if (!this.#is("set-up", "device-unlocked", "approve-device", "device-approved", "approve-agent", "agent-approved")) return;
     this.#idle();
   }
 
@@ -433,7 +550,9 @@ export class VaultSetup {
       return this.#set({ step: "signed-out" });
     }
     if (held.status !== 200) return this.#stop(flow, "refused", refusalText(held, SETUP_WORDS.wouldNotSay));
-    this.#set(holdsAVault(held.json) ? { step: "has-vault", message: null } : { step: "no-vault" });
+    this.#hasPassword = holdsAWrap(held.json, "password");
+    if (holdsAVault(held.json)) return this.#hasVault(null, null);
+    this.#set({ step: "no-vault" });
   }
 
   /** Sends the Recovery wrap that was made, and unlocks with the vault key once Nexus has kept it. */
@@ -457,22 +576,43 @@ export class VaultSetup {
       this.#forgetFresh();
       return this.#stop(flow, sent.status === 403 ? "not-owner" : "refused", sent.status === 403 ? SETUP_WORDS.notOwner : refusalText(sent, SETUP_WORDS.wouldNotKeepWrap));
     }
-    // Nexus has the wrap and the vault id. The vault key goes to the holder, which overwrites it when the vault is locked.
+    // Nexus has the Recovery wrap and the vault id. The password wrap, when one was asked for, follows with the same vault id.
+    const password = this.#pendingPasswordWrap;
+    let passwordKept = false;
+    if (password !== null) {
+      const answered = await this.#ask(flow, "POST", "wrap", password, () => undefined);
+      if (flow.cancelled) return;
+      passwordKept = answered?.status === 200;
+    }
+    // The vault key goes to the holder, which overwrites it when the vault is locked.
     const keys = { vaultKey: vault.vaultKey, vaultId: vault.vaultId, kid: vault.kid };
     vault.recoveryKey.fill(0);
     this.#fresh = null;
     this.#pendingWrap = null;
-    this.#unlockWith(keys);
+    this.#pendingPasswordWrap = null;
+    this.#unlockWith(keys, { step: "set-up", password: passwordKept, message: password === null || passwordKept ? null : SETUP_WORDS.passwordNotKept });
   }
 
-  /** Puts the keys in the holder and goes to unlocked. */
-  #unlockWith(keys: { vaultKey: Uint8Array; vaultId: string; kid: number }): void {
-    this.#current = null;
+  /** Puts the keys in the holder and goes to `then`, or to idle (unlocked) when that is null. */
+  #unlockWith(keys: { vaultKey: Uint8Array; vaultId: string; kid: number }, then: SetupState | null): void {
+    this.#current = then;
     this.#deps.keys.unlock(keys);
     this.#changed();
   }
 
   // ── the plumbing ───────────────────────────────────────────────────────────
+
+  /** Shows the Recovery Key of the vault being made, with the groups to type back and none of them wrong. */
+  #showKey(message: string | null): void {
+    const vault = this.#fresh;
+    if (vault === null) return;
+    this.#set({ step: "show-key", recoveryKey: vault.recoveryKeyText, ask: [...this.#asked], wrong: [], message: message ?? SETUP_WORDS.keyNeverShownAgain });
+  }
+
+  /** A vault exists and the person can open it: with the Recovery Key, and with a password when Nexus holds one. */
+  #hasVault(message: string | null, problem: OpenProblem | null): void {
+    this.#set({ step: "has-vault", message, problem, hasPassword: this.#hasPassword });
+  }
 
   #is(...steps: Array<SetupState["step"]>): boolean {
     return steps.includes(this.state.step);
@@ -495,7 +635,9 @@ export class VaultSetup {
   #forgetFresh(): void {
     if (this.#fresh !== null) forgetNewVault(this.#fresh);
     this.#fresh = null;
+    this.#asked = [];
     this.#pendingWrap = null;
+    this.#pendingPasswordWrap = null;
   }
 
   #dropPending(): void {
@@ -566,6 +708,9 @@ export class VaultSetup {
     return { status: response.status, json };
   }
 }
+
+/** True when two typed passwords are the same words: compared as the encryption reads them (NFKC), so another keyboard's spelling of a letter agrees. */
+export const passwordsAgree = (password: string, again: string): boolean => password.normalize("NFKC") === again.normalize("NFKC");
 
 /** Nexus's own words for a refusal when it gave some, else `fallback`. */
 function refusalText(reply: Reply, fallback: string): string {

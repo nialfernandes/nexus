@@ -66,7 +66,8 @@ describe("the setup controller, through everything it does", () => {
     };
     await third.setup.askAnotherDevice();
     await third.setup.typeMatchingCode(matching);
-    expect(third.setup.state.step).toBe("unlocked");
+    expect(third.setup.state.step).toBe("device-unlocked");
+    third.setup.done();
     a.setup.done();
 
     // An agent.

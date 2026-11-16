@@ -1,14 +1,14 @@
 // First run: the server holds no vault. The setup controller makes the vault key, the vault id and the Recovery Key, shows the key, and
-// asks for the last group of four characters back (three tries, exactly as `nexus-agent create-vault` does). Only when it is typed back
-// does it send the Recovery wrap, with the vault id, and unlock. Against the real server (real-nexus.ts); the key steps are the shared
-// ones (@nexus/agent/setup), so the wrap it sends is the one the command would send.
+// asks for three of its groups back (as many tries as the person needs). Only when they are typed back and the password step is finished
+// does it send the Recovery wrap, with the vault id (and the password wrap after it, when a password was asked for), and unlock. Against
+// the real server (real-nexus.ts); the key steps are the shared ones (@nexus/agent/setup), so the wrap it sends is the one the command would send.
 
 import { generateRecoveryKey, generateVaultKey, parseRecoveryKey, unwrapVaultKeyWithRecoveryKey, wrapVaultKeyWithRecoveryKey } from "@nexus/crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UNREACHABLE } from "../src/approval";
 import { encodeBase64 } from "../src/base64";
 import { SETUP_WORDS } from "../src/vault-setup";
-import { at, lastGroup, notTheLastGroup, setupDevice } from "./setup-world";
+import { at, groupsAsked, groupsAskedWithASlip, setupDevice } from "./setup-world";
 import { askNexus, bodyOf, everythingStored, forbidFetch, openWorld, type World } from "./world";
 
 let world: World;
@@ -25,7 +25,7 @@ afterEach(() => {
 const wrapsOnServer = async () => bodyOf(await askNexus("GET", "wraps", { cookie: world.ownerCookie }));
 
 describe("first run, with no vault on the server", () => {
-  it("asks what Nexus holds, shows the Recovery Key with nothing sent, and only after the check characters are typed back sends the wrap with the vault id and unlocks", async () => {
+  it("asks what Nexus holds, shows the Recovery Key with nothing sent, and only after the groups are typed back and the password step is finished sends the wrap with the vault id and unlocks", async () => {
     const device = await setupDevice(world, { files: { "Ideas/one.md": "first\n" } });
     expect(device.setup.state, "starts locked").toEqual({ step: "locked" });
 
@@ -36,22 +36,33 @@ describe("first run, with no vault on the server", () => {
     await device.setup.startFirstRun();
     const shown = at(device, "show-key");
     expect(shown.recoveryKey, "14 groups of 4").toMatch(/^[0-9A-Z]{4}(-[0-9A-Z]{4}){13}$/);
-    expect(shown.triesLeft).toBe(3);
+    expect(shown.ask, "three different groups, in order").toHaveLength(3);
+    expect(new Set(shown.ask).size).toBe(3);
+    expect(shown.ask).toEqual([...shown.ask].sort((x, y) => x - y));
+    expect(shown.ask.every((group) => group >= 1 && group <= 14)).toBe(true);
+    expect(shown.wrong, "none wrong before a try").toEqual([]);
     expect(device.holder.keys(), "still locked").toBeNull();
     expect(device.log.to("POST wrap"), "nothing sent yet").toEqual([]);
     expect(await wrapsOnServer(), "and the server holds no vault").toMatchObject({ vaultId: null, wraps: [] });
 
-    // The first try is wrong, the second is right (small letters and a space do not matter).
-    await device.setup.typeBack(notTheLastGroup(shown.recoveryKey));
+    // The first try is wrong, the second is right (small letters and spaces do not matter).
+    device.setup.typeBack(groupsAskedWithASlip(shown));
     const second = at(device, "show-key");
-    expect(second.triesLeft).toBe(2);
-    expect(second.message, "told in plain words").toMatch(/not the last four characters/i);
+    expect(second.wrong, "the slipped group is named, by its number").toEqual([shown.ask[0]]);
+    expect(second.message, "told in plain words").toBe(SETUP_WORDS.typeBackWrong);
     expect(second.recoveryKey, "the same key is still shown").toBe(shown.recoveryKey);
+    expect(second.ask, "and the same groups are asked").toEqual(shown.ask);
     expect(device.log.to("POST wrap"), "a wrong try sends nothing").toEqual([]);
     expect(device.holder.keys()).toBeNull();
 
-    await device.setup.typeBack(` ${lastGroup(shown.recoveryKey).toLowerCase()} `);
-    expect(device.setup.state).toEqual({ step: "unlocked" });
+    device.setup.typeBack(` ${groupsAsked(shown).toLowerCase().replace(/(.{4})/g, "$1 ")}`);
+    expect(device.setup.state, "right: on to the password step").toEqual({ step: "choose-password", message: null });
+    expect(device.log.to("POST wrap"), "still nothing sent: the password step comes first").toEqual([]);
+    expect(device.holder.keys(), "and still locked").toBeNull();
+
+    await device.setup.finishSetup(null);
+    expect(device.setup.state, "no password asked for, none kept").toEqual({ step: "set-up", password: false, message: null });
+    expect(device.holder.isUnlocked).toBe(true);
 
     // The wrap went with the vault id, and is the one the Recovery Key opens.
     const posted = device.log.to("POST wrap");
@@ -67,6 +78,9 @@ describe("first run, with no vault on the server", () => {
     const opened = await unwrapVaultKeyWithRecoveryKey(await parseRecoveryKey(shown.recoveryKey), new Uint8Array(Buffer.from(held.wraps[0].wrap, "base64")), { vaultId: held.vaultId, kid: 1 });
     expect(Array.from(opened), "the Recovery Key opens the wrap to the vault key the device holds").toEqual(Array.from(keys.vaultKey));
 
+    device.setup.done();
+    expect(device.setup.state).toEqual({ step: "unlocked" });
+
     // The vault is unlocked: the engine syncs with it, and the key is nowhere Nexus or the device's data can see.
     await device.engine.sync();
     expect(device.engine.status()).not.toMatch(/locked/i);
@@ -79,50 +93,130 @@ describe("first run, with no vault on the server", () => {
     }
   });
 
-  it("gives up after three wrong tries: nothing is sent, nothing is unlocked, the server holds no vault, and a new start makes a new key", async () => {
+  it("lets the person try as often as they need: every wrong try names its groups and sends nothing, and the right one is still right after many", async () => {
     const device = await setupDevice(world);
     await device.setup.begin();
     await device.setup.startFirstRun();
     const first = at(device, "show-key");
 
-    await device.setup.typeBack(notTheLastGroup(first.recoveryKey));
-    expect(at(device, "show-key").triesLeft).toBe(2);
-    await device.setup.typeBack("");
-    expect(at(device, "show-key").triesLeft).toBe(1);
-    await device.setup.typeBack(first.recoveryKey.slice(0, 4));
-    expect(device.setup.state).toMatchObject({ step: "stopped", reason: "type-back-failed" });
-    expect((device.setup.state as { message: string }).message).toBe(SETUP_WORDS.typeBackFailed);
-
-    // The right characters now are too late: that key was thrown away.
-    await device.setup.typeBack(lastGroup(first.recoveryKey));
-    expect(device.setup.state.step).toBe("stopped");
+    for (let attempt = 0; attempt < 6; attempt++) {
+      device.setup.typeBack(attempt % 2 === 0 ? "" : groupsAskedWithASlip(first));
+      expect(at(device, "show-key").wrong, `wrong try ${attempt + 1} names the groups`).toEqual(attempt % 2 === 0 ? first.ask : [first.ask[0]]);
+    }
     expect(device.log.to("POST wrap"), "nothing was posted").toEqual([]);
     expect(device.holder.keys(), "nothing was unlocked").toBeNull();
     expect(await wrapsOnServer()).toMatchObject({ vaultId: null, wraps: [] });
-    expect(JSON.stringify(device.states), "the key is shown in no state but show-key").not.toContain(first.recoveryKey.replace(/-/g, "").slice(0, 20));
-    expect(device.states.filter((s) => s.step === "show-key").length).toBe(3);
 
+    device.setup.typeBack(groupsAsked(first));
+    expect(device.setup.state.step).toBe("choose-password");
+
+    // A new start (after a cancel) makes a new key.
+    device.setup.cancel();
+    expect(device.setup.state).toEqual({ step: "locked" });
     await device.setup.begin();
     await device.setup.startFirstRun();
     expect(at(device, "show-key").recoveryKey, "a new key").not.toBe(first.recoveryKey);
   });
 
-  it("keeps the same wrap for another try when Nexus cannot be reached after the check characters were right", async () => {
+  it("names every group that is wrong, and only those: the right ones keep their place", async () => {
     const device = await setupDevice(world);
     await device.setup.begin();
     await device.setup.startFirstRun();
     const shown = at(device, "show-key");
+    const groups = groupsAsked(shown).match(/.{4}/g)!;
+    const slip = (group: string) => `${group[0] === "9" ? "8" : "9"}${group.slice(1)}`;
+    device.setup.typeBack([slip(groups[0]!), groups[1], slip(groups[2]!)].join(""));
+    expect(at(device, "show-key").wrong).toEqual([shown.ask[0], shown.ask[2]]);
+    device.setup.typeBack(groups.join("")); // all right now
+    expect(device.setup.state.step).toBe("choose-password");
+  });
+
+  it("goes back from the password step to the same key and the same groups, and the key is not made again", async () => {
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    await device.setup.startFirstRun();
+    const shown = at(device, "show-key");
+    device.setup.typeBack(groupsAsked(shown));
+    at(device, "choose-password");
+    device.setup.backToKey();
+    const again = at(device, "show-key");
+    expect(again.recoveryKey).toBe(shown.recoveryKey);
+    expect(again.ask).toEqual(shown.ask);
+    expect(again.wrong).toEqual([]);
+    device.setup.typeBack(groupsAsked(again));
+    await device.setup.finishSetup(null);
+    expect(at(device, "set-up").password).toBe(false);
+    const held = await wrapsOnServer();
+    const opened = await unwrapVaultKeyWithRecoveryKey(await parseRecoveryKey(shown.recoveryKey), new Uint8Array(Buffer.from(held.wraps[0].wrap, "base64")), { vaultId: held.vaultId, kid: 1 });
+    expect(Array.from(opened), "the key that was shown first is the key that was kept").toEqual(Array.from(device.holder.keys()!.vaultKey));
+  });
+
+  it("with a password: sends the Recovery wrap, then the password wrap with the same vault id, and both open to the vault key", async () => {
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    await device.setup.startFirstRun();
+    const shown = at(device, "show-key");
+    device.setup.typeBack(groupsAsked(shown));
+    await device.setup.finishSetup({ password: "a long password nobody guesses", again: "a long password nobody guesses" });
+    expect(device.setup.state).toEqual({ step: "set-up", password: true, message: null });
+
+    const posted = device.log.to("POST wrap");
+    expect(posted.map((request) => request.body.kind), "the Recovery wrap first, so the vault id is set").toEqual(["recovery", "password"]);
+    expect(posted[1]!.body.vaultId).toBe(posted[0]!.body.vaultId);
+    const held = await wrapsOnServer();
+    expect(held.wraps.map((wrap: { kind: string }) => wrap.kind).sort()).toEqual(["password", "recovery"]);
+    expect(JSON.stringify(held), "the password is not on Nexus").not.toContain("a long password nobody guesses");
+    expect(JSON.stringify([device.saved, device.deps.data, device.states]), "nor on the device").not.toContain("a long password nobody guesses");
+  }, 30_000);
+
+  it("refuses two passwords that are not the same, or none, and sends nothing; the same words typed on another keyboard agree", async () => {
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    await device.setup.startFirstRun();
+    device.setup.typeBack(groupsAsked(at(device, "show-key")));
+
+    await device.setup.finishSetup({ password: "one long password", again: "another long password" });
+    expect(device.setup.state).toEqual({ step: "choose-password", message: SETUP_WORDS.passwordsDiffer });
+    await device.setup.finishSetup({ password: "", again: "" });
+    expect(device.setup.state, "an empty password is no password").toEqual({ step: "choose-password", message: SETUP_WORDS.passwordsDiffer });
+    expect(device.log.to("POST wrap"), "nothing was sent").toEqual([]);
+    expect(device.holder.keys()).toBeNull();
+
+    await device.setup.finishSetup({ password: "Ｐassword long enough", again: "Password long enough" }); // a full-width letter and the letter
+    expect(device.setup.state).toEqual({ step: "set-up", password: true, message: null });
+  }, 30_000);
+
+  it("says so, and still unlocks with the Recovery Key, when Nexus will not keep the password wrap", async () => {
+    const device = await setupDevice(world, {}, (next) => async (request) => {
+      if (request.url.endsWith("/wrap") && JSON.parse(request.body ?? "{}").kind === "password") throw new Error("offline");
+      return next(request);
+    });
+    await device.setup.begin();
+    await device.setup.startFirstRun();
+    device.setup.typeBack(groupsAsked(at(device, "show-key")));
+    await device.setup.finishSetup({ password: "a long password again", again: "a long password again" });
+    expect(device.setup.state).toEqual({ step: "set-up", password: false, message: SETUP_WORDS.passwordNotKept });
+    expect(device.holder.isUnlocked, "the vault is set up and unlocked").toBe(true);
+    expect((await wrapsOnServer()).wraps.map((wrap: { kind: string }) => wrap.kind)).toEqual(["recovery"]);
+  }, 30_000);
+
+  it("keeps the same wrap for another try when Nexus cannot be reached after the password step", async () => {
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    await device.setup.startFirstRun();
+    const shown = at(device, "show-key");
+    device.setup.typeBack(groupsAsked(shown));
 
     device.network.online = false;
-    await device.setup.typeBack(lastGroup(shown.recoveryKey));
+    await device.setup.finishSetup(null);
     expect(device.setup.state).toEqual({ step: "save-failed", message: UNREACHABLE });
     expect(device.holder.keys(), "nothing is unlocked without the wrap kept").toBeNull();
-    await device.setup.typeBack(lastGroup(shown.recoveryKey));
+    device.setup.typeBack(groupsAsked(shown));
     expect(device.setup.state.step, "typing back again is not what the step takes").toBe("save-failed");
 
     device.network.online = true;
     await device.setup.tryAgain();
-    expect(device.setup.state).toEqual({ step: "unlocked" });
+    expect(at(device, "set-up")).toEqual({ step: "set-up", password: false, message: null });
     const held = await wrapsOnServer();
     const opened = await unwrapVaultKeyWithRecoveryKey(await parseRecoveryKey(shown.recoveryKey), new Uint8Array(Buffer.from(held.wraps[0].wrap, "base64")), { vaultId: held.vaultId, kid: 1 });
     expect(Array.from(opened), "the key that was shown is the key that was kept").toEqual(Array.from(device.holder.keys()!.vaultKey));
@@ -146,7 +240,7 @@ describe("first run, with no vault on the server", () => {
     await sealedVaultOnServer("a-vault-made-elsewhere");
 
     await device.setup.startFirstRun();
-    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.holdsOne });
+    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.holdsOne, problem: null, hasPassword: false });
     expect(device.states.some((s) => s.step === "show-key")).toBe(false);
     expect(device.log.to("POST wrap")).toEqual([]);
   });
@@ -158,7 +252,8 @@ describe("first run, with no vault on the server", () => {
     const shown = at(device, "show-key");
     await sealedVaultOnServer("a-vault-made-meanwhile");
 
-    await device.setup.typeBack(lastGroup(shown.recoveryKey));
+    device.setup.typeBack(groupsAsked(shown));
+    await device.setup.finishSetup(null);
     expect(device.setup.state).toEqual({ step: "stopped", reason: "other-vault", message: SETUP_WORDS.otherVault });
     expect(device.holder.keys(), "nothing was unlocked").toBeNull();
     expect((await wrapsOnServer()).vaultId, "and the other vault is as it was").toBe("a-vault-made-meanwhile");
@@ -166,8 +261,12 @@ describe("first run, with no vault on the server", () => {
 
   it("does nothing for a step's event that arrives at another step", async () => {
     const device = await setupDevice(world);
-    await device.setup.typeBack("ABCD");
+    device.setup.typeBack("ABCD");
+    device.setup.backToKey();
+    await device.setup.finishSetup(null);
     await device.setup.tryAgain();
+    await device.setup.typePassword("anything");
+    await device.setup.lookUpDevice("ABCD-EFGH");
     await device.setup.typeRecoveryKey("anything");
     await device.setup.startFirstRun();
     await device.setup.typeMatchingCode("12345-12345");
