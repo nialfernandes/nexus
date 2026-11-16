@@ -26,7 +26,7 @@
   var WORDS = {
     checking: { title: 'new device', line: 'Checking the code…' },
     asking: { title: 'new device', line: 'A device wants to sign in.' },
-    allowed: { title: 'allowed', line: 'The device is in.', quiet: 'You can close this page. The device picks it up by itself.' },
+    allowed: { title: 'allowed', line: 'The device is in.', quiet: 'You can close this page. The device does the rest.' },
     denied: { title: 'denied', line: 'Nothing was shared.', quiet: 'Changed your mind? Start again on the device.' },
     expired: { title: 'code ran out', line: 'Ten minutes is up.', said: 'That code has run out.', quiet: 'Ask for a new one on the device.' },
     used: { title: 'code used', line: 'One answer per code.', said: 'That code was already used.', quiet: 'A code works once. Ask for a new one on the device.' },

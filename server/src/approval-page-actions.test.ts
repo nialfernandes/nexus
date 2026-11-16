@@ -259,7 +259,7 @@ describe("board 2: Allow", () => {
     expect(page.el.title.textContent).toBe("allowed");
     expect(page.el.line.textContent).toBe("The device is in.");
     expect(page.el.said.textContent).toBe("lab-allow can use Nexus now.");
-    expect(page.el.quiet.textContent).toBe("You can close this page. The device picks it up by itself.");
+    expect(page.el.quiet.textContent).toBe("You can close this page. The device does the rest.");
     expect(page.el.quiet.hidden).toBe(false);
     expect(marksShown(page), "the teal tick").toEqual(["allowed"]);
     expect(page.el.result.hidden).toBe(false);
