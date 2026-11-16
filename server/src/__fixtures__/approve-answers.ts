@@ -25,6 +25,10 @@ export const PENDING = { code: CODE, identity: 'agents', label: 'lab-m', expires
 export const APPROVED = { result: 'approved', code: CODE, identity: 'agents', label: 'lab-m' };
 export const DENIED = { result: 'denied', code: CODE, identity: 'agents', label: 'lab-m' };
 
-/** What every route answers with a refusal, and the words the page is shown for one. */
-export const GONE = { error: 'That code has expired or has already been used.' };
+/**
+ * What every route answers with a refusal. A code that is finished says why in `reason` (the words are the same either way):
+ * the page draws "code ran out" for expired and "code used" for used. A code Nexus has no sign-in for has no reason.
+ */
+export const GONE = { error: 'That code has expired or has already been used.', reason: 'used' };
+export const GONE_EXPIRED = { error: 'That code has expired or has already been used.', reason: 'expired' };
 export const NOT_FOUND = { error: 'There is no sign-in with that code.' };

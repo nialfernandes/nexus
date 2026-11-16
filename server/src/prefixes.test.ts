@@ -72,9 +72,12 @@ describe("the old /apps/nexus prefix answers nothing", () => {
 });
 
 describe("the device approval page is at /nexus/approve", () => {
-  const FILES = ["approve", "approve.css", "approve.js", "theme-boot.js"];
+  const FILES = [
+    "approve", "approve.css", "approve.js",
+    "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
+  ];
 
-  it("serves the four files to the owner only, and none of them under the old prefix", async () => {
+  it("serves the page, its stylesheet, its script and its three typefaces to the owner only, and none of them under the old prefix", async () => {
     for (const file of FILES) {
       expect((await sendAs("GET", `/nexus/${file}`, owner)).status, file).toBe(200);
       expect((await sendAs("GET", `/nexus/${file}`, null)).status, `${file} signed out`).toBe(401);
@@ -116,8 +119,11 @@ describe("the Worker runs before the asset server for /nexus", () => {
     expect(wrangler.assets.run_worker_first).toEqual(["/nexus/*"]);
   });
 
-  it("has the four files in the assets under /nexus, the address the Worker asks for", () => {
-    for (const file of ["approve.html", "approve.css", "approve.js", "theme-boot.js"]) {
+  it("has the page's files in the assets under /nexus, the address the Worker asks for", () => {
+    for (const file of [
+      "approve.html", "approve.css", "approve.js",
+      "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
+    ]) {
       expect(readFileSync(join(import.meta.dirname, "../public/nexus", file), "utf8").length, file).toBeGreaterThan(0);
     }
     expect(wrangler.assets.directory).toBe("./public");

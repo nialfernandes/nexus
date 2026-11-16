@@ -101,7 +101,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `POST /wrap/delete` `{ kid, kind }` | owner | Removes a wrap |
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
-| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device |
+| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes and `"used"` when it was answered already (the approval page draws a different card for each); a code Nexus has no sign-in for is `404` |
 
 A note id is 1 to 128 letters, digits, hyphens or underscores (what url-safe base64, hex and a UUID are written in): a
 path, with its slashes and dots, is refused as an id so it cannot be used as one by mistake.
@@ -134,7 +134,7 @@ Everything is under `/nexus`: the API at `/nexus/api/...` and the device approva
 answers: the older `/apps/nexus` prefix has been removed, and an address under it is a 404 like any other that is not
 Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
-On Cloudflare the page's four files sit in the assets under `public/nexus`, the same address the Worker serves them at, so
+On Cloudflare the page's files (the page, its stylesheet and script, and its three typefaces in `public/nexus/fonts`) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
 `wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand them to anyone
 before the Worker could check for the owner. (The tests use a stand-in for the asset server, so this setting is the part
 they cannot prove on Cloudflare itself.)
@@ -192,7 +192,7 @@ Serve Nexus over HTTPS only. The owner's secret and every token travel in reques
 
 The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` to Nexus, gives the
 owner the device approval page (`public/nexus/`, served through the `ASSETS` binding), and answers 404 to everything
-else. The four files of the page are static and identical for everyone and hold nothing private, and `run_worker_first`
+else. The files of the page are static and identical for everyone and hold nothing private, and `run_worker_first`
 (above) makes the Worker the only way to them.
 
 ### Signing in as the owner

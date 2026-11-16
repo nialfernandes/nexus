@@ -194,6 +194,58 @@ describe("a code lasts ten minutes", () => {
   });
 });
 
+describe("a code that is gone says why", () => {
+  // The words and the status are the same for both (the page and the plugin read them); `reason` is what lets the approval
+  // page draw "code ran out" for one and "code used" for the other.
+  it("says used for a code that was allowed, one that was denied, and an answer that lost to another answer", async () => {
+    const allowed = await started("lab-why-allowed");
+    bodyOf(await device(owner).approve(allowed.code));
+    for (const call of [device(owner).pending(allowed.code), device(owner).approve(allowed.code), device(owner).deny(allowed.code)]) {
+      const refused = await call;
+      expectRefusal(refused, 410, "an allowed code");
+      expect(refused.body?.reason).toBe("used");
+    }
+
+    const denied = await started("lab-why-denied");
+    bodyOf(await device(owner).deny(denied.code));
+    const refused = await device(owner).pending(denied.code);
+    expectRefusal(refused, 410, "a denied code");
+    expect(refused.body?.reason).toBe("used");
+
+    const racing = await started("lab-why-racing");
+    const answers = await Promise.all([device(owner).approve(racing.code), device(owner).deny(racing.code)]);
+    const lost = answers.filter((a) => a.status === 410);
+    expect(lost, "one answer got in, the other lost").toHaveLength(1);
+    expect(lost[0].body?.reason).toBe("used");
+  });
+
+  it("says expired for a code nobody answered in ten minutes, and used again for one that was answered and then ran out", async () => {
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const unanswered = await started("lab-why-expired");
+    const answered = await started("lab-why-answered-then-expired");
+    bodyOf(await device(owner).approve(answered.code));
+
+    vi.setSystemTime(now + TEN_MINUTES + 1000);
+    for (const call of [device(owner).pending(unanswered.code), device(owner).approve(unanswered.code), device(owner).deny(unanswered.code)]) {
+      const refused = await call;
+      expectRefusal(refused, 410, "an expired code");
+      expect(refused.body?.reason).toBe("expired");
+      expect(refused.body?.error, "the words are the same as ever").toBe("That code has expired or has already been used.");
+    }
+    const gone = await device(owner).pending(answered.code);
+    expectRefusal(gone, 410, "an answered code that ran out");
+    expect(gone.body?.reason, "it was answered, so it is used").toBe("used");
+  });
+
+  it("says nothing of the kind for a code nobody was given", async () => {
+    const unknown = await device(owner).pending("NOSUCHCODE");
+    expectRefusal(unknown, 404, "an unknown code");
+    expect(unknown.body).toEqual({ error: "There is no sign-in with that code." });
+  });
+});
+
 describe("only the owner can answer a sign-in", () => {
   it("turns away a request with no credential, and someone signed in who is not the owner", async () => {
     const sign = await started("lab-not-owner");
