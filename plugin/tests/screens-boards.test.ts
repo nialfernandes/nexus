@@ -30,13 +30,13 @@ async function drawn(name: string, state: SetupState, prepare: (open: OpenScreen
   const folder = process.env.PICTURES_DIR;
   if (folder) {
     mkdirSync(folder, { recursive: true });
-    writeFileSync(path.join(folder, `${name}.html`), `<!doctype html><meta charset="utf-8"><style>${STYLES}</style><div class="nexus-screen" style="width:375px">${open.root.innerHTML}</div>`);
+    writeFileSync(path.join(folder, `${name}.html`), `<!doctype html><meta charset="utf-8"><style>body{margin:0}${STYLES}</style><div class="nexus-screen" style="width:375px">${open.root.innerHTML}</div>`);
   }
   return open;
 }
 
-/** The screen the key steps show first: the key, as it is after Continue on the start screen. */
-const keyScreen = (state: SetupState = SHOW_KEY) => drawn("recovery-key", state);
+/** The screen the key steps show first, at the controller's show-key state. */
+const keyScreen = (state: SetupState = SHOW_KEY) => openScreens(state);
 
 const slab = (root: HTMLElement): [string | null | undefined, string | null | undefined] => [root.querySelector(".nx-slab__title")?.textContent, root.querySelector(".nx-slab__line")?.textContent];
 const wrongBoxes = (root: HTMLElement): number => root.querySelectorAll(".nx-box--wrong").length;
@@ -62,8 +62,7 @@ describe("setup: the start screen", () => {
 
 describe("setup: the Recovery Key, shown once", () => {
   it("shows the 14 groups four to a row, the last row two groups, Copy key, the tick box and a dim Continue", async () => {
-    const { root } = await keyScreen();
-    tap(root, "continue"); // from the start screen to the key
+    const { root } = await drawn("recovery-key", SHOW_KEY, ({ root: screen }) => tap(screen, "continue")); // from the start screen to the key
     expect(words(root)).toEqual([
       "recovery key",
       "Step 2 of 4.",
@@ -84,9 +83,10 @@ describe("setup: the Recovery Key, shown once", () => {
   });
 
   it("with the box ticked: the tick box is teal with a tick in it and Continue is at full strength", async () => {
-    const { root } = await keyScreen();
-    tap(root, "continue");
-    tap(root, "saved");
+    const { root } = await drawn("recovery-key-saved", SHOW_KEY, ({ root: screen }) => {
+      tap(screen, "continue");
+      tap(screen, "saved");
+    });
     expect(control(root, "saved").getAttribute("aria-checked")).toBe("true");
     expect(control(root, "saved").querySelector("svg")).not.toBeNull();
     expect(isDim(root, "continue")).toBe(false);
@@ -95,10 +95,11 @@ describe("setup: the Recovery Key, shown once", () => {
 
 describe("setup: typing three groups back", () => {
   it("asks for the groups by number, three rows of four empty boxes, with the plain line about how groups are counted and Back", async () => {
-    const { root } = await keyScreen();
-    tap(root, "continue");
-    tap(root, "saved");
-    tap(root, "continue");
+    const { root } = await drawn("check-key", SHOW_KEY, ({ root: screen }) => {
+      tap(screen, "continue");
+      tap(screen, "saved");
+      tap(screen, "continue");
+    });
     expect(words(root)).toEqual([
       "check key",
       "Step 3 of 4.",
@@ -117,14 +118,14 @@ describe("setup: typing three groups back", () => {
   });
 
   it("names the group that does not match, turns its four boxes red and keeps the others as typed", async () => {
-    const open = await keyScreen();
-    const { root, setup } = open;
-    tap(root, "continue");
-    tap(root, "saved");
-    tap(root, "continue");
-    typeInto(root, "type-back", "4TNB3WVRY8JK");
+    const { root, setup } = await drawn("check-key-wrong", SHOW_KEY, ({ root: screen, setup: controller }) => {
+      tap(screen, "continue");
+      tap(screen, "saved");
+      tap(screen, "continue");
+      typeInto(screen, "type-back", "4TNB3WVRY8JK");
+      controller.show({ ...SHOW_KEY, wrong: [8], message: "wrong" });
+    });
     expect(setup.sent("typeBack"), "the twelve characters went to the controller as typed").toEqual([["4TNB3WVRY8JK"]]);
-    setup.show({ ...SHOW_KEY, wrong: [8], message: "wrong" });
     expect(words(root)).toEqual([
       "check key",
       "Step 3 of 4.",
@@ -272,8 +273,10 @@ describe("adding a device: the approving device", () => {
   });
 
   it("with a wrong code: all ten boxes red, the red line says nothing was sent and what to do next", async () => {
-    const { root, setup } = await drawn("approve-device-wrong", asking(null), ({ root: screen }) => typeInto(screen, "device", "AB12CD34EX"));
-    setup.show(asking("wrong-key-code", "no match"));
+    const { root } = await drawn("approve-device-wrong", asking(null), ({ root: screen, setup }) => {
+      typeInto(screen, "device", "AB12CD34EX");
+      setup.show(asking("wrong-key-code", "no match"));
+    });
     expect(wrongBoxes(root)).toBe(10);
     expect(words(root)).toEqual([
       "approve device",
@@ -333,8 +336,10 @@ describe("adding a device: the new device types the matching code", () => {
   });
 
   it("with a wrong code: every box red, a red box headed This device stays locked, and no counter", async () => {
-    const { root, setup } = await drawn("matching-code-wrong", typing(null), ({ root: screen }) => typeInto(screen, "matching", "4TKP8MXD2R"));
-    setup.show(typing("That is not the code"));
+    const { root } = await drawn("matching-code-wrong", typing(null), ({ root: screen, setup }) => {
+      typeInto(screen, "matching", "4TKP8MXD2R");
+      setup.show(typing("That is not the code"));
+    });
     expect(wrongBoxes(root)).toBe(10);
     expect(words(root)).toEqual([
       "matching code",
@@ -396,9 +401,11 @@ describe("unlocking with the Recovery Key", () => {
   });
 
   it("with a key whose last group does not check: only the last box is red, and the line names the last group first", async () => {
-    const { root, setup } = await drawn("locked-wrong", locked(true), ({ root: screen }) => pasteInto(screen, "recovery-key", 0, KEY.join(" ")));
-    // The controller says the key is not whole: the last group is the one it can prove wrong.
-    setup.show(locked(true, "incomplete", "not whole"));
+    const { root } = await drawn("locked-wrong", locked(true), ({ root: screen, setup }) => {
+      pasteInto(screen, "recovery-key", 0, KEY.join(" "));
+      // The controller says the key is not whole: the last group is the one it can prove wrong.
+      setup.show(locked(true, "incomplete", "not whole"));
+    });
     expect(words(root)).toEqual([
       "locked",
       "Signed in, no key yet.",

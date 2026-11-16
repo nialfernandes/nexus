@@ -315,6 +315,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--nx-radius-pill);
+  color: var(--nx-ink);
 }
 
 .nx-circle--done {
@@ -323,6 +324,7 @@
 
 .nx-circle--fault {
   background-color: var(--nx-red-fill);
+  color: var(--nx-red-text);
 }
 
 .nx-circle--neutral {
