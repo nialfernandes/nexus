@@ -406,7 +406,7 @@ export interface Device {
   saved: PluginData[];
   network: { online: boolean };
   deps: SyncDeps;
-  /** The port the engine is given for its key. Lock it, or unlock it, the way the setup screens will. */
+  /** The port the engine is given for its key. Lock it, or unlock it, the way the setup does. */
   unlock: TestUnlock;
   /** What the plugin has kept: the last persisted data, else what it started with. */
   data(): PluginData;

@@ -1,5 +1,5 @@
 // A new device is given the vault key by a device that already has it: the owner approves it, and it can unlock the vault
-// with no Recovery Key typed. This file is the engine of that exchange, both halves of it. The screens that drive it come later.
+// with no Recovery Key typed. This file is the engine of that exchange, both halves of it. The setup controller (vault-setup.ts) drives it, and the screens in src/screens draw that.
 //
 //   THE NEW DEVICE (`signInForKey`). It makes an X25519 key pair for this attempt, keeps the private half in memory only, and
 //   asks Nexus for a sign-in with the public half. It shows the person the link, the sign-in code and a KEY CODE (a short code

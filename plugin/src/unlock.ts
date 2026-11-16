@@ -3,7 +3,7 @@
 //
 // The key holder (key-holder.ts) is the one object behind this port, and the setup controller (vault-setup.ts) is what fills it:
 // when a person unlocks the vault the key is put here, and when they lock it, or the plugin unloads, it is taken away. While it
-// holds none the plugin syncs nothing and says that the vault is locked. The screens that drive the controller come later.
+// holds none the plugin syncs nothing and says that the vault is locked. The screens that drive the controller are in src/screens.
 //
 // THE KEY LIVES IN MEMORY ONLY. Nothing in this plugin writes it anywhere: not to the data file, not to local storage,
 // not to the vault. A port that held it on disk would be a different port, and a later piece of work would have to say so.

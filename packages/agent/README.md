@@ -259,7 +259,7 @@ did, which is what Node does. Only the first vault opened in a runtime uses `was
 last group typed back, lock the vault key under the Recovery Key, read the Recovery wrap Nexus holds and open it with a
 typed key, seal an approval to an agent's public key) through one file, `src/setup.ts`. It does no input or output of its
 own. The Nexus plugin's setup controller takes the same file as `@nexus/agent/setup`, so the command and the plugin make a
-vault and an agent's approval the same way, and what each prints is the same as before. The file is not part of the built
+vault and an agent's approval the same way, and what each prints is the same as before. The plugin asks for three groups of the key back, chosen by `groupsToTypeBack`, where the command asks for the last one, and can keep a password wrap (`passwordWrapRequest`, `newestPasswordWrap`, `openPasswordWrapHeld`) beside the Recovery wrap. The file is not part of the built
 library: an agent imports the vault, and a person's tools import the steps.
 
 ## Limits

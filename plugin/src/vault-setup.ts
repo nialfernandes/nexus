@@ -1,4 +1,4 @@
-// Setting up, unlocking, approving and locking the vault: a plain state machine the setup screens will drive. It has no look and no
+// Setting up, unlocking, approving and locking the vault: a plain state machine the setup screens (src/screens) draw and drive. It has no look and no
 // words of a screen's own: a screen reads `state`, shows what it says, and calls one event when the person does something. The
 // plain sentences in a state's `message` are there so nothing is ever refused without saying why; the screens' wording replaces them.
 //
@@ -22,7 +22,7 @@
 //                      numbered in `ask`. `wrong` is the groups of the last try that did not match (empty before a try).
 //   choose-password    First run: the key was typed back right. The person picks whether the vault also opens with a password. Nothing is
 //                      sent yet.
-//   save-failed        The check characters were right but Nexus did not take the Recovery wrap (it could not be reached, or was in
+//   save-failed        The groups were typed back right and the password step is finished, but Nexus did not take the Recovery wrap (it could not be reached, or was in
 //                      trouble). Nothing is unlocked; the same wraps can be sent again.
 //   set-up             First run is over and the vault is unlocked. `password` is whether a password wrap was kept, and `message` says so when
 //                      one was asked for and was not.

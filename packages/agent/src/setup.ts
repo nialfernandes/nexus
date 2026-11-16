@@ -17,9 +17,9 @@ import { decodeBase64, encodeBase64, encodeBase64Url } from "./base64";
 
 /** The number of the first vault key. */
 export const FIRST_KID = 1;
-/** How many times the check characters may be typed before a setup gives up. */
+/** How many times `nexus-agent create-vault` takes the check characters before it gives up (the plugin lets the person try as often as they need). */
 export const TYPE_BACK_TRIES = 3;
-/** What is said when the check characters typed back are not the last group of the Recovery Key. */
+/** What `nexus-agent create-vault` says when the check characters typed back are not the last group of the Recovery Key. */
 export const TYPE_BACK_WRONG = "Those are not the last four characters of the key. Nothing was sent.";
 /** A Recovery Key is written in this many groups of four characters. */
 export const RECOVERY_KEY_GROUPS = 14;
@@ -37,7 +37,7 @@ export interface NewVault {
   kid: number;
   /** The Recovery Key as a person writes it down: 14 groups of 4 characters joined by hyphens. */
   recoveryKeyText: string;
-  /** The last group of four characters of the Recovery Key: what the person types back to show the key was written down. */
+  /** The last group of four characters of the Recovery Key: what `nexus-agent create-vault` asks to be typed back to show the key was written down (the plugin asks for three groups, see `groupsToTypeBack`). */
   checkGroup: string;
 }
 
