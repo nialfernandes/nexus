@@ -1,19 +1,20 @@
-// The device approval page (docs/design/nexus, boards 1 to 5). It reads the code from its own address, asks Nexus what
-// is being asked, and lets the owner allow or deny it. Everything a device sent (its label, its code) goes on the page
-// as text, never as markup: this file only sets text and shows or hides parts of the page, and builds nothing from what it
-// was sent but plain boxes holding one character each.
+// The device approval page. It reads the code from its own address, asks Nexus what is being asked, and lets the owner
+// allow or deny it. Everything a device sent (its label, its identity, its code) goes on the page as text, never as
+// markup: this file only sets text and shows or hides parts of the page, and builds nothing from what it was sent but
+// plain boxes holding one character each.
 //
 //   GET  /nexus/api/device/pending?code=C    what is being asked, or a refusal
 //   POST /nexus/api/device/approve { code }  Allow
 //   POST /nexus/api/device/deny    { code }  Deny
 //
 // What the page shows:
-//   board 1  the question, the device's code and Allow and Deny
-//   board 2  allowed             board 3  denied
-//   board 4  code ran out        board 5  code used
+//   the question, the device's code and Allow and Deny
+//   allowed                      denied
+//   code ran out                 code used
 // A refusal that says the code is finished takes the question away, so nothing can be tapped twice: a 410 says why in
-// its `reason` (expired is board 4, used is board 5) and a 404 (a code Nexus no longer has) is board 5. Any other refusal,
-// and a code missing from the address, is shown in Nexus's own words.
+// its `reason` (expired is "code ran out", used is "code used") and a 404 (a code Nexus no longer has) is "code used".
+// "Code ran out" is in Nexus's own words when it sent some. Any other refusal, and a code missing from the address, is
+// shown in Nexus's own words.
 (function () {
   'use strict';
 
@@ -21,8 +22,8 @@
   var MINUTE = 60 * 1000;
   var GROUP = 4;
 
-  // The words, in one place. The boards name the app a device is; Nexus is not told which app that is, so the page says
-  // "the device" and the label the device sent names it in the card.
+  // The words, in one place. Nexus is not told which app a device is, so the page says "the device" and the label the
+  // device sent names it in the card.
   var WORDS = {
     checking: { title: 'new device', line: 'Checking the code…' },
     asking: { title: 'new device', line: 'A device wants to sign in.' },
@@ -108,11 +109,16 @@
     return null;
   }
 
-  function showFinished(kind) {
-    showResult(WORDS[kind], kind);
+  // The card for a code that ran out or was used. The "ran out" card says it in Nexus's own words when it sent some.
+  function showFinished(kind, answer) {
+    var words = WORDS[kind];
+    if (kind === 'expired' && answer.body && typeof answer.body.error === 'string') {
+      words = { title: words.title, line: words.line, said: answer.body.error, quiet: words.quiet };
+    }
+    showResult(words, kind);
   }
 
-  // Nexus's own words, on a card with the red cross, for what the boards do not draw.
+  // Nexus's own words, on a card with the red cross, for what has no card of its own.
   function showFault(words) {
     showResult({ title: WORDS.fault.title, line: WORDS.fault.line, said: words }, 'used');
   }
@@ -169,7 +175,7 @@
       }
       var kind = finishedKind(reply);
       if (kind) {
-        showFinished(kind);
+        showFinished(kind, reply);
       } else {
         alertBox.textContent = wordsOf(reply);
         alertBox.hidden = false;
@@ -192,7 +198,7 @@
       return;
     }
     var kind = finishedKind(reply);
-    if (kind) showFinished(kind);
+    if (kind) showFinished(kind, reply);
     else showFault(wordsOf(reply));
   });
 })();

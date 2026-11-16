@@ -9,7 +9,7 @@ rest of the page: see `src/plugs/cloudflare/page.ts`). Each is a variable font, 
 | `instrument-sans-var.woff2` | Instrument Sans | every sentence and the buttons | SIL Open Font License 1.1 |
 | `jetbrains-mono-var.woff2` | JetBrains Mono | the device code | SIL Open Font License 1.1, copyright The JetBrains Mono Project Authors |
 
-Where they came from: copied from the font folder of the design system these screens were drawn in, and compared with
+Where they came from: copied from a font folder where the same files were already kept, and compared with
 `cmp` against the copies there (no difference). That folder's notes say the Unbounded and Instrument Sans files are the
 `latin-wght-normal` files of the `@fontsource-variable/unbounded` and `@fontsource-variable/instrument-sans` packages;
 that was not compared again here. The JetBrains Mono file is from JetBrains' own project and was compared with nothing.

@@ -1,8 +1,7 @@
-/* THE DEVICE APPROVAL PAGE'S STYLESHEET, drawn in docs/design/nexus (boards 1 to 5; BUILD.md there says how). A reset, one
-   block of token variables, and the layout. Every colour, space, radius and font below the token block is read from
-   those tokens, and the page loads nothing from outside Nexus (the three typefaces are served beside it, in fonts/).
-   The page is light only, as the boards are: there is no dark set. A host that wants its own look changes the values
-   in the token block. */
+/* THE DEVICE APPROVAL PAGE'S STYLESHEET: a reset, one block of token variables, and the layout. Every colour, space,
+   radius and font below the token block is read from those tokens, and the page loads nothing from outside Nexus (the
+   three typefaces are served beside it, in fonts/). The page is light only: there is no dark set. A host that wants
+   its own look changes the values in the token block. */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 button { font: inherit; cursor: pointer; }
@@ -58,7 +57,7 @@ button { font: inherit; cursor: pointer; }
   --s-2: 8px;
   --s-3: 12px;
   --s-4: 16px;
-  /* The boards' own two: the space inside a card, and between the things on the page. */
+  /* Two of the page's own: the space inside a card, and between the things on the page. */
   --card-pad: 14px;
   --page-gap: 10px;
 
@@ -157,7 +156,7 @@ body {
 
 .card__quiet--fault { color: var(--fault); }
 
-/* Board 1: the device's code, one box per character, in groups of four (the last group takes what is left) so it can be matched against the device's own screen. */
+/* The question card: the device's code, one box per character, in groups of four (the last group takes what is left) so it can be matched against the device's own screen. */
 .code {
   display: flex;
   flex-direction: column;
@@ -240,7 +239,7 @@ body {
 .pill:disabled { opacity: 0.4; cursor: default; }
 .pill:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-/* Boards 2 to 5: the circle that says how it went. */
+/* The answer cards: the circle that says how it went. */
 .mark {
   display: flex;
   flex-shrink: 0;

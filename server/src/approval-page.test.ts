@@ -107,7 +107,7 @@ describe("the page's typefaces", () => {
       const sheet = await fetchLinked(href);
       for (const address of fontAddresses(sheet)) addresses.add(new URL(address, new URL(href, `${ORIGIN}${PAGE_PATH}`)).pathname);
     }
-    expect([...addresses].sort(), "the three the boards are drawn in").toEqual([
+    expect([...addresses].sort(), "the three typefaces the page is set in").toEqual([
       "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2", "/nexus/fonts/unbounded-var.woff2",
     ]);
     for (const address of addresses) {
