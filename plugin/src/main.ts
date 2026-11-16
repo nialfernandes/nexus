@@ -4,6 +4,8 @@
 
 import { Notice, Platform, Plugin, TFile, requestUrl, type App } from "obsidian";
 import { KeyHolder } from "./key-holder";
+import { NexusSetupModal } from "./screens/modal";
+import type { Entry } from "./screens/setup-screens";
 import { NexusSettingTab } from "./settings";
 import { STATE_KEY, joinState, sharedHasMore, signInLabel, splitState } from "./state";
 import { createSyncEngine } from "./sync";
@@ -56,7 +58,7 @@ export default class NexusPlugin extends Plugin {
   engine!: SyncEngine;
   /** Holds the vault key while the vault is unlocked, in memory only: the engine's `unlock` port, and where the setup puts the key. Starts locked. */
   readonly keyHolder = new KeyHolder((unlocked) => this.keyChanged(unlocked));
-  /** Sets up, unlocks, approves and locks the vault: the state machine the setup screens will drive. */
+  /** Sets up, unlocks, approves and locks the vault: the state machine the setup screens (src/screens) drive. */
   setup!: VaultSetup;
   /** Obsidian's `requestUrl`, narrowed to what the engine and the sign-in use. */
   readonly http: Http = (request) => requestUrl(request);
@@ -109,6 +111,33 @@ export default class NexusPlugin extends Plugin {
     this.addSettingTab(this.settingTab);
     if (Platform.isDesktop) this.statusBar = this.addStatusBarItem();
     this.addCommand({ id: "sync-now", name: "Sync now", callback: () => void this.engine.sync() });
+    this.addCommand({
+      id: "set-up-or-unlock",
+      name: "Set up or unlock this device",
+      checkCallback: (checking) => {
+        if (this.keyHolder.isUnlocked) return false;
+        if (!checking) this.openSetup("unlock");
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "approve-device",
+      name: "Approve a device",
+      checkCallback: (checking) => {
+        if (!this.keyHolder.isUnlocked) return false;
+        if (!checking) this.openSetup("approve");
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "lock",
+      name: "Lock Nexus",
+      checkCallback: (checking) => {
+        if (!this.keyHolder.isUnlocked) return false;
+        if (!checking) this.setup.lock();
+        return true;
+      },
+    });
     this.showStatus();
 
     // Obsidian reports every existing file as created while it loads the vault. Waiting for the layout to be ready
@@ -130,6 +159,11 @@ export default class NexusPlugin extends Plugin {
     // The key is dropped (overwritten) and nothing the setup was doing goes on.
     this.setup?.unload();
     this.keyHolder.lock();
+  }
+
+  /** Opens the setup screens: to set up or unlock this device, or to approve another one from it. */
+  openSetup(entry: Entry): void {
+    new NexusSetupModal(this.app, this.setup, entry).open();
   }
 
   /** What kind of device this is, from what Obsidian says about the platform. */
@@ -174,9 +208,10 @@ export default class NexusPlugin extends Plugin {
     return `${this.state.address}\n${this.state.user}`;
   }
 
-  /** The vault was locked or unlocked: the status line says so, and an unlock syncs at once (edits made while it was locked go up). */
+  /** The vault was locked or unlocked: the status line says so, the settings tab shows the key's row anew, and an unlock syncs at once (edits made while it was locked go up). */
   private keyChanged(unlocked: boolean): void {
     this.showStatus();
+    this.settingTab?.display();
     if (unlocked) void this.engine.sync();
   }
 

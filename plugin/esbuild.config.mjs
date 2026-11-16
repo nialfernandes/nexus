@@ -1,4 +1,5 @@
-// Builds src/main.ts into main.js, the file Obsidian loads beside manifest.json.
+// Builds src/main.ts into dist/main.js, and puts manifest.json and styles.css beside it: the three files a person copies into a vault's
+// `.obsidian/plugins/nexus/` folder, and the three Obsidian loads.
 //
 //   node esbuild.config.mjs          one build
 //   node esbuild.config.mjs watch    rebuild when a source file changes
@@ -7,13 +8,19 @@
 // use): a phone has no Node and no Electron, so nothing from either may end up in it. Obsidian hands `obsidian` to every
 // plugin, so it is left out of the bundle.
 
+import { copyFileSync, mkdirSync } from "node:fs";
 import esbuild from "esbuild";
+
+/** Where the three files are written. */
+const OUT_DIR = "dist";
+/** The files that are copied as they are, beside the built main.js. */
+const COPIED = ["manifest.json", "styles.css"];
 
 const watching = process.argv[2] === "watch";
 
 const options = {
   entryPoints: ["src/main.ts"],
-  outfile: "main.js",
+  outfile: `${OUT_DIR}/main.js`,
   bundle: true,
   format: "cjs",
   platform: "browser",
@@ -26,6 +33,9 @@ const options = {
   sourcemap: watching ? "inline" : false,
   treeShaking: true,
 };
+
+mkdirSync(OUT_DIR, { recursive: true });
+for (const file of COPIED) copyFileSync(file, `${OUT_DIR}/${file}`);
 
 if (watching) {
   const context = await esbuild.context(options);

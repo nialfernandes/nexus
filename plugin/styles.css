@@ -1,0 +1,619 @@
+/*
+ * The Nexus screens: setup, adding a device and unlocking. Drawn mobile first, 375 wide, in a slab look: a teal band with a lowercase
+ * title, white cards on a sand-grey ground, ink text and pill buttons. In desktop Obsidian it is the same layout in a centred modal about
+ * 560 px wide, with the teal band as the modal's top. Light only.
+ *
+ * Every colour, radius and size is a token, written once in the first rule below. Nothing after it writes a colour out by hand
+ * (plugin/tests/styles.test.ts holds the file to that).
+ */
+
+.nexus-screen {
+  /* colours */
+  --nx-teal: #2FCDB8;
+  --nx-ink: #0F1013;
+  --nx-ink-soft: #3A3A40;
+  --nx-ink-muted: #85858B;
+  --nx-white: #FFFFFF;
+  --nx-ground: #EEEDEA;
+  --nx-sand: #F2F1EE;
+  --nx-cream: #FFF3D6;
+  --nx-red-text: #C62020;
+  --nx-red-heading: #9B1C2E;
+  --nx-red-line: #D1293D;
+  --nx-red-fill: #FDECEE;
+  --nx-grey-circle: #E4E2DD;
+  --nx-switch-off: #C9C9D0;
+  --nx-ink-14: rgba(15, 16, 19, 0.14);
+  --nx-ink-25: rgba(15, 16, 19, 0.25);
+  --nx-ink-40: rgba(15, 16, 19, 0.4);
+  --nx-shadow: rgba(15, 16, 19, 0.078);
+  --nx-hairline: rgba(15, 16, 19, 0.078);
+  /* type */
+  --nx-font-display: "Unbounded", system-ui, sans-serif;
+  --nx-font-body: "Instrument Sans", system-ui, sans-serif;
+  --nx-font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* radii */
+  --nx-radius-card: 16px;
+  --nx-radius-panel: 10px;
+  --nx-radius-box: 8px;
+  --nx-radius-tick: 5px;
+  --nx-radius-slab: 28px;
+  --nx-radius-pill: 999px;
+}
+
+/* ── the modal Obsidian shows it in ─────────────────────────────────────────────── */
+
+.modal.nexus-modal {
+  width: min(560px, 100%);
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--nx-radius-card);
+}
+
+.modal.nexus-modal .modal-content {
+  margin: 0;
+  padding: 0;
+}
+
+/* The modal's own close mark sits on the teal band, in ink. */
+.modal.nexus-modal .modal-close-button {
+  color: var(--nx-ink);
+  z-index: 1;
+}
+
+/* ── the screen ─────────────────────────────────────────────────────────────────── */
+
+.nexus-screen,
+.nexus-screen * {
+  box-sizing: border-box;
+}
+
+.nx-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  background-color: var(--nx-ground);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: clip;
+  overflow-wrap: anywhere;
+  font-family: var(--nx-font-body);
+  color: var(--nx-ink);
+}
+
+.nx-slab {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background-color: var(--nx-teal);
+  border-bottom-left-radius: var(--nx-radius-slab);
+  border-bottom-right-radius: var(--nx-radius-slab);
+}
+
+.nx-slab__title {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  height: 42px;
+  padding-inline: 16px;
+  padding-top: 12px;
+  margin: 0;
+  font-family: var(--nx-font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 28px;
+  color: var(--nx-ink);
+}
+
+.nx-slab__line {
+  padding: 4px 16px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 17px;
+  opacity: 0.85;
+  color: var(--nx-ink);
+}
+
+.nx-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 8px;
+}
+
+.nx-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background-color: var(--nx-white);
+  border-radius: var(--nx-radius-card);
+  box-shadow: 0 1px 3px var(--nx-shadow);
+}
+
+/* ── words ──────────────────────────────────────────────────────────────────────── */
+
+.nx-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 21px;
+  color: var(--nx-ink);
+}
+
+.nx-small {
+  margin: 0;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--nx-ink-soft);
+}
+
+.nx-fault-line {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+  color: var(--nx-red-text);
+}
+
+.nx-label {
+  font-family: var(--nx-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 14px;
+  text-transform: uppercase;
+  color: var(--nx-ink-soft);
+}
+
+.nx-link {
+  appearance: none;
+  align-self: start;
+  margin: 0;
+  padding: 0;
+  height: auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font-family: var(--nx-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+  color: var(--nx-ink);
+  text-decoration: underline 1px;
+  text-underline-position: from-font;
+  cursor: pointer;
+}
+
+/* ── boxes that say something: the cream warning, and the red one for a fault ───── */
+
+.nx-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background-color: var(--nx-cream);
+  border-radius: var(--nx-radius-panel);
+}
+
+.nx-note--fault {
+  background-color: var(--nx-red-fill);
+}
+
+.nx-note__head {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 17px;
+  color: var(--nx-ink);
+}
+
+.nx-note--fault .nx-note__head {
+  color: var(--nx-red-heading);
+}
+
+/* ── the sand-grey panels: the key, and the summary ─────────────────────────────── */
+
+.nx-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--nx-sand);
+  border-radius: var(--nx-radius-panel);
+}
+
+.nx-panel__row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.nx-key-group {
+  font-family: var(--nx-font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--nx-ink);
+}
+
+.nx-key-spacer {
+  flex-shrink: 0;
+  width: 46px;
+}
+
+.nx-summary-name {
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--nx-ink-soft);
+}
+
+.nx-summary-value {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+  color: var(--nx-ink);
+}
+
+/* ── buttons ────────────────────────────────────────────────────────────────────── */
+
+.nx-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.nexus-screen .nx-pill {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 30px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--nx-radius-pill);
+  background: none;
+  box-shadow: none;
+  font-family: var(--nx-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--nx-ink);
+  cursor: pointer;
+}
+
+.nexus-screen .nx-pill--quiet {
+  border: 1.5px solid var(--nx-ink-25);
+}
+
+.nexus-screen .nx-pill--main {
+  background-color: var(--nx-ink);
+  color: var(--nx-white);
+}
+
+.nexus-screen .nx-pill--start {
+  align-self: start;
+}
+
+.nexus-screen .nx-pill[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── the round marks: done, ran out, not allowed ────────────────────────────────── */
+
+.nx-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--nx-radius-pill);
+}
+
+.nx-circle--done {
+  background-color: var(--nx-teal);
+}
+
+.nx-circle--fault {
+  background-color: var(--nx-red-fill);
+}
+
+.nx-circle--neutral {
+  background-color: var(--nx-grey-circle);
+}
+
+/* ── codes: one box per character, grouped 4, 4, 2 ──────────────────────────────── */
+
+.nx-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-code {
+  display: flex;
+  gap: 12px;
+}
+
+.nx-code__group {
+  display: flex;
+  flex-basis: 0;
+  gap: 4px;
+}
+
+.nx-code__group--4 {
+  flex-grow: 4;
+}
+
+.nx-code__group--2 {
+  flex-grow: 2;
+}
+
+.nx-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-basis: 0;
+  flex-grow: 1;
+  min-width: 0;
+  height: 44px;
+  border-radius: var(--nx-radius-box);
+  font-family: var(--nx-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--nx-ink);
+}
+
+/* A code that is only to be read: sand-grey, no outline. */
+.nx-box--read {
+  background-color: var(--nx-sand);
+}
+
+/* A code that is typed: white with a soft outline, and the teal one with the caret where the next character goes. */
+.nx-box--edit {
+  background-color: var(--nx-white);
+  border: 1.5px solid var(--nx-ink-14);
+}
+
+.nx-box--edit:focus-within {
+  border: 2px solid var(--nx-teal);
+}
+
+.nx-box--wrong,
+.nx-box--wrong:focus-within {
+  background-color: var(--nx-red-fill);
+  border: 2px solid var(--nx-red-line);
+}
+
+.nexus-screen .nx-box input {
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  caret-color: var(--nx-ink);
+}
+
+/* An empty box with the caret in it shows the caret as drawn: 2 px wide, in ink. */
+.nx-box--edit:focus-within:has(input:placeholder-shown)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  margin: -10px 0 0 -1px;
+  border-radius: 1px;
+  background-color: var(--nx-ink);
+  pointer-events: none;
+}
+
+.nexus-screen .nx-box--edit:focus-within:has(input:placeholder-shown) input {
+  caret-color: transparent;
+}
+
+/* The three groups typed back from the Recovery Key: a name to the left, four square boxes. */
+.nx-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nx-group .nx-label {
+  flex-shrink: 0;
+  width: 64px;
+}
+
+.nx-group .nx-box {
+  flex: 0 0 44px;
+  border-radius: var(--nx-radius-panel);
+  font-size: 16px;
+  line-height: 20px;
+}
+
+/* The Recovery Key typed in: 14 boxes, one for each group of four, four to a row. */
+.nx-keyrows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-keyrow {
+  display: flex;
+  gap: 6px;
+}
+
+.nx-keyrow .nx-box {
+  height: 38px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.nx-keyrow__rest {
+  flex-basis: 0;
+  flex-grow: 1;
+}
+
+/* ── the password step ──────────────────────────────────────────────────────────── */
+
+.nx-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 12px;
+  border-top: 1px solid var(--nx-hairline);
+  border-bottom: 1px solid var(--nx-hairline);
+}
+
+.nx-switch-row__words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nx-switch-row__name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--nx-ink);
+}
+
+.nexus-screen .nx-switch {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--nx-radius-pill);
+  background-color: var(--nx-switch-off);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.nexus-screen .nx-switch[aria-checked="true"] {
+  justify-content: flex-end;
+  background-color: var(--nx-teal);
+}
+
+.nx-switch__knob {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--nx-radius-pill);
+  background-color: var(--nx-white);
+}
+
+.nexus-screen .nx-input {
+  appearance: none;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1.5px solid var(--nx-ink-14);
+  border-radius: var(--nx-radius-panel);
+  background-color: var(--nx-white);
+  box-shadow: none;
+  outline: none;
+  font-family: var(--nx-font-body);
+  font-size: 15px;
+  line-height: 18px;
+  color: var(--nx-ink);
+}
+
+.nexus-screen .nx-input:focus {
+  border: 2px solid var(--nx-teal);
+  box-shadow: none;
+}
+
+.nexus-screen .nx-input::placeholder {
+  color: var(--nx-ink-muted);
+}
+
+.nexus-screen .nx-input[type="password"] {
+  letter-spacing: 0.18em;
+}
+
+.nexus-screen .nx-input[type="password"]::placeholder {
+  letter-spacing: normal;
+}
+
+/* ── the tick box: "I saved my Recovery Key somewhere safe" ─────────────────────── */
+
+.nx-tick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nexus-screen .nx-tick {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--nx-ink-40);
+  border-radius: var(--nx-radius-tick);
+  background-color: var(--nx-white);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.nexus-screen .nx-tick[aria-checked="true"] {
+  border-color: var(--nx-ink);
+  background-color: var(--nx-teal);
+}
+
+.nx-tick-row__words {
+  margin: 0;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--nx-ink);
+}
+
+/* ── waiting ────────────────────────────────────────────────────────────────────── */
+
+.nx-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The dot does not pulse. */
+.nx-status__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--nx-radius-pill);
+  background-color: var(--nx-teal);
+}

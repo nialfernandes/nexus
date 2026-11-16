@@ -66,6 +66,7 @@ export class NexusSettingTab extends PluginSettingTab {
       });
 
     this.showAccount(containerEl);
+    this.showEncryption(containerEl);
 
     new Setting(containerEl)
       .setName("Device name")
@@ -77,6 +78,24 @@ export class NexusSettingTab extends PluginSettingTab {
           await this.plugin.save();
         }),
       );
+  }
+
+  /** Where the setup screens are opened from: to set up or unlock this device, or, once it is unlocked, to approve another one or lock it. */
+  private showEncryption(containerEl: HTMLElement): void {
+    const { state } = this.plugin;
+    const encryption = new Setting(containerEl).setName("Encryption");
+    if (this.plugin.keyHolder.isUnlocked) {
+      encryption.setDesc("Unlocked on this device. Notes are scrambled here before they are sent.");
+      encryption.addButton((button) => button.setButtonText("Approve a device").onClick(() => this.plugin.openSetup("approve")));
+      encryption.addButton((button) => button.setButtonText("Lock").onClick(() => this.plugin.setup.lock()));
+      return;
+    }
+    if (!isSetUp(state)) {
+      encryption.setDesc("Enter the Nexus address and your user name above first.");
+      return;
+    }
+    encryption.setDesc("Locked. No note is sent or received until this device has the key.");
+    encryption.addButton((button) => button.setButtonText("Set up or unlock").setCta().onClick(() => this.plugin.openSetup("unlock")));
   }
 
   /** The sign in and sign out button, or the link and code while a sign-in waits to be allowed. */
