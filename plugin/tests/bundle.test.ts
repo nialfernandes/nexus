@@ -1,13 +1,14 @@
 // What Obsidian loads from the Nexus plugin: manifest.json says the plugin is called Nexus, has the id nexus and runs
-// on mobile; `npm run build` in the plugin's folder produces main.js from the source; and the bundle asks for no
+// on mobile; `npm run build` in the plugin's folder writes the three files a person copies into a vault (main.js,
+// manifest.json and styles.css) into its dist folder, with the manifest at version 0.3.0; and the bundle asks for no
 // Node or Electron module, which an iPhone does not have. Obsidian itself supplies `obsidian` and the editor's own
 // packages, and those are the only modules the bundle may require.
 //
-// The build is run for real, here, with main.js removed first, so the file that is scanned is the one the build makes
-// and never a stale one left in the folder.
+// The build is run for real, here, with the dist folder removed first, so the files that are scanned are the ones
+// the build makes and never stale ones left in the folder.
 
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +18,12 @@ import { describe, expect, it } from 'vitest';
 const run = promisify(execFile);
 
 const PLUGIN = fileURLToPath(new URL('..', import.meta.url));
-const MANIFEST = path.join(PLUGIN, 'manifest.json');
-const MAIN = path.join(PLUGIN, 'main.js');
+const DIST = path.join(PLUGIN, 'dist');
+const MANIFEST = path.join(DIST, 'manifest.json');
+const MAIN = path.join(DIST, 'main.js');
+const STYLES = path.join(DIST, 'styles.css');
+/** The version this build of the plugin is released as. */
+const VERSION = '0.3.0';
 const README = path.join(PLUGIN, 'README.md');
 
 /** The environment the build runs in. Vitest's own VITEST* variables are dropped: left in, a nested tool may print nothing. */
@@ -56,7 +61,7 @@ let built: Promise<void> | undefined;
 function build(): Promise<void> {
   built ??= (async () => {
     expect(existsSync(path.join(PLUGIN, 'package.json')), 'package.json is there: the plugin has its own package').toBe(true);
-    rmSync(MAIN, { force: true });
+    rmSync(DIST, { recursive: true, force: true });
     await run('npm', ['run', 'build'], { cwd: PLUGIN, env: CLEAN_ENV, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
   })();
   return built;
@@ -66,11 +71,19 @@ function build(): Promise<void> {
 const BUILD_TIME = 150_000;
 
 describe('the Nexus plugin as Obsidian loads it', () => {
-  it('builds manifest.json and main.js, where Obsidian looks for them', async () => {
+  it('writes main.js, manifest.json and styles.css into dist, the three files a person copies into a vault, and nothing else', async () => {
     await build();
-    expect(existsSync(MANIFEST), 'manifest.json sits beside main.js').toBe(true);
-    expect(existsSync(MAIN), '`npm run build` makes main.js').toBe(true);
-    expect(statSync(MAIN).size, 'and it is not empty').toBeGreaterThan(1000);
+    expect(readdirSync(DIST).sort()).toEqual(['main.js', 'manifest.json', 'styles.css']);
+    expect(statSync(MAIN).size, 'main.js is not empty').toBeGreaterThan(1000);
+    expect(readFileSync(MANIFEST, 'utf8'), 'the manifest is the one in the plugin folder, as it is').toBe(readFileSync(path.join(PLUGIN, 'manifest.json'), 'utf8'));
+    expect(readFileSync(STYLES, 'utf8'), 'and so is the stylesheet').toBe(readFileSync(path.join(PLUGIN, 'styles.css'), 'utf8'));
+    expect(statSync(STYLES).size, 'styles.css has the screens in it').toBeGreaterThan(1000);
+  }, BUILD_TIME);
+
+  it('is version 0.3.0, in the manifest and in the package', async () => {
+    await build();
+    expect((JSON.parse(readFileSync(MANIFEST, 'utf8')) as { version: string }).version).toBe(VERSION);
+    expect((JSON.parse(readFileSync(path.join(PLUGIN, 'package.json'), 'utf8')) as { version: string }).version).toBe(VERSION);
   }, BUILD_TIME);
 
   it('has a manifest that names the plugin Nexus, with the id nexus, and runs on mobile', async () => {

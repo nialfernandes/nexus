@@ -5,13 +5,13 @@
 > afford to lose until it has. What Nexus is meant to protect against, and what it
 > is not, is written down in the [threat model](../docs/THREAT-MODEL.md).
 >
-> **Encrypts on your device, but cannot be unlocked yet.** This version encrypts
-> every note on your own device before it is sent, name and folder included, and
-> only opens notes on your device, so your Nexus server holds scrambled data. But
-> the screens that make the vault key, show you the Recovery Key and unlock the
-> vault are not built yet. The logic behind them is built and tested, but nothing in
-> the plugin starts it, so for now the plugin has no key and syncs nothing: its
-> status line says the vault is locked. It is not ready for real notes.
+> **Encrypts on your device.** This version encrypts every note on your own
+> device before it is sent, name and folder included, and only opens notes on your
+> device, so your Nexus server holds scrambled data. The screens that make the vault
+> key, show you the Recovery Key once, unlock the vault and add another device are
+> in the plugin (see "The screens" below). Until the vault is unlocked on a device
+> the plugin has no key and syncs nothing: its status line says the vault is
+> locked.
 
 An Obsidian plugin that keeps every note in a vault in step with a Nexus server,
 both ways, on desktop and on mobile. You run the server yourself and tell the
@@ -25,6 +25,12 @@ default user.
   the **Nexus address** (the address your server's routes sit under, with no slash
   at the end) and your **User name** (the user your server knows you as). Until
   both are set, the status line says so.
+- **Set up or unlock.** Settings, Nexus, Encryption, **Set up or unlock**. On the
+  first device of a new vault it shows the Recovery Key once, asks you to type three of
+  its groups back, and lets you choose a password as well (off by default). On a
+  device that has to join a vault that exists, it asks for the Recovery Key, or for
+  the password when one was set up, or for another device that is already unlocked to
+  approve it.
 - **Sign in once.** Settings, Nexus, Sign in. The plugin asks your server for an
   approval for that user, labelled with this device's name (and a few characters of
   its id when no name was typed), shows the link and the code and opens the link.
@@ -95,9 +101,11 @@ TypeScript in `src/`, and runs every package's tests, the plugin's among them. T
 encryption package has to be built before the plugin's own `npm run typecheck`, `npm
 test` or `npm run build`, since the plugin takes it from its built file: run `npm run
 build --workspace @nexus/crypto` at the root once. `npm run build` in this folder
-alone makes `main.js`.
-Obsidian loads three files: `manifest.json` (kept in this folder), `main.js` (built)
-and `styles.css` (this plugin has none).
+alone makes the three files in `dist/`.
+`npm run build` in this folder writes the three files Obsidian loads, and a person
+copies into a vault, into `dist/`: `main.js` (built from `src/`), `manifest.json` and
+`styles.css` (both kept in this folder and copied as they are). The manifest's version
+is `0.3.0`.
 
 - `npm test` runs the tests. They run the sync engine and the sign-in against the
   real Nexus server from this repository's `server/` folder, running inside the test
@@ -130,15 +138,20 @@ state and calls one event when the person does something. The comment at the top
 the file names every state and every event in plain words. It covers:
 
 - **First run, with no vault on your server.** It makes the vault key, the vault id
-  and the Recovery Key, and shows the Recovery Key. The person types back the last
-  group of four characters (three tries). Only then does it send the Recovery wrap, with the
-  vault id, and unlock. Three wrong tries send nothing and keep nothing.
+  and the Recovery Key, and shows the Recovery Key. The person types back three of its
+  fourteen groups, chosen at random, with as many tries as they need. Then the person
+  chooses whether the vault also opens with a password. Only then does it send the
+  Recovery wrap, with the vault id, then the password wrap if one was asked for, and
+  unlock. Nothing is sent before that, and going back to the key shows the same key.
 - **A vault exists and this device has the Recovery Key.** It reads the vault id and
   the Recovery wrap from Nexus, opens the wrap with the key typed, and unlocks. A key
   that is wrong, or not whole, is refused with a plain message and nothing is kept.
+  When Nexus holds a password wrap, the password opens it the same way.
 - **A new device, approved from another.** The two-code exchange below, as states:
   waiting, type the matching code, unlocked or refused.
-- **This device approves another device,** with the key code typed here.
+- **This device approves another device,** with the sign-in code and the key code
+  typed here. The sign-in code is looked up first, so the person is shown which device
+  they are approving.
 - **This device approves an agent.** The person pastes the agent's public key, and
   the controller seals the vault key to it and shows the approval, for the person to save beside the agent's
   private key. It is the same text `nexus-agent approve-agent` prints, so either can be used, and it is never sent through Nexus.
@@ -154,16 +167,31 @@ unlocks with the Recovery Key reads it there, and a new device is handed it in i
 has to use the same one, because each note's encryption is bound to it. This plugin keeps it nowhere else, so the data
 file still holds only the address and the user name.
 
+## The screens
+
+The screens (`src/screens/`) are a drawing of the setup controller's state and nothing more: what is
+on screen is the controller's `state`, and what the person does is one call to one of its events. They
+have no key, no code and no check of their own. A code is one box for each character (or, for the Recovery
+Key, one for each group of four), and it is checked the moment the last box is full, so there is no
+Approve, Check or Unlock button. Anything a device sent, such as the name it signed in with, is put on a
+screen as text and never as markup. Opening them is **Set up or unlock** and **Approve a device** in the
+Encryption row of the settings tab, and the commands of the same names.
+
+They are shown in Obsidian's own modal, on a phone and on a desktop, and are styled by `styles.css`, which
+writes every colour, radius and size once, as a token, at its top. The type faces they are drawn in
+(Unbounded, Instrument Sans and JetBrains Mono) are not bundled: where a reader's device has none, the
+system's type is used.
+
 ## Giving a new device the vault key
 
-The engine for this is `src/approval.ts`, and the setup controller drives it as states; its screens are
-not built, so nothing in the plugin's own screens starts it yet. A device that holds the vault key can approve a new one, so that the new device
+The engine for this is `src/approval.ts`, and the setup controller drives it as states, which the screens
+above draw. A device that holds the vault key can approve a new one, so that the new device
 unlocks the vault with no Recovery Key typed.
 
 - The new device makes a key pair of its own for the attempt, keeps the private half in memory only,
   and asks to be signed in with its public key. It shows a **key code** for that key.
-- The approving device is unlocked and signed in as the owner. The person types the new device's key
-  code on it. It refuses to go on unless that is the code of the key Nexus gave it, so a server that
+- The approving device is unlocked and signed in as the owner. The person types the new device's sign-in
+  code, which finds the device, and then its key code on it. It refuses to go on unless that is the code of the key Nexus gave it, so a server that
   swapped the new device's key for its own is not sent the vault key. Otherwise it seals the vault key to the
   new device's key and leaves that with Nexus, which cannot open it, hands it over once and deletes it.
   The approving device shows a **matching code**.
@@ -192,22 +220,22 @@ a GitHub release. It works on desktop and on mobile.
 BRAT installs from a release, not from a folder of the repository. This repository
 also releases the test plugin in `probe/` (version 0.1.0), and BRAT reads one list of
 releases for the whole repository, so each release carries the files of one plugin.
-A release of this plugin carries `manifest.json` and `main.js` from this folder, with
-a tag that is the version in `manifest.json` (for example `0.2.0`). Whoever maintains
+A release of this plugin carries `main.js`, `manifest.json` and `styles.css` from `dist/`, with
+a tag that is the version in `manifest.json` (for example `0.3.0`). Whoever maintains
 the repository makes that release; BRAT checks for new ones and updates the plugin.
 
 ## Install by copying the files
 
-1. Build it (above), or take `manifest.json` and `main.js` from the release.
-2. Make the folder `<vault>/.obsidian/plugins/nexus/` and put `manifest.json` and
-   `main.js` in it. The folder name has to be `nexus`, the plugin's id.
+1. Build it (above), or take `main.js`, `manifest.json` and `styles.css` from the release.
+2. Make the folder `<vault>/.obsidian/plugins/nexus/` and put `main.js`, `manifest.json`
+   and `styles.css` in it. The folder name has to be `nexus`, the plugin's id.
 3. In Obsidian, Settings, Community plugins, turn on **Nexus** (turn on community
    plugins first if they are off).
 
 On an iPhone the vault is a folder in the Files app, and the Files app does not show
 folders that start with a dot, so the `.obsidian` folder inside the vault is out of
 sight there. The way through the Files app is the vault's own sync: put the `nexus`
-folder (with `manifest.json` and `main.js`) into `<vault>/.obsidian/plugins/` on a
+folder (with `main.js`, `manifest.json` and `styles.css`) into `<vault>/.obsidian/plugins/` on a
 computer, let the vault reach the phone through iCloud Drive in the Files app, then
 restart Obsidian on the phone and turn on **Nexus** under Community plugins.
 Installing through BRAT on the phone needs none of this, so use it when you can.

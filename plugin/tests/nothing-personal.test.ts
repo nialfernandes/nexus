@@ -13,11 +13,12 @@ const PLUGIN = fileURLToPath(new URL('..', import.meta.url));
 const NAME = new RegExp(['ni', 'al'].join(''), 'i');
 
 /**
- * What is not the plugin's own writing: what npm installed, and the build's output. `main.js` is the bundle, which holds the
+ * What is not the plugin's own writing: what npm installed, and the build's output (the dist folder, which holds the bundle and copies of
+ * the manifest and the stylesheet that are searched where they are made). `main.js` is the bundle, which holds the
  * encryption library's WebAssembly written out as base64 text, and a search for a name in any case finds letters of it by chance.
  * The source it is built from is searched, and the bundle is held to what it asks for by bundle.test.ts.
  */
-const SKIPPED_FOLDERS = new Set(['node_modules']);
+const SKIPPED_FOLDERS = new Set(['node_modules', 'dist']);
 const SKIPPED_FILES = new Set(['main.js']);
 
 /** Every file under `folder`, as a path from the plugin's folder. */
@@ -63,8 +64,9 @@ describe('the plugin folder', () => {
     expect(source.length).toBeGreaterThan(3);
     for (const file of source) {
       const text = readFileSync(path.join(PLUGIN, file), 'utf8');
-      // The one address in the source is the example shown greyed in the settings field, on the reserved example domain.
-      const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((url) => !/^https?:\/\/(?:[a-z]+\.)?example\.com(?:\/|$)/.test(url));
+      // The one address in the source is the example shown greyed in the settings field, on the reserved example domain. The SVG
+      // namespace is a name that the browser's own drawing calls ask for, not a server.
+      const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((url) => !/^https?:\/\/(?:[a-z]+\.)?example\.com(?:\/|$)/.test(url) && url !== 'http://www.w3.org/2000/svg');
       expect(urls, `${file} holds no address of a real server`).toEqual([]);
     }
   });

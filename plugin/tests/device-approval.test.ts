@@ -10,7 +10,7 @@
 
 import { generateDeviceKeyPair, generateVaultKey, sealApproval } from "@nexus/crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApprovalError, MATCHING_CODE_TRIES, approveDevice, signInForKey, type KeySignIn, type PendingApproval } from "../src/approval";
+import { ApprovalError, MATCHING_CODE_TRIES, approveDevice, readSignInCode, signInForKey, type KeySignIn, type PendingApproval } from "../src/approval";
 import { encodeBase64 } from "../src/base64";
 import { foundIn } from "./leaks";
 import {
@@ -83,6 +83,19 @@ const checkCode = (outcome: KeySignIn): PendingApproval => {
 };
 
 const hasToken = (b: Device): boolean => b.saved.some((data) => data.token !== null) || b.deps.data.token !== null;
+
+describe("a sign-in code as a person types it", () => {
+  it("is written as Nexus writes it: four characters, a hyphen, four, whatever way it was typed", () => {
+    for (const typed of ["WXYZ-2345", "wxyz2345", " wxyz 2345 ", "WX YZ-23 45"]) expect(readSignInCode(typed), typed).toBe("WXYZ-2345");
+    expect(readSignInCode("WXYZ-2O4I"), "O reads as 0 and I as 1: Nexus's codes have neither letter").toBe("WXYZ-2041");
+  });
+
+  it("is handed back trimmed, for Nexus to refuse, when it is not eight characters", () => {
+    expect(readSignInCode("  WXYZ  ")).toBe("WXYZ");
+    expect(readSignInCode("")).toBe("");
+    expect(readSignInCode("WXYZ-23456")).toBe("WXYZ-23456");
+  });
+});
 
 describe("device A approves a new device B", () => {
   it("worked example: B asks, A approves, both work out the same code, B confirms, opens the approval and syncs A's notes", async () => {

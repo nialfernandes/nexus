@@ -22,6 +22,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("a vault exists with a password set up at the first run", () => {
+  const PASSWORD = "a long password for this vault";
+
+  it("tells has-vault that a password is held, opens with the password typed, and the vault key is the first device's; a wrong or missing password opens nothing", async () => {
+    const { device: first } = await firstRun(world, { files: { "Ideas/one.md": "first\n" } }, PASSWORD);
+    await first.engine.sync();
+
+    const second = await setupDevice(world);
+    await second.setup.begin();
+    expect(second.setup.state, "the screen can offer the password").toEqual({ step: "has-vault", message: null, problem: null, hasPassword: true });
+
+    await second.setup.typePassword("not the password");
+    expect(second.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.wrongPassword, problem: "wrong", hasPassword: true });
+    await second.setup.typePassword("");
+    expect(second.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.noPassword, problem: "empty", hasPassword: true });
+    expect(second.holder.keys(), "still locked").toBeNull();
+    expect(second.log.to("POST wrap"), "nothing sent").toEqual([]);
+
+    await second.setup.typePassword(PASSWORD);
+    expect(second.setup.state).toEqual({ step: "unlocked" });
+    expect(Array.from(second.holder.keys()!.vaultKey)).toEqual(Array.from(first.holder.keys()!.vaultKey));
+    await second.engine.sync();
+    expect(second.vault.texts()).toEqual({ "Ideas/one.md": "first\n" });
+  }, 30_000);
+
+  it("still opens with the Recovery Key, which the password sits beside", async () => {
+    const { recoveryKey } = await firstRun(world, {}, PASSWORD);
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    await device.setup.typeRecoveryKey(recoveryKey);
+    expect(device.setup.state).toEqual({ step: "unlocked" });
+  }, 30_000);
+
+  it("is not offered when the vault has no password, and a password typed then is not tried: nothing is asked of Nexus", async () => {
+    await firstRun(world);
+    const device = await setupDevice(world);
+    await device.setup.begin();
+    expect(at(device, "has-vault").hasPassword).toBe(false);
+    const asked = device.log.requests().length;
+    await device.setup.typePassword("anything");
+    expect(device.setup.state).toEqual({ step: "has-vault", message: null, problem: null, hasPassword: false });
+    expect(device.log.requests().length).toBe(asked);
+  });
+});
+
 describe("a vault exists and this device has the Recovery Key", () => {
   it("reads the vault id and the Recovery wrap from Nexus and unlocks with the key typed (small letters, no hyphens), and the engine then syncs the first device's notes", async () => {
     const { device: first, recoveryKey } = await firstRun(world, { files: { "Ideas/one.md": "first\n", "Ideas/two.md": "second\n" } });
@@ -29,7 +74,7 @@ describe("a vault exists and this device has the Recovery Key", () => {
 
     const second = await setupDevice(world);
     await second.setup.begin();
-    expect(second.setup.state).toEqual({ step: "has-vault", message: null });
+    expect(second.setup.state).toEqual({ step: "has-vault", message: null, problem: null, hasPassword: false });
     await second.setup.typeRecoveryKey(recoveryKey.replace(/-/g, "").toLowerCase());
     expect(second.setup.state).toEqual({ step: "unlocked" });
     expect(second.holder.keys()).toMatchObject({ vaultId: first.holder.keys()!.vaultId, kid: 1 });
@@ -76,15 +121,15 @@ describe("a vault exists and this device has the Recovery Key", () => {
 
     const another = await formatRecoveryKey(await generateRecoveryKey());
     await device.setup.typeRecoveryKey(another);
-    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.wrongRecoveryKey });
+    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.wrongRecoveryKey, problem: "wrong", hasPassword: false });
     expect(device.holder.keys()).toBeNull();
 
     await device.setup.typeRecoveryKey(recoveryKey.slice(0, -1));
-    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.incompleteRecoveryKey });
+    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.incompleteRecoveryKey, problem: "incomplete", hasPassword: false });
     await device.setup.typeRecoveryKey(`${recoveryKey.slice(0, -1)}${recoveryKey.endsWith("0") ? "1" : "0"}`);
-    expect(device.setup.state, "a mistyped character is caught by the key's own check").toEqual({ step: "has-vault", message: SETUP_WORDS.incompleteRecoveryKey });
+    expect(device.setup.state, "a mistyped character is caught by the key's own check").toEqual({ step: "has-vault", message: SETUP_WORDS.incompleteRecoveryKey, problem: "incomplete", hasPassword: false });
     await device.setup.typeRecoveryKey("   ");
-    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.noRecoveryKey });
+    expect(device.setup.state).toEqual({ step: "has-vault", message: SETUP_WORDS.noRecoveryKey, problem: "empty", hasPassword: false });
 
     expect(device.holder.keys(), "still locked").toBeNull();
     expect(device.saved.length, "nothing was kept").toBe(before);
@@ -101,7 +146,7 @@ describe("a vault exists and this device has the Recovery Key", () => {
     await device.setup.begin();
     device.network.online = false;
     await device.setup.typeRecoveryKey(recoveryKey);
-    expect(device.setup.state).toEqual({ step: "has-vault", message: UNREACHABLE });
+    expect(device.setup.state).toEqual({ step: "has-vault", message: UNREACHABLE, problem: "other", hasPassword: false });
     expect(device.holder.keys()).toBeNull();
     device.network.online = true;
     await device.setup.typeRecoveryKey(recoveryKey);
@@ -148,7 +193,7 @@ describe("a new device approved from another", () => {
       expect(b.opened, "the link was opened in a browser").toEqual([waiting.link]);
       expect(waiting.keyCode).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
       a.setup.startApprovingDevice();
-      expect(a.setup.state).toEqual({ step: "approve-device", message: null });
+      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, device: null });
       await a.setup.approveDevice(waiting.code, waiting.keyCode);
       const approved = at(a, "device-approved");
       expect(approved.label).toBe("New phone");
@@ -162,7 +207,7 @@ describe("a new device approved from another", () => {
     expect(b.saved.some((d) => d.token !== null)).toBe(false);
 
     await b.setup.typeMatchingCode(matching);
-    expect(b.setup.state).toEqual({ step: "unlocked" });
+    expect(b.setup.state).toEqual({ step: "device-unlocked" });
     expect(b.deps.data.token).toMatch(/^nx_/);
     expect(Array.from(b.holder.keys()!.vaultKey)).toEqual(Array.from(a.holder.keys()!.vaultKey));
     a.setup.done();
@@ -216,7 +261,7 @@ describe("a new device approved from another", () => {
     await b.setup.typeMatchingCode("");
     expect(at(b, "type-matching-code").triesLeft).toBe(1);
     await b.setup.typeMatchingCode(matching);
-    expect(b.setup.state).toEqual({ step: "unlocked" });
+    expect(b.setup.state).toEqual({ step: "device-unlocked" });
   });
 
   it("throws the approval away when the person says the codes do not match: nothing unlocked, no token kept", async () => {
@@ -261,7 +306,7 @@ describe("a new device approved from another", () => {
       await deviceRoutes({ cookie: world.ownerCookie }).approve(waiting.code);
     };
     await b.setup.askAnotherDevice();
-    expect(b.setup.state, "signed in, and it looked at what Nexus holds").toEqual({ step: "has-vault", message: null });
+    expect(b.setup.state, "signed in, and it looked at what Nexus holds").toEqual({ step: "has-vault", message: null, problem: null, hasPassword: false });
     expect(b.deps.data.token).toMatch(/^nx_/);
     expect(b.holder.keys()).toBeNull();
     await b.setup.typeRecoveryKey(recoveryKey);

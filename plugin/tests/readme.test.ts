@@ -41,13 +41,21 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(existsSync(path.join(PLUGIN, link!)), `${link} is a file in this repository`).toBe(true);
   });
 
-  it('says plainly what this version does with notes and what it cannot do yet: it encrypts on the device, and the logic that unlocks it is built, but no screen starts it', () => {
+  it('says plainly what this version does with notes and where setting up and unlocking are: it encrypts on the device, and the screens that make, show and unlock the key are in the plugin', () => {
     expect(WORDS).toMatch(/encrypts every note on your own device before it is sent/i);
-    expect(WORDS).toMatch(/screens that make the vault key[^.]*are not built yet/i);
-    expect(WORDS).toMatch(/logic behind them is built and tested, but nothing in the plugin starts it/i);
+    expect(WORDS).toMatch(/screens that make the vault key, show you the Recovery Key once, unlock the vault and add another device are in the plugin/i);
+    expect(WORDS).toMatch(/Settings, Nexus, Encryption, \*\*Set up or unlock\*\*/);
     expect(WORDS).toMatch(/has no key and syncs nothing/i);
     expect(WORDS).toMatch(/status line says the vault is locked/i);
+    expect(WORDS, 'and no longer says the screens are not built').not.toMatch(/are not built yet|nothing in the plugin starts it|cannot be unlocked yet/i);
     expect(WORDS, 'and no longer says that notes are sent as they are').not.toMatch(/does not encrypt yet|sends the text of each note to your Nexus server as it is/i);
+  });
+
+  it('says what the screens are: a drawing of the controller, no button to approve, check or unlock, nothing a device sent as markup, and the tokens in styles.css', () => {
+    expect(WORDS).toMatch(/a drawing of the setup controller's state and nothing more/i);
+    expect(WORDS).toMatch(/no Approve, Check or Unlock button/i);
+    expect(WORDS).toMatch(/as text and never as markup/i);
+    expect(WORDS).toMatch(/`styles\.css`, which writes every colour, radius and size once, as a token/i);
   });
 
   it('says that the key is held in memory only, where the engine asks for it, and that the setup controller and the key holder are what fill and empty it', () => {
@@ -100,7 +108,7 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(WORDS).toMatch(/## Install through BRAT/);
     expect(WORDS).toMatch(/Add beta plugin/);
     expect(WORDS).toMatch(/`owner\/name`/);
-    expect(WORDS).toMatch(/`manifest\.json` and `main\.js`/);
+    expect(WORDS).toMatch(/`main\.js`, `manifest\.json` and `styles\.css` from `dist\/`/);
     const manifest = JSON.parse(readFileSync(path.join(PLUGIN, 'manifest.json'), 'utf8')) as { version: string };
     expect(WORDS, "a release's tag is the manifest's version").toContain(`(for example \`${manifest.version}\`)`);
   });

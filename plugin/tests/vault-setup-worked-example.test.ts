@@ -1,7 +1,7 @@
 // The worked example of the setup controller, against the real server code (real-nexus.ts), one person with three things in hand: a
 // first device, a second device, and an agent.
 //
-//   Device A runs the first-run setup (the Recovery Key is shown; the check characters are typed back wrong, then right) and syncs two
+//   Device A runs the first-run setup (the Recovery Key is shown; three of its groups are typed back wrong, then right; no password) and syncs two
 //   notes. Device B is new: it asks to be approved, A approves it with both codes typed (the key code on A, the matching code on B), B
 //   unlocks and syncs the two notes. A approves an agent from the agent's public key, and the approval A shows opens in packages/agent,
 //   which reads A's notes. Then A locks: its engine says the vault is locked and syncs nothing.
@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { encodeBase64 } from "../src/base64";
 import { AgentVault } from "../../packages/agent/src/index";
 import { ADDRESS, fetchOverNexus } from "../../packages/agent/tests/world";
-import { at, lastGroup, notTheLastGroup, setupDevice } from "./setup-world";
+import { at, groupsAsked, groupsAskedWithASlip, setupDevice } from "./setup-world";
 import { forbidFetch, openBlob, openWorld, type World } from "./world";
 
 let world: World;
@@ -37,10 +37,12 @@ describe("the setup controller, worked through", () => {
     const shown = at(a, "show-key");
     expect(a.log.to("POST wrap"), "the key is shown and nothing is sent").toEqual([]);
 
-    await a.setup.typeBack(notTheLastGroup(shown.recoveryKey)); // the first try is wrong
-    expect(at(a, "show-key").triesLeft).toBe(2);
+    a.setup.typeBack(groupsAskedWithASlip(shown)); // the first try is wrong
+    expect(at(a, "show-key").wrong).toEqual([shown.ask[0]]);
     expect(a.log.to("POST wrap"), "a wrong try sends nothing").toEqual([]);
-    await a.setup.typeBack(lastGroup(shown.recoveryKey)); // the second is right
+    a.setup.typeBack(groupsAsked(shown)); // the second is right
+    await a.setup.finishSetup(null); // no password
+    a.setup.done();
     expect(a.setup.state).toEqual({ step: "unlocked" });
     expect(a.log.to("POST wrap"), "the wrap went once, with the vault id").toHaveLength(1);
     expect(a.log.to("POST wrap")[0]!.body.vaultId).toBe(a.holder.keys()!.vaultId);
@@ -66,7 +68,8 @@ describe("the setup controller, worked through", () => {
     await b.setup.askAnotherDevice();
     expect(b.holder.keys(), "B is locked until the matching code is typed on B").toBeNull();
     await b.setup.typeMatchingCode(matching); // the matching code is typed on B
-    expect(b.setup.state).toEqual({ step: "unlocked" });
+    expect(b.setup.state).toEqual({ step: "device-unlocked" });
+    b.setup.done();
     a.setup.done();
 
     await b.engine.sync();

@@ -10,17 +10,21 @@
 // This file is not part of the single-file library an agent imports (index.ts does not export it).
 
 import {
-  deviceKeyCode, formatRecoveryKey, generateRecoveryKey, generateVaultKey, normaliseRecoveryText, NexusCryptoError, parseRecoveryKey,
-  sealApproval, unwrapVaultKeyWithRecoveryKey, wrapVaultKeyWithRecoveryKey,
+  createPasswordWrap, deviceKeyCode, formatRecoveryKey, generateRecoveryKey, generateVaultKey, normaliseRecoveryText, NexusCryptoError,
+  openPasswordWrap, parseRecoveryKey, sealApproval, unwrapVaultKeyWithRecoveryKey, wrapVaultKeyWithRecoveryKey,
 } from "@nexus/crypto";
 import { decodeBase64, encodeBase64, encodeBase64Url } from "./base64";
 
 /** The number of the first vault key. */
 export const FIRST_KID = 1;
-/** How many times the check characters may be typed before a setup gives up. */
+/** How many times `nexus-agent create-vault` takes the check characters before it gives up (the plugin lets the person try as often as they need). */
 export const TYPE_BACK_TRIES = 3;
-/** What is said when the check characters typed back are not the last group of the Recovery Key. */
+/** What `nexus-agent create-vault` says when the check characters typed back are not the last group of the Recovery Key. */
 export const TYPE_BACK_WRONG = "Those are not the last four characters of the key. Nothing was sent.";
+/** A Recovery Key is written in this many groups of four characters. */
+export const RECOVERY_KEY_GROUPS = 14;
+/** How many of those groups the plugin asks to be typed back. */
+export const TYPE_BACK_GROUPS = 3;
 /** An X25519 public key is this many bytes. */
 export const PUBLIC_KEY_BYTES = 32;
 
@@ -33,7 +37,7 @@ export interface NewVault {
   kid: number;
   /** The Recovery Key as a person writes it down: 14 groups of 4 characters joined by hyphens. */
   recoveryKeyText: string;
-  /** The last group of four characters of the Recovery Key: what the person types back to show the key was written down. */
+  /** The last group of four characters of the Recovery Key: what `nexus-agent create-vault` asks to be typed back to show the key was written down (the plugin asks for three groups, see `groupsToTypeBack`). */
   checkGroup: string;
 }
 
@@ -62,6 +66,31 @@ export function forgetNewVault(vault: Pick<NewVault, "vaultKey" | "recoveryKey">
 /** True when `typed` is the check characters: capitals or small letters, hyphens and spaces do not matter, and O reads as 0, I and L as 1. */
 export const isTypedBack = (typed: string, checkGroup: string): boolean => normaliseRecoveryText(typed) === normaliseRecoveryText(checkGroup);
 
+/**
+ * Which groups the person is asked to type back: `TYPE_BACK_GROUPS` of the key's groups, by number from 1, in the order they are written.
+ * Chosen at random by the random bytes in `random` (one byte is used for each draw, so any bytes will do), and never the same group twice.
+ */
+export function groupsToTypeBack(random: Uint8Array): number[] {
+  const left = Array.from({ length: RECOVERY_KEY_GROUPS }, (_, index) => index + 1);
+  const chosen: number[] = [];
+  for (let draw = 0; draw < TYPE_BACK_GROUPS; draw++) {
+    const [group] = left.splice((random[draw] ?? 0) % left.length, 1);
+    chosen.push(group!);
+  }
+  return chosen.sort((a, b) => a - b);
+}
+
+/**
+ * The groups, by number, that were not typed back right. `typed` is what was typed for `asked` groups one after the other, four
+ * characters each (capitals or small letters, hyphens and spaces do not matter, O reads as 0, I and L as 1). A group that is short
+ * or missing is wrong. Empty when every asked group matches the written key.
+ */
+export function wrongGroups(typed: string, recoveryKeyText: string, asked: readonly number[]): number[] {
+  const written = recoveryKeyText.split("-");
+  const symbols = normaliseRecoveryText(typed);
+  return asked.filter((group, position) => normaliseRecoveryText(symbols.slice(position * 4, position * 4 + 4)) !== normaliseRecoveryText(written[group - 1] ?? ""));
+}
+
 /** What `POST /wrap` is sent to keep a new vault's Recovery wrap: the vault id goes with it, and the first wrap sets it. */
 export interface RecoveryWrapRequest {
   kid: number;
@@ -77,6 +106,21 @@ export async function recoveryWrapRequest(vault: Pick<NewVault, "vaultKey" | "re
   return { kid: vault.kid, kind: "recovery", wrap: encodeBase64(wrap), vaultId: vault.vaultId };
 }
 
+/** What `POST /wrap` is sent to keep a password wrap: the same vault id as the Recovery wrap, which is sent first. */
+export interface PasswordWrapRequest {
+  kid: number;
+  kind: "password";
+  /** Base64. */
+  wrap: string;
+  vaultId: string;
+}
+
+/** The vault key locked under a password (Argon2id, `PASSWORD_KDF`), as the body of `POST /wrap`. The password is normalised (NFKC) by the encryption package. */
+export async function passwordWrapRequest(vault: Pick<NewVault, "vaultKey" | "vaultId" | "kid">, password: string): Promise<PasswordWrapRequest> {
+  const wrap = await createPasswordWrap(password, vault.vaultKey, { vaultId: vault.vaultId, kid: vault.kid });
+  return { kid: vault.kid, kind: "password", wrap: encodeBase64(wrap), vaultId: vault.vaultId };
+}
+
 // ── what Nexus holds ─────────────────────────────────────────────────────────
 
 /** True when what `GET /wraps` answered says the server holds a vault: a wrap, or a vault id. */
@@ -84,26 +128,48 @@ export function holdsAVault(held: { wraps?: unknown; vaultId?: unknown }): boole
   return (Array.isArray(held.wraps) && held.wraps.length > 0) || typeof held.vaultId === "string";
 }
 
-/** The newest Recovery wrap Nexus holds, and the vault id it was made with. */
-export interface RecoveryWrapHeld {
+/** The newest wrap of one kind that Nexus holds, and the vault id it was made with. */
+export interface WrapHeld {
   vaultId: string;
   kid: number;
   wrap: Uint8Array;
+}
+/** The newest Recovery wrap Nexus holds, and the vault id it was made with. */
+export type RecoveryWrapHeld = WrapHeld;
+
+type WrapsAnswer = { wraps?: unknown; vaultId?: unknown };
+type WrapKind = "recovery" | "password";
+
+/** True when what `GET /wraps` answered says the server holds a wrap of `kind`. */
+export function holdsAWrap(held: WrapsAnswer, kind: WrapKind): boolean {
+  return Array.isArray(held.wraps) && held.wraps.some((w) => (w as { kind?: unknown } | null)?.kind === kind);
+}
+
+/** The newest wrap of `kind` in what `GET /wraps` answered, or the reason there is none. */
+function newestWrap(held: WrapsAnswer, kind: WrapKind): { ok: true; held: WrapHeld } | { ok: false; reason: "no-vault-id" | "no-wrap" | "bad-wrap" } {
+  if (typeof held.vaultId !== "string") return { ok: false, reason: "no-vault-id" };
+  const vaultId: string = held.vaultId;
+  const wraps = (Array.isArray(held.wraps) ? held.wraps : []) as Array<{ kid: number; kind: string; wrap: string }>;
+  const newest = wraps.filter((w) => w.kind === kind).sort((a, b) => b.kid - a.kid)[0];
+  if (newest === undefined) return { ok: false, reason: "no-wrap" };
+  const wrap = decodeBase64(newest.wrap);
+  if (wrap === null) return { ok: false, reason: "bad-wrap" };
+  return { ok: true, held: { vaultId, kid: newest.kid, wrap } };
 }
 
 /**
  * The newest Recovery wrap in what `GET /wraps` answered, or the reason there is none: the server holds no vault id, it holds no
  * Recovery wrap, or the wrap it holds is not base64.
  */
-export function newestRecoveryWrap(held: { wraps?: unknown; vaultId?: unknown }): { ok: true; held: RecoveryWrapHeld } | { ok: false; reason: "no-vault-id" | "no-recovery-wrap" | "bad-wrap" } {
-  if (typeof held.vaultId !== "string") return { ok: false, reason: "no-vault-id" };
-  const vaultId: string = held.vaultId;
-  const wraps = (Array.isArray(held.wraps) ? held.wraps : []) as Array<{ kid: number; kind: string; wrap: string }>;
-  const newest = wraps.filter((w) => w.kind === "recovery").sort((a, b) => b.kid - a.kid)[0];
-  if (newest === undefined) return { ok: false, reason: "no-recovery-wrap" };
-  const wrap = decodeBase64(newest.wrap);
-  if (wrap === null) return { ok: false, reason: "bad-wrap" };
-  return { ok: true, held: { vaultId, kid: newest.kid, wrap } };
+export function newestRecoveryWrap(held: WrapsAnswer): { ok: true; held: RecoveryWrapHeld } | { ok: false; reason: "no-vault-id" | "no-recovery-wrap" | "bad-wrap" } {
+  const found = newestWrap(held, "recovery");
+  return found.ok ? found : { ok: false, reason: found.reason === "no-wrap" ? "no-recovery-wrap" : found.reason };
+}
+
+/** The newest password wrap in what `GET /wraps` answered, or the reason there is none (as `newestRecoveryWrap`). */
+export function newestPasswordWrap(held: WrapsAnswer): { ok: true; held: WrapHeld } | { ok: false; reason: "no-vault-id" | "no-password-wrap" | "bad-wrap" } {
+  const found = newestWrap(held, "password");
+  return found.ok ? found : { ok: false, reason: found.reason === "no-wrap" ? "no-password-wrap" : found.reason };
 }
 
 /** The keys a vault is unlocked with. */
@@ -135,6 +201,22 @@ export async function openRecoveryWrap(held: RecoveryWrapHeld, typedKey: string)
     return { ok: false, reason: "wrong" };
   } finally {
     recoveryKey.fill(0);
+  }
+}
+
+/**
+ * Opens the password wrap with the password as the person typed it. `empty`: nothing was typed. `wrong`: not this vault's password
+ * (the wrap did not open, which is all that can be told). `bad-wrap`: the wrap Nexus holds asks for Argon2id settings this version
+ * does not accept, or is not a password wrap. The vault key that is answered is the caller's to overwrite.
+ */
+export async function openPasswordWrapHeld(held: WrapHeld, typed: string): Promise<{ ok: true; keys: OpenedVault } | { ok: false; reason: "empty" | "wrong" | "bad-wrap" }> {
+  if (typed === "") return { ok: false, reason: "empty" };
+  try {
+    const vaultKey = await openPasswordWrap(typed, held.wrap, { vaultId: held.vaultId, kid: held.kid });
+    return { ok: true, keys: { vaultKey, vaultId: held.vaultId, kid: held.kid } };
+  } catch (error) {
+    if (!(error instanceof NexusCryptoError)) throw error;
+    return { ok: false, reason: error.code === "unwrap-failed" ? "wrong" : "bad-wrap" };
   }
 }
 

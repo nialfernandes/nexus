@@ -103,7 +103,7 @@ describe("the vault key", () => {
     const written = readdirSync(dir).filter((f) => f.endsWith(".ts")).map((f) => [f, readFileSync(dir + f, "utf8")] as const);
     expect(written.length, "the sources were found").toBeGreaterThan(8);
     for (const [file, source] of written) {
-      expect(source, `${file} neither makes nor unwraps a vault key`).not.toMatch(/generateVaultKey|generateRecoveryKey|parseRecoveryKey|unwrapVaultKeyWithRecoveryKey|openPasswordWrap/);
+      expect(source, `${file} neither makes nor unwraps a vault key`).not.toMatch(/generateVaultKey|generateRecoveryKey|parseRecoveryKey|unwrapVaultKeyWithRecoveryKey|createPasswordWrap|\bopenPasswordWrap\b/);
       if (file !== "approval.ts") expect(source, `${file} does not open an approval: only approval.ts does, and it holds the key back until the person has checked the code`).not.toMatch(/openApproval/);
     }
     const controller = written.find(([file]) => file === "vault-setup.ts")?.[1] ?? "";

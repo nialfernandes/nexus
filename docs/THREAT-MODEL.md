@@ -7,9 +7,9 @@ design or the code. Until one has, treat every statement here as a goal that
 the code is trying to meet, not as something anyone has proved. Do not rely on
 Nexus for anything you cannot afford to lose. The server in this repository
 stores only the blobs a device sends and never reads a note, and the Obsidian
-plugin encrypts every note on the device before it sends it. But the screens that
-make the vault key and unlock the vault are not built yet, so the plugin has no key
-and syncs nothing, and nothing is protected in use until they are.
+plugin encrypts every note on the device before it sends it. The plugin has the
+screens that make the vault key and unlock the vault, and until the vault is unlocked
+on a device it has no key and syncs nothing.
 
 The exact byte layout of the encrypted data is in [FORMAT.md](FORMAT.md). This
 document says what that format is for.
@@ -26,8 +26,8 @@ when it matters.
 
 **Today, it depends on the device.** The server in this repository holds only the
 blobs a device sends and never reads a note. The Obsidian plugin encrypts every
-note before it sends it, but it cannot yet be given a key (the screens for that are
-not built), so it syncs nothing. The server turns away a blob that does not begin the
+note before it sends it, and it syncs only while the vault is unlocked on the device
+(the screens that make and unlock the key are in the plugin). The server turns away a blob that does not begin the
 way an encrypted note does (the format's version, the key number, and at least the
 smallest length), so a device that forgot to encrypt is told so; it looks at nothing
 past that header, so it cannot tell a blob with the right header that is not really
@@ -202,8 +202,7 @@ Someone who can watch or interfere with traffic between a device and the server.
 - **Locked, with disk encryption:** where you use the Obsidian plugin, the plan is
   to hold the key in Obsidian's local secret storage, which its own guide describes as local
   storage and does not promise is encrypted on disk [S63]. The plugin as it is now holds
-  the key in memory only, while the vault is unlocked, and writes it nowhere; the screens
-  that unlock it are not built yet. Another way in keeps
+  the key in memory only, while the vault is unlocked, and writes it nowhere. Another way in keeps
   the key wherever that app keeps secrets, and this document does not vouch for
   that place. The real defence is the device's own lock screen and disk encryption, which Nexus cannot
   add.
