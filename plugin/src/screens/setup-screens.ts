@@ -166,11 +166,7 @@ export const WORDS = {
   },
   stopped: { title: "stopped", line: "Nothing was kept.", again: "Try again" },
   saveFailed: { title: "not saved", line: "Nothing is unlocked yet.", again: "Try again" },
-  cancel: "Cancel",
-  back: "Back",
-  continue: "Continue",
-  done_: "Done",
-  close: "Close",
+  buttons: { cancel: "Cancel", back: "Back", continue: "Continue", done: "Done", close: "Close" },
 } as const;
 
 /** The ids of the code fields, which tell their boxes apart. */
@@ -179,8 +175,6 @@ const FIELD = { typeBack: "type-back", signIn: "sign-in", device: "device", matc
 const KEY = { password: "password", again: "again", unlockPassword: "unlock-password" } as const;
 
 type Phase = "start" | "key" | "check";
-
-const once = (box: Edit): number => box.focus;
 
 export class SetupScreens {
   /** The element the screens are drawn into: its one child is the screen. */
@@ -337,7 +331,7 @@ export class SetupScreens {
   /** A code field's edit: draw anew with the caret where the edit sent it. The entry is checked when it is whole. */
   #edited(id: string, check: (() => void) | null): (edit: Edit) => void {
     return (edit) => {
-      this.#pendingFocus = boxKey(id, once(edit));
+      this.#pendingFocus = boxKey(id, edit.focus);
       this.#render();
       if (edit.complete && check) check();
     };
@@ -356,7 +350,7 @@ export class SetupScreens {
       case "waiting-for-device":
         return this.#waitingScreen(state);
       case "type-matching-code":
-        return this.#matchingScreen(state);
+        return this.#matchingScreen();
       case "device-unlocked":
         return this.#unlockedScreen();
       case "approve-device":
@@ -391,8 +385,8 @@ export class SetupScreens {
         note(w.auditHead, w.audit),
         small(w.next),
         actions(
-          pill(WORDS.cancel, "quiet", () => setup.cancel(), { key: "cancel" }),
-          pill(WORDS.continue, "main", () => {
+          pill(WORDS.buttons.cancel, "quiet", () => setup.cancel(), { key: "cancel" }),
+          pill(WORDS.buttons.continue, "main", () => {
             if (setup.state.step === "no-vault") this.#run(setup.startFirstRun());
             else {
               this.#phase = "key";
@@ -445,8 +439,8 @@ export class SetupScreens {
           el("p", { class: "nx-tick-row__words" }, w.saved),
         ),
         actions(
-          pill(WORDS.back, "quiet", () => this.#goTo("start"), { key: "back" }),
-          pill(WORDS.continue, "main", () => this.#goTo("check"), { dim: !this.#saved, key: "continue" }),
+          pill(WORDS.buttons.back, "quiet", () => this.#goTo("start"), { key: "back" }),
+          pill(WORDS.buttons.continue, "main", () => this.#goTo("check"), { dim: !this.#saved, key: "continue" }),
         ),
       ),
     );
@@ -466,7 +460,7 @@ export class SetupScreens {
           this.#wrongRows,
         ),
         wrong.length === 0 ? small(w.how) : faultLine(wrong.length === 1 ? w.one(wrong[0]!) : w.several(wrong)),
-        actions(pill(WORDS.back, "quiet", () => this.#goTo("key"), { key: "back" })),
+        actions(pill(WORDS.buttons.back, "quiet", () => this.#goTo("key"), { key: "back" })),
       ),
     );
   }
@@ -513,7 +507,7 @@ export class SetupScreens {
         message === null ? null : faultLine(message),
         note(this.#passwordOn ? w.pickLong : w.readFirst, w.warning),
         actions(
-          pill(WORDS.back, "quiet", () => this.#deps.setup.backToKey(), { key: "back" }),
+          pill(WORDS.buttons.back, "quiet", () => this.#deps.setup.backToKey(), { key: "back" }),
           pill(w.finish, "main", () => this.#run(this.#deps.setup.finishSetup(this.#passwordOn ? { password: this.#password, again: this.#again } : null)), { dim: !ready, key: "finish" }),
         ),
       ),
@@ -557,7 +551,7 @@ export class SetupScreens {
         text(w.text),
         state.message === null ? null : faultLine(state.message),
         el("div", { class: "nx-panel" }, row(w.recoveryKey, w.savedByYou), row(w.password, state.password ? w.on : w.off), row(w.audit, w.notYetAudited)),
-        actions(pill(WORDS.done_, "main", () => this.#deps.setup.done(), { key: "done" })),
+        actions(pill(WORDS.buttons.done, "main", () => this.#deps.setup.done(), { key: "done" })),
       ),
     );
   }
@@ -572,7 +566,7 @@ export class SetupScreens {
         readCode(w.signInCode, codeCharacters(state.code)),
         readCode(w.deviceCode, codeCharacters(state.keyCode)),
         el("div", { class: "nx-status" }, el("span", { class: "nx-status__dot" }), small(w.status)),
-        actions(pill(WORDS.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
       ),
     );
   }
@@ -589,7 +583,7 @@ export class SetupScreens {
           WORDS.waiting.signInCode,
         ),
         message !== null && this.#signIn.wrong ? faultLine(message) : small(w.nothingSent),
-        actions(pill(WORDS.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
       ),
     );
   }
@@ -612,7 +606,7 @@ export class SetupScreens {
           WORDS.waiting.deviceCode,
         ),
         this.#deviceCode.wrong ? faultLine(state.problem === "wrong-key-code" ? w.wrongCode : (state.message ?? w.wrongCode)) : small(w.nothingSent),
-        actions(pill(WORDS.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
       ),
     );
   }
@@ -622,11 +616,12 @@ export class SetupScreens {
     return screen(
       w.title,
       w.line,
-      card(text(w.text), readCode(w.matching, codeCharacters(state.code)), small(w.warning), actions(pill(WORDS.done_, "main", () => this.#deps.setup.done(), { key: "done" }))),
+      card(text(w.text), readCode(w.matching, codeCharacters(state.code)), small(w.warning), actions(pill(WORDS.buttons.done, "main", () => this.#deps.setup.done(), { key: "done" }))),
     );
   }
 
-  #matchingScreen(state: Extract<SetupState, { step: "type-matching-code" }>): HTMLElement {
+  /** The tries the controller counts are not shown: there is no counter and no lock-out here. */
+  #matchingScreen(): HTMLElement {
     const w = WORDS.matching;
     const wrong = this.#matching.wrong;
     return screen(
@@ -644,16 +639,14 @@ export class SetupScreens {
           WORDS.approved.matching,
         ),
         wrong ? note(w.stays, w.staysText, true) : small(w.why),
-        actions(pill(WORDS.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
       ),
     );
-    // `state` is not read: the controller's counter of tries is not shown, as drawn.
-    void state;
   }
 
   #unlockedScreen(): HTMLElement {
     const w = WORDS.unlocked;
-    return screen(w.title, w.line, card(doneCircle(), text(w.text), actions(pill(WORDS.done_, "main", () => this.#deps.setup.done(), { key: "done" }))));
+    return screen(w.title, w.line, card(doneCircle(), text(w.text), actions(pill(WORDS.buttons.done, "main", () => this.#deps.setup.done(), { key: "done" }))));
   }
 
   #lockedScreen(state: Extract<SetupState, { step: "has-vault" }>): HTMLElement {
@@ -669,10 +662,9 @@ export class SetupScreens {
             id: FIELD.key,
             name: w.recoveryKey,
             entry: this.#recoveryKey,
-            onEdit: (edit, box) => {
+            onEdit: (edit) => {
               this.#wrongKeyBoxes = new Set();
               this.#edited(FIELD.key, this.#recoveryKey.complete ? () => this.#run(this.#deps.setup.typeRecoveryKey(this.#recoveryKey.text)) : null)(edit);
-              void box;
             },
           },
           w.recoveryKey,
@@ -686,7 +678,7 @@ export class SetupScreens {
               this.#render();
             }, "use-password")
           : null,
-        actions(pill(WORDS.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
       ),
     );
   }
@@ -723,7 +715,7 @@ export class SetupScreens {
           this.#unlockPassword = "";
           this.#render();
         }, "use-recovery-key"),
-        actions(pill(WORDS.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
       ),
     );
   }
@@ -766,7 +758,7 @@ export class SetupScreens {
       card(
         text(w.text),
         actions(
-          pill(WORDS.close, "quiet", () => this.#deps.setup.cancel(), { key: "close" }),
+          pill(WORDS.buttons.close, "quiet", () => this.#deps.setup.cancel(), { key: "close" }),
           pill(w.ask, "main", () => this.#run(this.#deps.setup.askAnotherDevice()), { key: "ask" }),
         ),
       ),
@@ -780,7 +772,7 @@ export class SetupScreens {
       w.line,
       card(
         text(message),
-        actions(pill(WORDS.close, "quiet", () => this.#deps.setup.cancel(), { key: "close" }), pill(w.again, "main", () => this.#run(this.#deps.setup.begin()), { key: "again" })),
+        actions(pill(WORDS.buttons.close, "quiet", () => this.#deps.setup.cancel(), { key: "close" }), pill(w.again, "main", () => this.#run(this.#deps.setup.begin()), { key: "again" })),
       ),
     );
   }
@@ -790,12 +782,12 @@ export class SetupScreens {
     return screen(
       w.title,
       w.line,
-      card(text(message), actions(pill(WORDS.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" }), pill(w.again, "main", () => this.#run(this.#deps.setup.tryAgain()), { key: "again" }))),
+      card(text(message), actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" }), pill(w.again, "main", () => this.#run(this.#deps.setup.tryAgain()), { key: "again" }))),
     );
   }
 
   #notDrawnScreen(): HTMLElement {
-    return screen(WORDS.stopped.title, WORDS.stopped.line, card(actions(pill(WORDS.close, "main", () => this.#deps.setup.done(), { key: "close" }))));
+    return screen(WORDS.stopped.title, WORDS.stopped.line, card(actions(pill(WORDS.buttons.close, "main", () => this.#deps.setup.done(), { key: "close" }))));
   }
 
   // ── what the buttons do ───────────────────────────────────────────────────────

@@ -10,7 +10,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { WORDS } from "../src/screens/setup-screens";
 import type { SetupState } from "../src/vault-setup";
 import { STYLES, box, boxes, buttons, control, isDim, openScreens, pasteInto, tap, typeInto, typeText, words, type OpenScreens } from "./screens-world";
 
@@ -425,6 +424,5 @@ describe("the look of every screen", () => {
   it("uses no hand-written colour: every colour in the stylesheet is a token", () => {
     const outside = STYLES.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\.nexus-screen \{[^}]*\}/, "");
     expect(outside.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(/g) ?? []).toEqual([]);
-    expect(WORDS.cancel).toBe("Cancel");
   });
 });

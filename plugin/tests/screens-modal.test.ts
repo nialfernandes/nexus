@@ -23,6 +23,9 @@ afterEach(() => {
 
 afterAll(() => removeDom());
 
+/** Whether the stand-in modal is open: only the stand-in knows. */
+const isOpen = (modal: object): boolean => (modal as { isOpen: boolean }).isOpen;
+
 const open = (state: SetupState, entry: "unlock" | "approve" = "unlock") => {
   const setup = new FakeSetup(state);
   const modal = new NexusSetupModal({} as never, setup as unknown as VaultSetup, entry);
@@ -45,9 +48,9 @@ describe("the modal the setup screens are shown in", () => {
 
   it("closes itself when the controller has nothing going on, as Done does", () => {
     const { modal, setup } = open({ step: "set-up", password: false, message: null });
-    expect(modal.isOpen).toBe(true);
+    expect(isOpen(modal)).toBe(true);
     setup.show({ step: "unlocked" });
-    expect(modal.isOpen).toBe(false);
+    expect(isOpen(modal)).toBe(false);
     expect(document.body.contains(modal.modalEl)).toBe(false);
   });
 
