@@ -451,11 +451,10 @@ export class VaultSetup {
   async lookUpDevice(signInCode: string): Promise<void> {
     if (this.#current?.step !== "approve-device") return;
     const flow = this.#start();
-    const code = signInCode.trim();
     try {
-      const found = await findPendingDevice({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, code);
+      const found = await findPendingDevice({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, signInCode);
       if (flow.cancelled) return;
-      this.#set({ step: "approve-device", message: null, problem: null, device: { signInCode: code, label: found.label } });
+      this.#set({ step: "approve-device", message: null, problem: null, device: { signInCode: found.signInCode, label: found.label } });
     } catch (error) {
       if (flow.cancelled) return;
       if (!(error instanceof ApprovalError)) throw error;
@@ -472,7 +471,7 @@ export class VaultSetup {
     const flow = this.#start();
     this.#set({ step: "working", doing: "approving" });
     try {
-      const approved = await approveWithKeyCode({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, signInCode.trim(), typedKeyCode);
+      const approved = await approveWithKeyCode({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, signInCode, typedKeyCode);
       if (flow.cancelled) return;
       this.#set({ step: "device-approved", code: approved.code, label: approved.label });
     } catch (error) {

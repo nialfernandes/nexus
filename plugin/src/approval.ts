@@ -186,6 +186,16 @@ const body = (response: HttpResponse): any => {
 
 type Call = (request: Parameters<Http>[0]) => Promise<HttpResponse>;
 
+/**
+ * A sign-in code as Nexus writes it (four characters, a hyphen, four), from what a person typed: capitals or small letters, a hyphen,
+ * spaces or none do not matter, and O reads as 0, I and L as 1 (Nexus's codes use none of those letters). Text that is not eight
+ * characters is handed back as it was, trimmed, for Nexus to say it has no such sign-in.
+ */
+export function readSignInCode(typed: string): string {
+  const symbols = typed.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+  return symbols.length === 8 ? `${symbols.slice(0, 4)}-${symbols.slice(4)}` : typed.trim();
+}
+
 /** What Nexus says about a sign-in that waits to be approved. */
 interface PendingSignIn {
   label: string;
@@ -227,10 +237,11 @@ async function askWhatIsPending(base: string, call: Call, signInCode: string): P
  * Asks Nexus which device waits under `signInCode` and answers the label it sent, to show the person which device is being approved.
  * Sends nothing that could carry the key. Throws an ApprovalError as `approveDevice` does.
  */
-export async function findPendingDevice(deps: ApproveDeps, signInCode: string): Promise<{ label: string }> {
+export async function findPendingDevice(deps: ApproveDeps, signInCode: string): Promise<{ label: string; signInCode: string }> {
   const { base, call } = approverCalls(deps);
-  const { label } = await askWhatIsPending(base, call, signInCode);
-  return { label };
+  const code = readSignInCode(signInCode);
+  const { label } = await askWhatIsPending(base, call, code);
+  return { label, signInCode: code };
 }
 
 /**
@@ -239,8 +250,9 @@ export async function findPendingDevice(deps: ApproveDeps, signInCode: string): 
  * Throws an ApprovalError, with nothing sent that could carry the key, when this device is locked or signed out, when Nexus
  * has no such sign-in, or when the key Nexus gave this device is not the one the person's code is for.
  */
-export async function approveDevice(deps: ApproveDeps, signInCode: string, typedKeyCode: string): Promise<Approved> {
+export async function approveDevice(deps: ApproveDeps, typedSignInCode: string, typedKeyCode: string): Promise<Approved> {
   const { keys, base, call } = approverCalls(deps);
+  const signInCode = readSignInCode(typedSignInCode);
   const pending = await askWhatIsPending(base, call, signInCode);
   const deviceKey = pending.deviceKey;
   if (deviceKey === null) {

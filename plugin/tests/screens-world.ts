@@ -6,10 +6,31 @@
 // server code are screens-worked-example.test.ts.
 
 import { readFileSync } from "node:fs";
+import { Window } from "happy-dom";
 import path from "node:path";
 import { expect } from "vitest";
 import { SetupScreens, type ScreenDeps } from "../src/screens/setup-screens";
 import type { SetupState, VaultSetup } from "../src/vault-setup";
+
+/**
+ * A page for a test that has to run in Node (the ones that use the real server code, which needs `node:sqlite`): the globals a screen
+ * and the helpers below use are taken from a happy-dom window, and put back by what this answers. The tests that need no Node module have
+ * the same page from vitest itself (`@vitest-environment happy-dom`).
+ */
+export function installDom(): () => void {
+  const window = new Window({ url: "http://localhost/" });
+  const names = ["document", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "Event", "KeyboardEvent", "MouseEvent"] as const;
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const before = names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+  for (const name of names) Object.defineProperty(globalThis, name, { value: (window as unknown as Record<string, unknown>)[name], configurable: true, writable: true });
+  return () => {
+    for (const [name, descriptor] of before) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globals[name];
+    }
+    void window.happyDOM.close();
+  };
+}
 
 /** Every event name the screens may send the controller. */
 const EVENTS = [
@@ -62,6 +83,8 @@ export interface OpenScreens {
   /** The timers the screens asked for: run one with `ticks[i]()`. */
   timers: Array<{ ms: number; run: () => void; stopped: boolean }>;
   closed: () => number;
+  /** What opening the screens sent the controller, before the person did anything. */
+  opening: Array<[string, ...unknown[]]>;
 }
 
 /** Opens the screens over a stand-in controller that is at `state`. */
@@ -83,8 +106,8 @@ export async function openScreens(state: SetupState, entry: "unlock" | "approve"
   const screens = new SetupScreens(deps);
   document.body.append(screens.element);
   await screens.start(entry);
-  setup.calls.length = 0; // what opening it sent is not what the person did
-  return { screens, setup, root: screens.element, copied, timers, closed: () => closes };
+  const opening = setup.calls.splice(0); // what opening it sent is not what the person did
+  return { screens, setup, root: screens.element, copied, timers, closed: () => closes, opening };
 }
 
 // ── the person's hands ───────────────────────────────────────────────────────────
@@ -107,11 +130,18 @@ export function typeInto(root: HTMLElement, id: string, characters: string, from
   let index = from;
   for (const character of characters) {
     const input = box(root, id, index);
-    input.value = character;
+    input.value += character; // typed at the end of what the box holds, as a keyboard does
     input.dispatchEvent(new Event("input", { bubbles: true }));
     const focused = document.activeElement?.getAttribute("data-key") ?? `${id}:${index}`;
     index = Number(focused.split(":")[1]);
   }
+}
+
+/** The box's field now says `value`, as it does after the person deletes a character or types over one. */
+export function setBox(root: HTMLElement, id: string, index: number, value: string): void {
+  const input = box(root, id, index);
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 /** Pastes `words` into box `index` of the field `id`. */

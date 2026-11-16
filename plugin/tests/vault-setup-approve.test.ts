@@ -85,7 +85,7 @@ describe("this device approves another device", () => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
       a.setup.startApprovingDevice();
-      await a.setup.lookUpDevice(` ${waiting.code} `);
+      await a.setup.lookUpDevice(` ${waiting.code.replace("-", "").toLowerCase()} `); // as eight boxes give it: no hyphen, small letters
       expect(a.setup.state, "Nexus says which device it is: its label, as the device sent it").toEqual({
         step: "approve-device", message: null, problem: null, device: { signInCode: waiting.code, label: "<img src=x onerror=alert(1)> phone" },
       });

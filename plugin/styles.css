@@ -412,6 +412,10 @@
   caret-color: var(--nx-ink);
 }
 
+.nexus-screen .nx-box input::selection {
+  background: transparent;
+}
+
 /* An empty box with the caret in it shows the caret as drawn: 2 px wide, in ink. */
 .nx-box--edit:focus-within:has(input:placeholder-shown)::after {
   content: "";
