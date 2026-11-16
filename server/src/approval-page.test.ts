@@ -5,14 +5,18 @@
 // run against the real Worker in approval-page-actions.test.ts. What the page looks like on a screen (its layout, its
 // size on a phone, its colours in both looks) is checked nowhere: this package has no browser tests.
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { parseRules } from "./__fixtures__/css-rules";
 import { ORIGIN, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
 import { device, sendAs, type Who } from "./__fixtures__/identity-world";
-import { API_APPROVE, API_DENY, API_PENDING, APPROVED, DENIED, GONE, NOT_FOUND, PAGE_PATH, PENDING } from "./__fixtures__/approve-answers";
+import { API_APPROVE, API_DENY, API_PENDING, APPROVED, DENIED, GONE, GONE_EXPIRED, NOT_FOUND, PAGE_PATH, PENDING } from "./__fixtures__/approve-answers";
 
 let owner: Who;
 let stranger: Who;
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeAll(async () => {
   await setUpNexus();
@@ -89,6 +93,30 @@ describe("the link a device is handed opens the approval page", () => {
     const asStranger = await sendAs("GET", `${PAGE_PATH}?code=ABCD`, stranger);
     expect(asStranger.status).not.toBe(200);
     expect(asStranger.text).not.toMatch(/\bAllow\b/);
+  });
+});
+
+describe("the page's typefaces", () => {
+  /** Every address a stylesheet's @font-face rules load a font from. */
+  const fontAddresses = (css: string) => [...css.matchAll(/url\(\s*['"]?([^'")\s]+)['"]?\s*\)/gi)].map((m) => m[1]);
+
+  it("are the files its stylesheet names, served beside it to the owner and to nobody else", async () => {
+    const parts = partsOf(await openPage());
+    const addresses = new Set<string>();
+    for (const href of parts.stylesheets) {
+      const sheet = await fetchLinked(href);
+      for (const address of fontAddresses(sheet)) addresses.add(new URL(address, new URL(href, `${ORIGIN}${PAGE_PATH}`)).pathname);
+    }
+    expect([...addresses].sort(), "the three typefaces the page is set in").toEqual([
+      "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2", "/nexus/fonts/unbounded-var.woff2",
+    ]);
+    for (const address of addresses) {
+      const asOwner = await sendAs("GET", address, owner);
+      expect(asOwner.status, `${address} for the owner`).toBe(200);
+      expect(asOwner.text.length, `${address} is a font file`).toBeGreaterThan(1000);
+      expect((await sendAs("GET", address, null)).status, `${address} signed out`).toBe(401);
+      expect((await sendAs("GET", address, stranger)).status, `${address} for a stranger`).not.toBe(200);
+    }
   });
 });
 
@@ -177,8 +205,21 @@ describe("the answers the browser checks use are the real answers", () => {
     const gone = await device(owner).pending(used.code);
     expectRefusal(gone, 410, "a used code");
     expectSameShape(gone.body, GONE, "gone");
+    expect(gone.body, "the page draws the used card from this reason").toEqual(GONE);
     const unknown = await device(owner).pending("NOSUCHCODE");
     expectRefusal(unknown, 404, "an unknown code");
     expectSameShape(unknown.body, NOT_FOUND, "not found");
+  });
+
+  it("for a code that ran out: the same words and status as a used one, with the reason the page draws its own card from", async () => {
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const waiting = bodyOf(await device().start("agents", "lab-m"));
+    vi.setSystemTime(waiting.expiresAt + 1000);
+    const gone = await device(owner).pending(waiting.code);
+    expectRefusal(gone, 410, "an expired code");
+    expectSameShape(gone.body, GONE_EXPIRED, "expired");
+    expect(gone.body).toEqual(GONE_EXPIRED);
   });
 });

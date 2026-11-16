@@ -3,32 +3,62 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <meta name="robots" content="noindex" />
 
-    <!-- The look follows the device, applied before the first paint. -->
-    <script src="/nexus/theme-boot.js"></script>
-
-    <title>Allow a device — Nexus</title>
+    <title>Allow a device: Nexus</title>
 
     <link rel="stylesheet" href="/nexus/approve.css" />
   </head>
   <body>
     <!-- THE DEVICE APPROVAL PAGE. A device asked Nexus for a sign-in and was handed a link to this page with a code on
-         it. approve.js reads the code from the address, asks Nexus what is being asked, and shows the question with
-         Allow and Deny. Each part below is hidden until the script has something true to put in it, and everything a
-         device sent (the label) goes in as text, never as markup. The page is drawn plainly for now. -->
-    <main class="approve">
-      <p class="approve__eyebrow">Nexus</p>
-      <h1 class="approve__question" id="question" hidden></h1>
-      <p class="approve__hint" id="hint" hidden>Only allow it if you just asked for it on that device. The code stops working ten minutes after it was made.</p>
-      <div class="approve__actions" id="actions" hidden>
-        <button type="button" class="approve__button approve__button--allow" id="allow">Allow</button>
-        <button type="button" class="approve__button" id="deny">Deny</button>
-      </div>
-      <p class="approve__status" id="status" role="status" hidden></p>
-      <p class="approve__alert" id="alert" role="alert" hidden></p>
-    </main>
+         it. approve.js reads the code from the address, asks Nexus what is being asked, and fills this page in: the
+         question with Allow and Deny, or one answer card (allowed, denied, code ran out, code used). Each part is hidden
+         until the script has something true to put in it, and everything a device sent (its label, its code) goes in as
+         text, never as markup. -->
+    <div class="page">
+      <header class="slab">
+        <div class="slab__row">
+          <h1 class="slab__title" id="title">new device</h1>
+        </div>
+        <p class="slab__line" id="line" role="status">Checking the code…</p>
+      </header>
+
+      <main class="content">
+        <!-- The question. -->
+        <section class="card" id="ask" hidden>
+          <p class="card__words" id="question"></p>
+          <p class="card__quiet" id="hint"></p>
+          <div class="code">
+            <p class="code__label">DEVICE CODE</p>
+            <div class="code__boxes" id="code" role="img"></div>
+          </div>
+          <div class="actions" id="actions">
+            <button type="button" class="pill pill--main" id="allow">Allow</button>
+            <button type="button" class="pill pill--quiet" id="deny">Deny</button>
+          </div>
+          <p class="card__quiet card__quiet--fault" id="alert" role="alert" hidden></p>
+        </section>
+
+        <!-- The answer, or a code that cannot be answered. One mark shows. -->
+        <section class="card" id="result" hidden>
+          <span class="mark mark--allowed" id="mark-allowed" aria-hidden="true" hidden>
+            <svg class="mark__icon" width="18" height="18" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M4 10.5l4 4L16 6" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span class="mark mark--denied" id="mark-denied" aria-hidden="true" hidden>
+            <svg class="mark__icon" width="16" height="16" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><path d="M2 2l10 10M12 2L2 12" fill="none" stroke-width="2.2" stroke-linecap="round" /></svg>
+          </span>
+          <span class="mark mark--fault" id="mark-expired" aria-hidden="true" hidden>
+            <svg class="mark__icon" width="18" height="18" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2" /><path d="M10 5.5V10l3 2" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span class="mark mark--fault" id="mark-used" aria-hidden="true" hidden>
+            <svg class="mark__icon" width="16" height="16" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><path d="M2 2l10 10M12 2L2 12" fill="none" stroke-width="2.2" stroke-linecap="round" /></svg>
+          </span>
+          <p class="card__words" id="said"></p>
+          <p class="card__quiet" id="quiet"></p>
+        </section>
+      </main>
+    </div>
     <script src="/nexus/approve.js"></script>
   </body>
 </html>

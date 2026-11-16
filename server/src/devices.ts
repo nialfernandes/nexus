@@ -51,6 +51,9 @@ export const MAX_APPROVAL_BYTES = 2048;
 const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 const GONE = "That code has expired or has already been used.";
+/** Why a code is gone, sent beside the words so the approval page can say which. The status and the words are the same either way. */
+const EXPIRED = { reason: "expired" } as const;
+const USED = { reason: "used" } as const;
 const NO_SUCH_CODE = "There is no sign-in with that code.";
 
 interface SigninRow {
@@ -151,9 +154,13 @@ async function signinFor(host: NexusHost, codeInput: unknown): Promise<SigninRow
   return row;
 }
 
-/** A sign-in that is still waiting for the owner: not answered yet, not expired. Anything else is gone. */
+/**
+ * A sign-in that is still waiting for the owner: not answered yet, not expired. Anything else is gone, and the refusal says
+ * which: one that was answered is used (even if its time is also up), one that nobody answered in time is expired.
+ */
 function stillWaiting(host: NexusHost, row: SigninRow): void {
-  if (row.status !== "pending" || row.expires_at <= host.clock.now()) throw new Refusal(410, GONE);
+  if (row.status !== "pending") throw new Refusal(410, GONE, USED);
+  if (row.expires_at <= host.clock.now()) throw new Refusal(410, GONE, EXPIRED);
 }
 
 /** What the approval page shows, and what a device that can approve needs: the public key to seal to, or null when the device sent none. */
@@ -204,7 +211,7 @@ export async function approve(host: NexusHost, input: Record<string, unknown>) {
       ),
     ]),
   ]);
-  if (made.changes !== 1) throw new Refusal(410, GONE);
+  if (made.changes !== 1) throw new Refusal(410, GONE, USED);
   return answered("approved", row);
 }
 
@@ -215,7 +222,7 @@ export async function deny(host: NexusHost, codeInput: unknown) {
     [row.code, host.clock.now()],
   );
   // Another answer got in between the read and the write: the code is used.
-  if (done.changes === 0) throw new Refusal(410, GONE);
+  if (done.changes === 0) throw new Refusal(410, GONE, USED);
   return answered("denied", row);
 }
 

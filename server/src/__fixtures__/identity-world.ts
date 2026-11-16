@@ -32,12 +32,12 @@
 //                                                 `deviceKey` is the device's X25519 public key, for an approval to be sealed to
 //   GET  device/pending ?code=C                   the owner only
 //       200 { code, identity, label, expiresAt, deviceKey }  what the approval page shows (`deviceKey` is null when none was sent)
-//       404 no such code        410 the code has expired, or has been allowed or denied already
+//       404 no such code        410 { error, reason } the code has expired (`reason` "expired"), or has been allowed or denied already ("used")
 //   POST device/approve { code[, approval, approverKey] }   the owner only
 //       `approval` is the sealed vault key (base64) and `approverKey` the approving device's public key (base64, 32 bytes): both or neither,
 //       and only for a sign-in that sent a `deviceKey` (else 400). The server keeps them until the device collects them or the code expires.
 //       200 { result: "approved", code, identity, label }
-//       401 nobody the owner's  403 someone who is signed in as another identity  404 / 410 as above
+//       401 nobody the owner's  403 someone who is signed in as another identity  404 / 410 as above (an answer that lost to another answer is 410 "used")
 //   POST device/deny    { code }                  the owner only, answers as approve does with result "denied"
 //   POST device/poll    { secret }                no credential needed
 //       200 { status: "pending" }                                       not decided yet
