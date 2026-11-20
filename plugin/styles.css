@@ -1,7 +1,7 @@
 /*
- * The Nexus screens: setup, adding a device and unlocking. Drawn mobile first, 375 wide, in a slab look: a teal band with a lowercase
- * title, white cards on a sand-grey ground, ink text and pill buttons. In desktop Obsidian it is the same layout in a centred modal about
- * 560 px wide, with the teal band as the modal's top. Light only.
+ * The Nexus screens: setup, adding a device and unlocking. Drawn mobile first, 375 wide, in a slab look: a teal band holding one slim
+ * line (the nexus mark, a thin divider and the lowercase title), white cards on a sand-grey ground, ink text and pill buttons. In
+ * desktop Obsidian it is the same layout in a centred modal about 560 px wide, with the teal band as the modal's top. Light only.
  *
  * Every colour, radius and size is a token, written once in the first rule below. Nothing after it writes a colour out by hand
  * (plugin/tests/styles.test.ts holds the file to that).
