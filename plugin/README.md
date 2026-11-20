@@ -95,7 +95,8 @@ npm run check         # at the root: builds the encryption package, then checks 
 The plugin is one workspace of the repository's root `package.json`, with the
 encryption package (`packages/crypto`), the merge package (`packages/merge`) and the
 server, so one `npm ci` at the root installs them all. `npm run check` at the root
-checks that the CI workflow's actions are pinned to commit hashes, builds the
+checks that the CI workflows' actions are pinned to commit hashes, runs the tests of the
+release scripts (see "Making a release"), builds the
 encryption package, type-checks every package, builds `main.js` from the
 TypeScript in `src/`, and runs every package's tests, the plugin's among them. The
 encryption package has to be built before the plugin's own `npm run typecheck`, `npm
