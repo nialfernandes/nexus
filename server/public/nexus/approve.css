@@ -122,11 +122,17 @@ body {
   border-bottom-right-radius: var(--r-slab);
 }
 
+/* The line is 32px high and the name sits in the middle of it: the mark and the title share a baseline. */
 .slab__row {
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+
+.slab__name {
   display: flex;
   align-items: baseline;
   gap: var(--s-2);
-  height: 32px;
 }
 
 .slab__mark,
@@ -183,7 +189,6 @@ body {
   gap: var(--s-3);
   width: 100%;
   max-width: var(--card-max);
-  margin-inline: auto;
   padding: var(--card-pad);
   background: var(--card);
   border-radius: var(--r-card);
