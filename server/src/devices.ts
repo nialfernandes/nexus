@@ -2,8 +2,9 @@
 //
 //   1. The device asks to start a sign-in for an identity and a label (`start`, no credential needed). It is handed a
 //      short CODE (safe to show on a screen), a LINK to the approval page, and a long SECRET that only it knows.
-//   2. The owner opens the link on a phone or a computer, signed in, sees what is being asked, and allows or
-//      denies it (`pending`, `approve`, `deny`, all the owner's only).
+//   2. The owner opens the link on a phone or a computer, signed in (or types the owner secret on the page, which is how a
+//      first device is set up), sees what is being asked, and allows or denies it (`pending`, `approve`, `deny`, all the
+//      owner's only). An approving device that is only typed the code finds the sign-in with `waiting`.
 //   3. The device polls with its secret. After an allow, the first poll is handed a token, once. Every later poll
 //      is refused.
 //
