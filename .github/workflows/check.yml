@@ -1,8 +1,13 @@
 # Runs every package's checks on every pull request and every push to main. It needs no secret and deploys nothing.
 #
+# Right after `npm ci`, `npm run check:audit` (.github/check-audit.sh) asks npm for advisories and fails the run on a high or
+# critical one in a package that ships (`npm audit --omit=dev --audit-level=high`); an advisory in a dev-only tool is printed and
+# does not fail it. That needs the network, so it is a step of its own here and not part of `npm run check` (which has to run on a
+# machine with Node and nothing else). Like the browser steps below, it uses no action, so there is nothing for it to pin.
+#
 # `npm run check` at the root first checks that every `uses:` line in .github/workflows names its action by a full commit
 # hash (a tag can be moved to other code, which would then run here; the tag goes in a trailing comment), runs the tests of
-# the scripts the release workflow (release.yml) stands on, then builds the
+# the scripts the release workflow (release.yml) stands on and of the audit script, then builds the
 # encryption package and the agent library, type-checks every package, builds the linking job and the plugin and runs every package's tests. A package added to the
 # workspaces in the root package.json is checked here without a change to this file.
 #
@@ -31,6 +36,8 @@ jobs:
           cache: npm
       - name: Install every package
         run: npm ci
+      - name: Check that no package that ships has a high or critical advisory
+        run: npm run check:audit
       - name: Check every package
         run: npm run check
       - name: Install the browser the approval page is checked in

@@ -1,0 +1,3 @@
+npm warn audit request to http://127.0.0.1:9/-/npm/v1/security/audits/quick failed, reason: connect ECONNREFUSED 127.0.0.1:9
+undefined
+npm error audit endpoint returned an error
