@@ -107,6 +107,9 @@ describe("device A approves a new device B", () => {
       if (wait !== 0) return;
       // B has shown its link and its device code, the code of its key. The person types that code, and only that, on A.
       expect(shown.keyCode, "B shows a code for its own key").toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
+      // The approval page opened from B's link asks Nexus what is being asked: it is handed the same code B shows, so the owner can compare them.
+      const onThePage = bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).pending(shown.code));
+      expect(onThePage, "the page's question names B and carries the code B shows").toMatchObject({ label: DEVICE_NAME, deviceCode: shown.keyCode });
       approved = await approves(a, shown);
     });
 
