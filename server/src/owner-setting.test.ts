@@ -120,14 +120,14 @@ describe("the owner's first sign-in for a device", () => {
 });
 
 describe("the Worker's own addresses", () => {
-  it("answers 404 in plain words to an address that is not Nexus's, and a page that needs the owner is not sent to anyone else", async () => {
+  it("answers 404 in plain words to an address that is not Nexus's, and sends the approval page to anyone who opens it, since it holds nothing private", async () => {
     const env = await nexusEnv();
     for (const path of ["/", "/nexus", "/nexus/", "/nexus/other", "/apps/nexus", "/apps/other", "/favicon.ico"]) {
       const answer = await send("GET", path, ownersCookie, undefined, env);
       expect(answer.status, path).toBe(404);
       expect(answer.body, path).toBeNull();
     }
-    expect((await send("GET", "/nexus/approve", null, undefined, env)).status).toBe(401);
+    expect((await send("GET", "/nexus/approve", null, undefined, env)).status, "the page is for anyone with its link: the owner signs in on it").toBe(200);
     expect((await send("POST", "/nexus/approve", ownersCookie, {}, env)).status, "only a GET opens the page").toBe(404);
   });
 });
