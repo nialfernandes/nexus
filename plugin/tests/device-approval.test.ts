@@ -1,6 +1,6 @@
 // A new device gets the vault key through an approval a server cannot forge. Device A is unlocked and signed in as the owner;
 // device B is new: signed out and locked. B asks to be approved, sending its own public key and showing a key code for it. A
-// (the person types B's key code on it) seals the vault key to that key and leaves it with Nexus, which holds it for B, hands it
+// (which lists the devices waiting, takes the one the person picked by its name, and is typed B's key code) seals the vault key to that key and leaves it with Nexus, which holds it for B, hands it
 // over once and deletes it. Both devices work out the same matching code, and B puts nothing to use, not the token and not the key,
 // until the person types A's code on B and it is the one B worked out. Nothing but the server's routes passes between the two.
 //
@@ -10,7 +10,7 @@
 
 import { generateDeviceKeyPair, generateVaultKey, sealApproval } from "@nexus/crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApprovalError, MATCHING_CODE_TRIES, approveDevice, signInForKey, type KeySignIn, type PendingApproval } from "../src/approval";
+import { ApprovalError, MATCHING_CODE_TRIES, approveDevice, listWaitingDevices, signInForKey, type KeySignIn, type PendingApproval, type WaitingDevice } from "../src/approval";
 import { encodeBase64 } from "../src/base64";
 import { foundIn } from "./leaks";
 import {
@@ -54,6 +54,18 @@ async function deviceA(): Promise<Device> {
 
 const approver = (a: Device) => ({ http: a.deps.http, data: a.deps.data, unlock: a.unlock });
 
+/** The device waiting under this sign-in code, as A's list of the devices waiting has it: what the person picks by its name. */
+async function waitingUnder(a: Device, signInCode: string): Promise<WaitingDevice> {
+  const found = (await listWaitingDevices(approver(a))).find((device) => device.signInCode === signInCode);
+  if (found === undefined) throw new Error(`A's list of the devices waiting has no sign-in under ${signInCode}`);
+  return found;
+}
+
+/** A lists the devices waiting, the person picks B's by its name, types `typed` (B's key code unless told otherwise), and A approves. */
+async function approves(a: Device, shown: Screen, typed: string = shown.keyCode) {
+  return approveDevice(approver(a), await waitingUnder(a, shown.code), typed);
+}
+
 /**
  * B asks to be approved. `during` is called each time B waits to poll, with B's screen: the person doing what they do on the other
  * device. The sign-in returns when B has its answer.
@@ -95,7 +107,10 @@ describe("device A approves a new device B", () => {
       if (wait !== 0) return;
       // B has shown its link and its device code, the code of its key. The person types that code, and only that, on A.
       expect(shown.keyCode, "B shows a code for its own key").toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
-      approved = await approveDevice(approver(a), shown.keyCode);
+      // The approval page opened from B's link asks Nexus what is being asked: it is handed the same code B shows, so the owner can compare them.
+      const onThePage = bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).pending(shown.code));
+      expect(onThePage, "the page's question names B and carries the code B shows").toMatchObject({ label: DEVICE_NAME, deviceCode: shown.keyCode });
+      approved = await approves(a, shown);
     });
 
     expect(approved, "A worked out a matching code").toMatchObject({ label: DEVICE_NAME });
@@ -103,7 +118,8 @@ describe("device A approves a new device B", () => {
     expect(pending.code, "B works out the same code as A").toBe(approved!.code);
     expect(approved!.code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
     expect(screen.code, "the code B showed with its link is the sign-in's, not the matching code").not.toBe(approved!.code);
-    expect(a.log.to("GET device/waiting"), "A found the sign-in from the device code through the list of those waiting").toHaveLength(1);
+    expect(a.log.to("GET device/waiting"), "A got the sign-in and its key from the list of those waiting").toHaveLength(1);
+    expect(a.log.to("GET device/pending"), "and asked Nexus nothing more about it: the list held the key").toEqual([]);
 
     // B has the approval but uses nothing of it yet.
     expect(b.unlock.keys(), "still locked until the person confirms").toBeNull();
@@ -140,7 +156,7 @@ describe("device A approves a new device B", () => {
     let approved!: { code: string };
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
       if (wait !== 0) return;
-      approved = await approveDevice(approver(a), shown.keyCode);
+      approved = await approves(a, shown);
       held = hostileServer().approvalFor(shown.code);
     });
     await checkCode(outcome).confirm(approved.code);
@@ -166,7 +182,7 @@ describe("device A approves a new device B", () => {
     const b = await newDevice();
     let approved!: { code: string };
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
-      if (wait === 0) approved = await approveDevice(approver(a), shown.keyCode.toLowerCase().replace("-", " "));
+      if (wait === 0) approved = await approves(a, shown, shown.keyCode.toLowerCase().replace("-", " "));
     });
     expect(await checkCode(outcome).confirm(approved.code.toLowerCase().replace("-", " "))).toBe("unlocked");
   });
@@ -176,7 +192,7 @@ describe("device A approves a new device B", () => {
     const b = await newDevice();
     let approved!: { code: string };
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
-      if (wait === 0) approved = await approveDevice(approver(a), shown.keyCode);
+      if (wait === 0) approved = await approves(a, shown);
     });
     const pending = checkCode(outcome);
     expect(MATCHING_CODE_TRIES).toBe(3);
@@ -196,7 +212,7 @@ describe("device A approves a new device B", () => {
     const b = await newDevice();
     let approved!: { code: string };
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
-      if (wait === 0) approved = await approveDevice(approver(a), shown.keyCode);
+      if (wait === 0) approved = await approves(a, shown);
     });
     const pending = checkCode(outcome);
     const other = approved.code === "00000-00000" ? "11111-11111" : "00000-00000";
@@ -225,7 +241,7 @@ describe("a server that makes or swaps the approval", () => {
 
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
       if (wait !== 0) return;
-      approved = await approveDevice(approver(a), shown.keyCode);
+      approved = await approves(a, shown);
       // Before B polls, the server puts an approval of its own where A's was. It knows B's public key (B sent it), so it can seal to it.
       const deviceKey = server.deviceKeyOf(shown.code)!;
       expect(deviceKey, "the server was given B's public key").toBeTruthy();
@@ -260,7 +276,7 @@ describe("a server that makes or swaps the approval", () => {
       let approved!: { code: string };
       const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
         if (wait !== 0) return;
-        approved = await approveDevice(approver(a), shown.keyCode);
+        approved = await approves(a, shown);
         await swap(shown.code);
       });
       if (outcome.result === "bad-approval") {
@@ -285,18 +301,18 @@ describe("a server that makes or swaps the approval", () => {
     await expect(
       asksToBeApproved(b, async (shown, wait) => {
         if (wait > 0) throw new Error("the person gave up");
-        // The server answers A's look at the sign-in with a key of its own.
+        // The server answers A's look at the sign-ins with a key of its own in B's place.
         signInCode = shown.code;
         server.swapDeviceKey(shown.code, Buffer.from(serversPair.publicKey).toString("base64"));
         sent = a.log.requests().length;
-        refused = await approveDevice(approver(a), shown.keyCode).catch((error) => error);
+        refused = await approves(a, shown).catch((error) => error);
       }),
     ).rejects.toThrow("the person gave up");
 
     expect(refused).toBeInstanceOf(ApprovalError);
     expect((refused as ApprovalError).reason).toBe("wrong-key-code");
     expect(a.log.to("POST device/approve"), "A sent no approval at all").toEqual([]);
-    expect(a.log.requests().length - sent, "A only looked: the list of the sign-ins waiting and the key of the one").toBe(2);
+    expect(a.log.requests().length - sent, "A only looked: the list of the sign-ins waiting, with the keys in it").toBe(1);
     expect(server.approvalsHeld(signInCode), "so there is nothing sealed to the server's key for it to open").toBe(0);
   });
 
@@ -309,8 +325,9 @@ describe("a server that makes or swaps the approval", () => {
       asksToBeApproved(b, async (shown, wait) => {
         if (wait > 0) throw new Error("done");
         signInCode = shown.code;
+        const chosen = await waitingUnder(a, shown.code);
         for (const typed of ["", "ABCDE-FGHJK", "hello", shown.code]) {
-          const error = await approveDevice(approver(a), typed).catch((e) => e);
+          const error = await approveDevice(approver(a), chosen, typed).catch((e) => e);
           reasons.push(error instanceof ApprovalError ? error.reason : "approved");
           if (error instanceof ApprovalError) expect(error.message, "plain words").not.toMatch(/\b(401|403|404|http|kid|sealed|X25519)\b/i);
         }
@@ -322,60 +339,90 @@ describe("a server that makes or swaps the approval", () => {
 });
 
 describe("what A will not do", () => {
-  it("send anything when it is locked, signed out, or not the owner's", async () => {
+  it("look at the devices waiting, or send anything, when it is locked, signed out, or not the owner's", async () => {
     const b = await newDevice();
+    const owner = await deviceA();
     const locked = await deviceA();
     locked.unlock.lock();
     const signedOut = await makeDevice(world, { token: null });
     const agentsToken = await world.tokenFor("agents", "an agent that is not the owner");
     const agent = await makeDevice(world, { token: agentsToken });
-    const reasons: Record<string, string> = {};
-    const asked = [locked, signedOut, agent].map((device) => device.log.requests().length);
+    const listing: Record<string, string> = {};
+    const approving: Record<string, string> = {};
+    const asked = [locked, signedOut].map((device) => device.log.requests().length);
     let signInCode = "";
     await expect(
       asksToBeApproved(b, async (shown, wait) => {
         if (wait > 0) throw new Error("done");
         signInCode = shown.code;
+        // The owner's device is let see B (that is what the others are held back from) and is the source of the device to be approved.
+        const chosen = await waitingUnder(owner, shown.code);
         for (const [name, device] of [["locked", locked], ["signed out", signedOut], ["not the owner", agent]] as const) {
-          const error = await approveDevice(approver(device), shown.keyCode).catch((e) => e);
-          reasons[name] = error instanceof ApprovalError ? error.reason : "approved";
+          const looked = await listWaitingDevices(approver(device)).catch((e) => e);
+          listing[name] = looked instanceof ApprovalError ? looked.reason : "listed";
+          const error = await approveDevice(approver(device), chosen, shown.keyCode).catch((e) => e);
+          approving[name] = error instanceof ApprovalError ? error.reason : "approved";
         }
       }),
     ).rejects.toThrow("done");
-    expect(reasons).toEqual({ locked: "locked", "signed out": "signed-out", "not the owner": "not-allowed" });
+    const expected = { locked: "locked", "signed out": "signed-out", "not the owner": "not-allowed" };
+    expect(listing, "none of them is told who is waiting").toEqual(expected);
+    expect(approving, "and none of them approves").toEqual(expected);
     expect(locked.log.requests().length, "a locked device does not even look").toBe(asked[0]);
     expect(signedOut.log.requests().length, "nor does one that is signed out").toBe(asked[1]);
-    expect(agent.log.to("POST device/approve"), "an agent sends no approval").toEqual([]);
-    expect(hostileServer().approvalsHeld(signInCode)).toBe(0);
+    // An agent is never handed a device to approve (its list is refused, above). Given one anyway, what it sends is refused by Nexus.
+    expect(agent.log.to("POST device/approve").map((request) => request.status), "an agent's approval is refused by Nexus").toEqual([403]);
+    expect(hostileServer().approvalsHeld(signInCode), "so Nexus holds nothing sealed for B").toBe(0);
   });
 
-  it("approve a device that is not waiting, or one whose sign-in has run out", async () => {
+  it("is told of no device when none is waiting, and of none whose sign-in has run out", async () => {
     const a = await deviceA();
-    const missing = await approveDevice(approver(a), "AAAAA-AAAAA").catch((e) => e);
-    expect(missing).toBeInstanceOf(ApprovalError);
-    expect(missing.reason, "no device is waiting under that code").toBe("wrong-key-code");
+    expect(await listWaitingDevices(approver(a)), "no device is waiting: an empty list, not an error").toEqual([]);
     expect(a.log.to("POST device/approve")).toEqual([]);
 
     const b = await newDevice();
     const now = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
-    let late: unknown;
+    let waitingThen: WaitingDevice[] = [];
+    let waitingLater: WaitingDevice[] = [];
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
       if (wait > 0) return;
+      waitingThen = await listWaitingDevices(approver(a));
       vi.setSystemTime(now + TEN_MINUTES + 1000);
-      late = await approveDevice(approver(a), shown.keyCode).catch((e) => e);
+      waitingLater = await listWaitingDevices(approver(a));
     });
-    expect((late as ApprovalError).reason, "a sign-in that ran out is not listed as waiting, so no device has its code").toBe("wrong-key-code");
+    expect(waitingThen.map((device) => device.label), "B is listed by its name while its sign-in waits").toEqual([DEVICE_NAME]);
+    expect(waitingLater, "a sign-in that ran out is not listed as waiting").toEqual([]);
     expect(outcome, "and B, told it ran out, gives up").toEqual({ result: "expired" });
   });
 
-  it("give a vault key to a device that did not send a public key, which can still be allowed from the page", async () => {
+  it("lists devices by name, oldest first, with the key each sent, and leaves out one that sent no key", async () => {
+    const a = await deviceA();
+    const first = await generateDeviceKeyPair();
+    const second = await generateDeviceKeyPair();
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const one = bodyOf(await deviceRoutes().start(world.user, "MacBook", encodeBase64(first.publicKey)));
+    vi.setSystemTime(now + 1000);
+    bodyOf(await deviceRoutes().start(world.user, "a script that sent no key"));
+    vi.setSystemTime(now + 2000);
+    const two = bodyOf(await deviceRoutes().start(world.user, "Pixel", encodeBase64(second.publicKey)));
+
+    const listed = await listWaitingDevices(approver(a));
+    expect(listed.map((device) => [device.label, device.signInCode]), "by name, oldest first; the one with no key cannot be sent the vault key, so it is not offered").toEqual([
+      ["MacBook", one.code],
+      ["Pixel", two.code],
+    ]);
+    expect(Array.from(listed[0]!.deviceKey)).toEqual(Array.from(first.publicKey));
+    expect(Array.from(listed[1]!.deviceKey)).toEqual(Array.from(second.publicKey));
+  });
+
+  it("gives a vault key to no device that sent no public key, which can still be allowed from the page", async () => {
     const a = await deviceA();
     const started = bodyOf(await deviceRoutes().start(world.user, "a script that sent no key"));
-    const error = await approveDevice(approver(a), "AAAAA-AAAAA").catch((e) => e);
-    expect(error).toBeInstanceOf(ApprovalError);
-    expect(error.reason, "it has no key, so it has no device code to be found by").toBe("wrong-key-code");
+    expect(await listWaitingDevices(approver(a)), "it has no key, so it is not a device to pick").toEqual([]);
     expect(a.log.to("POST device/approve")).toEqual([]);
     expect(bodyOf(await deviceRoutes({ cookie: world.ownerCookie }).approve(started.code)).result, "the owner's page can still allow it").toBe("approved");
   });
@@ -408,7 +455,7 @@ describe("the approval is deleted", () => {
     const pair = await generateDeviceKeyPair();
     const started = bodyOf(await deviceRoutes().start(world.user, "collected once", encodeBase64(pair.publicKey)));
     const { deviceKeyCode } = await import("@nexus/crypto");
-    await approveDevice(approver(a), await deviceKeyCode(pair.publicKey));
+    await approveDevice(approver(a), await waitingUnder(a, started.code), await deviceKeyCode(pair.publicKey));
     expect(hostileServer().approvalsHeld(started.code)).toBe(1);
 
     const first = bodyOf(await deviceRoutes().poll(started.secret));
@@ -427,7 +474,7 @@ describe("the approval is deleted", () => {
     vi.setSystemTime(now);
     const started = bodyOf(await deviceRoutes().start(world.user, "never collects", encodeBase64(pair.publicKey)));
     const { deviceKeyCode } = await import("@nexus/crypto");
-    await approveDevice(approver(a), await deviceKeyCode(pair.publicKey));
+    await approveDevice(approver(a), await waitingUnder(a, started.code), await deviceKeyCode(pair.publicKey));
     const held = hostileServer().approvalFor(started.code)!;
     expect(held.approval).toBeTruthy();
 
@@ -445,7 +492,7 @@ describe("a sign-in that asks for a key is tied to the address it began against"
     const b = await newDevice();
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
       if (wait !== 0) return;
-      await approveDevice(approver(a), shown.keyCode);
+      await approves(a, shown);
       b.deps.data.address = "https://another-nexus.example.test/nexus/api";
     });
     expect(outcome).toEqual({ result: "changed" });
@@ -458,7 +505,7 @@ describe("a sign-in that asks for a key is tied to the address it began against"
     const b = await newDevice();
     let approved!: { code: string };
     const { outcome } = await asksToBeApproved(b, async (shown, wait) => {
-      if (wait === 0) approved = await approveDevice(approver(a), shown.keyCode);
+      if (wait === 0) approved = await approves(a, shown);
     });
     const pending = checkCode(outcome);
     b.deps.data.user = "someone-else";

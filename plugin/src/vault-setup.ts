@@ -9,7 +9,7 @@
 // THE STATES (what is on the screen, in plain words)
 //   locked             The vault is locked and nothing is going on. This is where the plugin starts, and where lock and cancel end.
 //   unlocked           The vault is unlocked and nothing is going on. The plugin syncs.
-//   working            Something is being asked of Nexus or worked out; wait. `doing` says which: looking (what Nexus holds),
+//   working            Something is being asked of Nexus or worked out; wait. `doing` says which: looking (what Nexus holds), listing (which devices wait to be approved),
 //                      starting-sign-in, saving (the wraps), opening (the vault key with the Recovery Key or the password), approving (a device).
 //   stopped            It cannot go on, and says why in `message` (and `reason`). Nothing was kept. `begin` starts again.
 //   signed-out         This device holds no sign-in, so it cannot ask Nexus what it holds. A new device can still ask another to approve it.
@@ -31,7 +31,8 @@
 //                      drawn, the person types the device code only.
 //   type-matching-code The approval came. The person types, here, the matching code the approving device shows. `triesLeft`.
 //   device-unlocked    A new device's matching code agreed: the vault is unlocked here.
-//   approve-device     This device is unlocked and ready to approve another: the device code the new device shows is typed, and that is
+//   approve-device     This device is unlocked and ready to approve another: `devices` are the ones waiting, by name, `device` the one chosen (the
+//                      only one, or the pick); the device code the new device shows is typed, and that is
 //                      all. `problem` is the ApprovalError's reason for the last refusal.
 //   device-approved    The other device was approved. `code` is the matching code to show here and type on the new device.
 //   approve-agent      This device is unlocked and ready to approve an agent: the agent's public key is pasted.
@@ -57,10 +58,13 @@
 //   typeMatchingCode(text)        From type-matching-code: the code the approving device shows. Right: device-unlocked. Wrong: another
 //                                 try, and after three the approval is thrown away (stopped).
 //   refuseCode()                  From type-matching-code: the person says the codes do not match. The approval is thrown away (stopped).
-//   startApprovingDevice()        From unlocked: ready to approve another device (approve-device).
-//   approveDevice(deviceCode)     From approve-device: the device code read off the new device. Nexus lists the sign-ins waiting and this device
-//                                 finds the one whose key has that code. Right: device-approved. A code no waiting device's key has is
-//                                 refused with nothing sent, and the person tries again.
+//   startApprovingDevice()        From unlocked, or approve-device (look again): ask Nexus which devices are waiting (approve-device, with `devices` by
+//                                 name). One waiting is `device` already; several are listed to pick from; none says so, and the person looks again.
+//   chooseDevice(signInCode)      From approve-device with several waiting: the one the person picked, by name. Then its device code is typed.
+//   backToDevices()               From approve-device with a device chosen out of several: the list again.
+//   approveDevice(deviceCode)     From approve-device with a device chosen: the device code read off the new device. It is checked against the
+//                                 key of that device. Right: device-approved. A code that is not its key's is refused with nothing sent,
+//                                 and the person tries again.
 //   startApprovingAgent()         From unlocked: ready to approve an agent (approve-agent).
 //   approveAgent(publicKey)       From approve-agent: the agent's public key as pasted. Right: agent-approved. Not a public key: refused.
 //   done()                        From set-up, device-unlocked, approve-device, device-approved, approve-agent or agent-approved: back to unlocked.
@@ -79,12 +83,15 @@ import {
   wrongGroups, type NewVault, type PasswordWrapRequest, type RecoveryWrapRequest,
 } from "@nexus/agent/setup";
 import { NexusCryptoError } from "@nexus/crypto";
-import { ApprovalError, MATCHING_CODE_TRIES, UNREACHABLE, approveDevice as approveWithDeviceCode, signInForKey, type PendingApproval } from "./approval";
+import {
+  ApprovalError, MATCHING_CODE_TRIES, UNREACHABLE, approveDevice as approveWithDeviceCode, listWaitingDevices, signInForKey, type PendingApproval,
+  type WaitingDevice,
+} from "./approval";
 import type { KeyHolder } from "./key-holder";
 import type { Http, PluginData } from "./types";
 
 /** What a `working` step is doing. */
-export type Doing = "looking" | "starting-sign-in" | "saving" | "opening" | "approving";
+export type Doing = "looking" | "listing" | "starting-sign-in" | "saving" | "opening" | "approving";
 
 /** Why a setup stopped. */
 export type StoppedBecause =
@@ -93,6 +100,12 @@ export type StoppedBecause =
 
 /** What was wrong with a Recovery Key or a password the person typed: see `has-vault` above. */
 export type OpenProblem = "empty" | "incomplete" | "wrong" | "other";
+
+/** A device that is waiting to be approved, as a screen shows it: the name it signed in with, and the code of its sign-in (which names it to `chooseDevice`). Its key stays in the controller. */
+export interface WaitingName {
+  label: string;
+  signInCode: string;
+}
 
 export type SetupState =
   | { step: "locked" }
@@ -109,7 +122,7 @@ export type SetupState =
   | { step: "waiting-for-device"; link: string; code: string; keyCode: string }
   | { step: "type-matching-code"; triesLeft: number; message: string | null }
   | { step: "device-unlocked" }
-  | { step: "approve-device"; message: string | null; problem: ApprovalError["reason"] | null }
+  | { step: "approve-device"; message: string | null; problem: ApprovalError["reason"] | null; devices: WaitingName[]; device: WaitingName | null }
   | { step: "device-approved"; code: string; label: string }
   | { step: "approve-agent"; message: string | null }
   | { step: "agent-approved"; approval: string; publicKeyCode: string };
@@ -192,6 +205,9 @@ export class VaultSetup {
   #hasPassword = false;
   /** A new device's approval that is waiting for the matching code. */
   #pending: PendingApproval | null = null;
+  /** The devices that were waiting when this device last looked, with the keys they sent, and the one chosen to be approved. Public keys only, forgotten when the step ends. */
+  #waiting: WaitingDevice[] = [];
+  #chosen: WaitingDevice | null = null;
   #unloaded = false;
 
   constructor(deps: SetupDeps) {
@@ -434,18 +450,63 @@ export class VaultSetup {
     this.#stop(flow, "codes-differ", SETUP_WORDS.refusedByPerson);
   }
 
-  startApprovingDevice(): void {
-    if (!this.#is("unlocked")) return;
-    this.#set({ step: "approve-device", message: null, problem: null });
+  /**
+   * This device is unlocked and approves a new device: it asks Nexus which devices are waiting and names them. One waiting is the device
+   * to approve; several are listed for the person to pick from; none says so, and the person can look again. Asked again from the
+   * approve-device step, it lists anew (a device that started after the last look shows up).
+   */
+  async startApprovingDevice(): Promise<void> {
+    if (!this.#is("unlocked", "approve-device")) return;
+    const flow = this.#start();
+    this.#set({ step: "working", doing: "listing" });
+    try {
+      const listed = await listWaitingDevices(this.#approving());
+      if (flow.cancelled) return;
+      this.#waiting = listed;
+      this.#showDevices(listed.length === 1 ? listed[0]! : null, null, null);
+    } catch (error) {
+      if (flow.cancelled) return;
+      if (!(error instanceof ApprovalError)) throw error;
+      if (error.reason === "locked") return this.#idle();
+      this.#waiting = [];
+      this.#showDevices(null, error.message, error.reason);
+    }
   }
 
-  /** This device is unlocked and approves a new device: the device code the new device shows, typed here, is all it is given. */
-  async approveDevice(typedDeviceCode: string): Promise<void> {
+  /** From the list of waiting devices: the person picked this one by its name. */
+  chooseDevice(signInCode: string): void {
     if (this.#current?.step !== "approve-device") return;
+    const picked = this.#waiting.find((waiting) => waiting.signInCode === signInCode);
+    if (picked === undefined) return;
+    this.#showDevices(picked, null, null);
+  }
+
+  /** From a chosen device, when several are waiting: the list again, to pick another. */
+  backToDevices(): void {
+    if (this.#current?.step !== "approve-device" || this.#waiting.length < 2) return;
+    this.#showDevices(null, null, null);
+  }
+
+  /** The approve-device step, with the devices that wait (by name) and the one chosen. */
+  #showDevices(device: WaitingDevice | null, message: string | null, problem: ApprovalError["reason"] | null): void {
+    this.#chosen = device;
+    const name = (waiting: WaitingDevice): WaitingName => ({ label: waiting.label, signInCode: waiting.signInCode });
+    this.#set({ step: "approve-device", message, problem, devices: this.#waiting.map(name), device: device === null ? null : name(device) });
+  }
+
+  #approving(): { http: Http; data: PluginData; unlock: KeyHolder } {
+    return { http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys };
+  }
+
+  /** This device is unlocked and approves the device that was chosen: the device code that device shows, typed here, is all it is given. */
+  async approveDevice(typedDeviceCode: string): Promise<void> {
+    const shown = this.#current;
+    const chosen = this.#chosen;
+    if (shown?.step !== "approve-device" || chosen === null) return;
     const flow = this.#start();
     this.#set({ step: "working", doing: "approving" });
     try {
-      const approved = await approveWithDeviceCode({ http: this.#deps.http, data: this.#deps.data, unlock: this.#deps.keys }, typedDeviceCode);
+      const approved = await approveWithDeviceCode(this.#approving(), chosen, typedDeviceCode);
       if (flow.cancelled) return;
       this.#set({ step: "device-approved", code: approved.code, label: approved.label });
     } catch (error) {
@@ -453,7 +514,7 @@ export class VaultSetup {
       if (!(error instanceof ApprovalError)) throw error;
       // Nothing that could carry the key was sent. A locked device has no key to give, so there is nothing to try again.
       if (error.reason === "locked") return this.#idle();
-      this.#set({ step: "approve-device", message: error.message, problem: error.reason });
+      this.#set({ step: "approve-device", message: error.message, problem: error.reason, devices: shown.devices, device: shown.device });
     }
   }
 
@@ -620,6 +681,8 @@ export class VaultSetup {
 
   /** Back to locked or unlocked, as the key holder says. */
   #idle(): void {
+    this.#waiting = [];
+    this.#chosen = null;
     this.#current = null;
     this.#changed();
   }

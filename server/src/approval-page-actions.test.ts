@@ -25,6 +25,7 @@ import worker from "./plugs/cloudflare/worker";
 import { ORIGIN, OWNER_SECRET, appEnv, bodyOf, expectRefusal, setUpNexus, signInOwner } from "./__fixtures__/nexus-world";
 import { OWNER_SECRET_HEADER, device, sendAs, type Who } from "./__fixtures__/identity-world";
 import { API_APPROVE, API_DENY, API_PENDING, GONE_EXPIRED, PAGE_PATH } from "./__fixtures__/approve-answers";
+import { DEVICE_KEYS } from "./__fixtures__/device-keys";
 
 let owner: Who;
 
@@ -202,8 +203,8 @@ async function open(address: string, startUnreachable = false, browser: Browser 
 }
 
 /** A device asks to sign in, and the page for its link is opened. */
-async function openLinkFor(label: string) {
-  const started = bodyOf(await device().start("agents", label));
+async function openLinkFor(label: string, deviceKey?: string) {
+  const started = bodyOf(await device().start("agents", label, deviceKey));
   const link = new URL(started.link);
   const page = await open(link.pathname + link.search);
   return { ...started, page };
@@ -244,7 +245,21 @@ describe("the question: the page the owner is shown for a waiting sign-in", () =
     expect(posts(page.calls), "nothing is answered until the owner taps").toEqual([]);
   });
 
-  it("shows the device's own code, one read-only box per character in groups of four, with the whole code as its label", async () => {
+  it("shows the code the new device shows for its key: ten symbols in groups of 4, 4 and 2, with its name, and not the sign-in code", async () => {
+    const { key, code: shown } = DEVICE_KEYS[0]!;
+    const { code, page } = await openLinkFor("MacBook", key);
+    const symbols = shown.replace("-", "").split("");
+    expect(symbols, "the code the device shows, without its dash").toHaveLength(10);
+
+    expect(page.el.question.textContent, "the device is named").toBe("Allow MacBook to use Nexus as agents?");
+    expect(codeBoxes(page)).toEqual([symbols.slice(0, 4), symbols.slice(4, 8), symbols.slice(8)]);
+    expect(page.el.code.children.map((group: Element) => group.className)).toEqual(["code__group code__group--of-4", "code__group code__group--of-4", "code__group code__group--of-2"]);
+    expect(page.el.code.attributes["aria-label"], "read out as one string").toBe(`Device code ${symbols.join("")}`);
+    expect(codeBoxes(page).flat().join(""), "nothing of the sign-in code the link carries is drawn").not.toBe(code.replace("-", ""));
+    expect(page.calls, "the page asked once, and the sign-in code in its address is what it asked with").toEqual([{ method: "GET", path: API_PENDING, code, body: null }]);
+  });
+
+  it("shows the sign-in code, in groups of four, for a device that sent no key and so has no key code: it is the one code on that device's screen", async () => {
     const { code, page } = await openLinkFor("lab-code");
     const characters = code.replace("-", "").split("");
     expect(characters, "the code Nexus made, without its dash").toHaveLength(8);

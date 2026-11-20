@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
+import { deviceKeyCodeInput, deviceKeyCodeOf } from "../src/format.js";
 import {
   approvalCode, devicePublicKey, deviceKeyCode, generateDeviceKeyPair, generateVaultKey, NexusCryptoError, openApproval, readApprovalCode, RECOVERY_ALPHABET, sealApproval,
 } from "../src/index.js";
@@ -181,6 +182,15 @@ describe("the matching code of an approval", () => {
       await approvalCode({ newDevicePublicKey: key, approverPublicKey: sequence(32, 0x50), kid: 1, sealed: sequence(91, 0x90) }),
     );
     expect((await refusal(deviceKeyCode(new Uint8Array(31)))).code).toBe("invalid-argument");
+  });
+
+  it("is the same code with no encryption library: the server hashes the key itself and writes the code with deviceKeyCodeOf", async () => {
+    // The server has no libsodium; it hashes deviceKeyCodeInput(key) with its own SHA-256 and hands the digest to deviceKeyCodeOf.
+    for (const seed of [0x10, 0x11, 0x42]) {
+      const key = sequence(32, seed);
+      expect(deviceKeyCodeOf(sha256(deviceKeyCodeInput(key))), `seed ${seed}`).toBe(await deviceKeyCode(key));
+    }
+    expect(deviceKeyCodeOf(sha256(deviceKeyCodeInput(sequence(32, 0x10)))), "the pinned example").toBe(DEVICE_KEY_CODE_TEXT);
   });
 
   it("is read from what a person typed: capitals or small letters, hyphen or space, O for 0 and I or L for 1; anything else is null", () => {

@@ -138,6 +138,15 @@ export class RealNexus {
     this.db.exec("DELETE FROM nexus_notes");
   }
 
+  /**
+   * No sign-ins and no approvals held, so a test that lists the devices waiting to be approved starts from none: a sign-in an earlier test
+   * began lasts ten minutes and would be listed. Tokens that were made from sign-ins stay, with the identities.
+   */
+  emptySignIns(): void {
+    this.db.exec("DELETE FROM nexus_approvals");
+    this.db.exec("DELETE FROM nexus_signins");
+  }
+
   /** Answers one request to the API: the server's own `runNexus`. */
   fetch(request: Request): Promise<Response> {
     return runNexus(request, this.host);

@@ -29,6 +29,24 @@ export function cleanAddress(address: unknown): string {
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
+/** The hosts that are the machine's own. The server takes the owner's secret over plain http from these and from nowhere else (server/src/plugs/cloudflare/signin.ts). */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Whether the owner's secret may be sent to this address: it is an https address, or one of this machine's own. The server refuses the
+ * secret from anywhere else (a 401, as if none was sent), and over plain http to another host it would also cross the network in the
+ * clear, so the owner's commands send nothing there. An address that is not an address is not decided here: `cleanAddress` says so.
+ */
+export function ownerSecretMayGoTo(address: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(address.trim());
+  } catch {
+    return true;
+  }
+  return url.protocol !== "http:" || LOOPBACK_HOSTS.has(url.hostname);
+}
+
 /** The cookie the owner's secret travels in: the owner's own session, which the owner's commands use in place of a token. */
 export const OWNER_COOKIE = "nexus_owner";
 

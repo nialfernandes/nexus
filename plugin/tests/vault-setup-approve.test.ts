@@ -1,5 +1,5 @@
-// An unlocked device approves another: a new device (the one device code typed here must be the code of the key of a device that waits,
-// worked out here from the key Nexus gave this device, and nothing that could carry the key is sent until it is), or an agent (its public key pasted; the approval is shown and saved by
+// An unlocked device approves another: a new device (named in the slab, or picked by name from several that wait; the one device code typed
+// here must be the code of that device's key, worked out here from the key Nexus gave this device, and nothing that could carry the key is sent until it is), or an agent (its public key pasted; the approval is shown and saved by
 // the person, and never sent through Nexus). The agent's approval is opened here by packages/agent itself, and so is the one the
 // `nexus-agent approve-agent` command prints from the Recovery Key: either can be used. Against the real server (real-nexus.ts).
 
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("this device approves another device", () => {
-  it("is typed the device code and nothing else: it refuses a code no waiting device has, sending nothing, and approves when the right one is typed", async () => {
+  it("names the one device that waits, is typed its device code and nothing else: it refuses another code, sending nothing, and approves when the right one is typed", async () => {
     const { device: a } = await firstRun(world, { files: { "Ideas/one.md": "first\n" } });
     await a.engine.sync();
     const b = await setupDevice(world, { token: null, name: "New phone" });
@@ -33,13 +33,18 @@ describe("this device approves another device", () => {
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
+      expect(a.setup.state, "one device waits, so it is the one: named, and its code is asked for").toEqual({
+        step: "approve-device", message: null, problem: null,
+        devices: [{ label: "New phone", signInCode: waiting.code }], device: { label: "New phone", signInCode: waiting.code },
+      });
 
       await a.setup.approveDevice("AAAAA-AAAAA");
-      expect(a.setup.state, "refused with a reason, and still at the form").toEqual({
+      expect(a.setup.state, "refused with a reason, and still at the form for the same device").toEqual({
         step: "approve-device",
-        message: expect.stringMatching(/No device that is waiting has that code, so nothing was sent/),
+        message: expect.stringMatching(/That is not the code of the device that was chosen, so nothing was sent/),
         problem: "wrong-key-code",
+        devices: [{ label: "New phone", signInCode: waiting.code }], device: { label: "New phone", signInCode: waiting.code },
       });
       await a.setup.approveDevice("not a code at all");
       expect(a.setup.state.step).toBe("approve-device");
@@ -68,10 +73,10 @@ describe("this device approves another device", () => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
       hostileServer().swapDeviceKey(waiting.code, encodeBase64(attacker.publicKey));
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       // The person types the code B really shows. The key A was handed is the attacker's, so its code is another and no device has this one.
       await a.setup.approveDevice(waiting.keyCode);
-      expect(a.setup.state).toEqual({ step: "approve-device", message: expect.stringMatching(/No device that is waiting has that code/), problem: "wrong-key-code" });
+      expect(a.setup.state).toMatchObject({ step: "approve-device", message: expect.stringMatching(/not the code of the device that was chosen/), problem: "wrong-key-code" });
       // Even the attacker's own code, which the person cannot know, is the only one that would pass: they never see it.
       expect(await deviceKeyCode(attacker.publicKey)).not.toBe(waiting.keyCode);
       b.setup.cancel();
@@ -81,14 +86,14 @@ describe("this device approves another device", () => {
     expect(a.holder.keys()).not.toBeNull();
   });
 
-  it("finds the new device from its device code however it was typed, and hands back the name it sent for the screen to show as text", async () => {
+  it("takes the device code however it was typed, and hands back the name the device sent for the screen to show as text", async () => {
     const { device: a } = await firstRun(world);
     const b = await setupDevice(world, { token: null, name: "<img src=x onerror=alert(1)> phone" });
     let matching = "";
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       await a.setup.approveDevice(` ${waiting.keyCode.replace("-", "").toLowerCase()} `); // as ten boxes give it: no hyphen, small letters
       expect(a.setup.state, "Nexus says which device it was: its label, as the device sent it").toEqual({
         step: "device-approved", code: expect.stringMatching(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/), label: "<img src=x onerror=alert(1)> phone",
@@ -100,7 +105,7 @@ describe("this device approves another device", () => {
     expect(b.setup.state).toEqual({ step: "device-unlocked" });
   });
 
-  it("picks the right device when others are waiting too, and the others stay waiting", async () => {
+  it("lists several devices by name to pick from; the code is checked against the one picked, so another's code is refused, and the others stay waiting", async () => {
     const { device: a } = await firstRun(world);
     // Two other sign-ins wait, each with a key of its own, one asked for before the new device and one after.
     const earlier = bodyOf(await deviceRoutes().start(world.user, "Earlier phone", encodeBase64((await generateDeviceKeyPair()).publicKey)));
@@ -110,7 +115,30 @@ describe("this device approves another device", () => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
       const later = bodyOf(await deviceRoutes().start(world.user, "Later phone", encodeBase64((await generateDeviceKeyPair()).publicKey)));
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
+      const names = [
+        { label: "Earlier phone", signInCode: earlier.code },
+        { label: "New phone", signInCode: waiting.code },
+        { label: "Later phone", signInCode: later.code },
+      ];
+      expect(a.setup.state, "three wait: they are named, oldest first, and none is chosen yet").toEqual({ step: "approve-device", message: null, problem: null, devices: names, device: null });
+      await a.setup.approveDevice(waiting.keyCode);
+      expect(a.setup.state, "no device is chosen, so a code alone approves nothing").toMatchObject({ step: "approve-device", device: null });
+      expect(a.log.to("POST device/approve")).toEqual([]);
+
+      // The wrong one is picked: the code on the new device is not the code of its key.
+      a.setup.chooseDevice(earlier.code);
+      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, devices: names, device: names[0] });
+      await a.setup.approveDevice(waiting.keyCode);
+      expect(a.setup.state).toMatchObject({ step: "approve-device", problem: "wrong-key-code", device: names[0] });
+      expect(a.log.to("POST device/approve"), "nothing was sent for a device whose code was not typed").toEqual([]);
+
+      // Back to the list, the right one: its code is the one typed.
+      a.setup.backToDevices();
+      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, devices: names, device: null });
+      a.setup.chooseDevice("not a sign-in code");
+      expect(a.setup.state, "a name that is not on the list picks nothing").toMatchObject({ device: null });
+      a.setup.chooseDevice(waiting.code);
       await a.setup.approveDevice(waiting.keyCode);
       expect(at(a, "device-approved").label).toBe("New phone");
       matching = at(a, "device-approved").code;
@@ -124,20 +152,34 @@ describe("this device approves another device", () => {
     expect(a.log.to("POST device/approve")).toHaveLength(1);
   });
 
-  it("says plainly when no device is waiting at all, with its reason, and sends nothing", async () => {
+  it("says plainly when no device is waiting, sends nothing, and finds a device that starts later when it looks again", async () => {
     const { device: a } = await firstRun(world);
-    a.setup.startApprovingDevice();
+    await a.setup.startApprovingDevice();
+    expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, devices: [], device: null });
     await a.setup.approveDevice("4TQ8M-W2K0B");
-    expect(a.setup.state).toEqual({ step: "approve-device", message: expect.stringMatching(/No device that is waiting has that code/), problem: "wrong-key-code" });
+    expect(a.setup.state, "no device is chosen, so a code approves nothing").toEqual({ step: "approve-device", message: null, problem: null, devices: [], device: null });
     expect(a.log.to("POST device/approve")).toEqual([]);
+
+    const pair = await generateDeviceKeyPair();
+    const started = bodyOf(await deviceRoutes().start(world.user, "Later phone", encodeBase64(pair.publicKey)));
+    await a.setup.startApprovingDevice();
+    expect(a.setup.state, "looking again finds it, and it is the one").toMatchObject({
+      step: "approve-device", device: { label: "Later phone", signInCode: started.code }, devices: [{ label: "Later phone", signInCode: started.code }],
+    });
+  });
+
+  it("offers no sign-in that sent no key, which has no device code to be typed", async () => {
+    const { device: a } = await firstRun(world);
+    bodyOf(await deviceRoutes().start(world.user, "a script that sent no key"));
+    await a.setup.startApprovingDevice();
+    expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, devices: [], device: null });
   });
 
   it("is told by Nexus that its account may not approve, and says so with the reason not-allowed and sends nothing to the new device", async () => {
     const { device: a } = await firstRun(world);
     a.deps.data.token = await world.tokenFor("agents", "not the owner");
-    a.setup.startApprovingDevice();
-    await a.setup.approveDevice("AAAAA-AAAAA");
-    expect(a.setup.state).toMatchObject({ step: "approve-device", problem: "not-allowed" });
+    await a.setup.startApprovingDevice();
+    expect(a.setup.state, "it is not even told who is waiting").toMatchObject({ step: "approve-device", problem: "not-allowed", devices: [], device: null });
     expect(a.log.to("POST device/approve")).toEqual([]);
     a.setup.done();
     expect(a.setup.state).toEqual({ step: "unlocked" });
@@ -145,7 +187,7 @@ describe("this device approves another device", () => {
 
   it("is only for an unlocked device", async () => {
     const locked = await setupDevice(world);
-    locked.setup.startApprovingDevice();
+    await locked.setup.startApprovingDevice();
     expect(locked.setup.state, "a locked device has no key to give").toEqual({ step: "locked" });
     await locked.setup.approveDevice("AAAAA-AAAAA");
     expect(locked.log.requests()).toEqual([]);
@@ -256,7 +298,7 @@ describe("locking", () => {
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       await a.setup.approveDevice(waiting.keyCode);
     };
     await b.setup.askAnotherDevice();

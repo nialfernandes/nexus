@@ -60,7 +60,7 @@ describe("the setup controller, through everything it does", () => {
     third.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(third, "waiting-for-device");
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       await a.setup.approveDevice(waiting.keyCode);
       matching = at(a, "device-approved").code;
     };

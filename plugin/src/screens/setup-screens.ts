@@ -7,7 +7,7 @@
 // Everything a device sent (the name it signed in with) is shown as text, never as markup (dom.ts).
 
 import { COPIED_FOR_MS, COPY_WORDS } from "../copied";
-import { passwordsAgree, type SetupState, type VaultSetup } from "../vault-setup";
+import { passwordsAgree, type SetupState, type VaultSetup, type WaitingName } from "../vault-setup";
 import { CodeEntry, codeCharacters, type Edit } from "./code-entry";
 import { el } from "./dom";
 import {
@@ -101,10 +101,18 @@ export const WORDS = {
   },
   approve: {
     title: "approve device",
-    line: "Type the device code.",
+    // Board 15 names the new device in the slab line; a device that sent no name is called this.
+    unnamed: "A new device",
     text: "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
     nothingSent: "Nothing is sent to the new device until the code is right.",
     wrongCode: "That is not the code on the new device, so nothing was sent. Read it again from its screen. If it keeps failing, cancel and start again on the new device.",
+    // Not drawn on a board yet: several devices are waiting, and none is.
+    chooseLine: "Which device?",
+    chooseText: "More than one new device is waiting. Pick the one you are looking at.",
+    another: "Not this one",
+    noneLine: "No device is waiting.",
+    noneText: "On the new device, choose to ask another device to approve it. It shows up here by its name.",
+    again: "Look again",
   },
   approved: {
     title: "approved",
@@ -154,7 +162,7 @@ export const WORDS = {
     close: "Close",
   },
   // Not drawn: the steps that have no screen of their own, in the same look.
-  working: { title: "working", line: "One moment.", looking: "Asking Nexus what it holds.", signIn: "Asking Nexus to sign this device in.", saving: "Keeping your wraps on Nexus.", opening: "Opening your notes.", approving: "Approving the device." },
+  working: { title: "working", line: "One moment.", looking: "Asking Nexus what it holds.", listing: "Asking Nexus which devices are waiting.", signIn: "Asking Nexus to sign this device in.", saving: "Keeping your wraps on Nexus.", opening: "Opening your notes.", approving: "Approving the device." },
   signedOut: {
     title: "sign in",
     line: "Not signed in yet.",
@@ -197,6 +205,8 @@ export class SetupScreens {
   #again = "";
   // Approving a device.
   readonly #deviceCode = new CodeEntry(Array(CODE_BOXES).fill(1));
+  /** The sign-in code of the device the code is being typed for, to start the boxes empty when another is chosen. */
+  #deviceFor: string | null = null;
   // A new device typing the matching code.
   readonly #matching = new CodeEntry(Array(CODE_BOXES).fill(1));
   // Unlocking with the Recovery Key, or the password.
@@ -221,8 +231,7 @@ export class SetupScreens {
     this.#active = true;
     this.#lastStable = null;
     let working: Promise<void> = Promise.resolve();
-    if (entry === "approve") this.#deps.setup.startApprovingDevice();
-    else working = this.#deps.setup.begin();
+    working = entry === "approve" ? this.#deps.setup.startApprovingDevice() : this.#deps.setup.begin();
     // What the controller did before its first wait is on screen at once; what it learns from Nexus arrives as its own changes.
     this.#changed();
     await working;
@@ -235,6 +244,7 @@ export class SetupScreens {
     this.#deps.setup.cancel();
     this.#typeBack.clear();
     this.#deviceCode.clear();
+    this.#deviceFor = null;
     this.#matching.clear();
     this.#recoveryKey.clear();
     this.#password = this.#again = this.#unlockPassword = "";
@@ -282,10 +292,14 @@ export class SetupScreens {
           this.#wrongRows = new Set(state.wrong.map((group) => state.ask.indexOf(group)));
         }
         break;
-      case "approve-device":
-        if (isNew) this.#deviceCode.clear();
+      case "approve-device": {
+        // A new step, or another device chosen, starts the code empty.
+        const which = state.device?.signInCode ?? null;
+        if (isNew || which !== this.#deviceFor) this.#deviceCode.clear();
+        this.#deviceFor = which;
         if (state.problem !== null && state.problem !== "not-allowed") this.#deviceCode.wrong = true;
         break;
+      }
       case "type-matching-code":
         if (isNew) this.#matching.clear();
         if (state.message !== null) this.#matching.wrong = true;
@@ -349,7 +363,8 @@ export class SetupScreens {
       case "device-unlocked":
         return this.#unlockedScreen();
       case "approve-device":
-        return state.problem === "not-allowed" ? this.#notAllowedScreen() : this.#deviceCodeScreen(state);
+        if (state.problem === "not-allowed") return this.#notAllowedScreen();
+        return state.device !== null ? this.#deviceCodeScreen(state, state.device) : state.devices.length > 0 ? this.#chooseDeviceScreen(state) : this.#noDeviceScreen(state);
       case "device-approved":
         return this.#approvedScreen(state);
       case "has-vault":
@@ -565,11 +580,12 @@ export class SetupScreens {
     );
   }
 
-  #deviceCodeScreen(state: Extract<SetupState, { step: "approve-device" }>): HTMLElement {
+  /** The new device is chosen (the only one waiting, or the pick): its name is the slab line, and its device code is typed. */
+  #deviceCodeScreen(state: Extract<SetupState, { step: "approve-device" }>, device: WaitingName): HTMLElement {
     const w = WORDS.approve;
     return screen(
       w.title,
-      w.line,
+      device.label === "" ? w.unnamed : device.label,
       card(
         text(w.text),
         codeField(
@@ -582,7 +598,42 @@ export class SetupScreens {
           WORDS.waiting.deviceCode,
         ),
         this.#deviceCode.wrong ? faultLine(state.problem === "wrong-key-code" ? w.wrongCode : (state.message ?? w.wrongCode)) : small(w.nothingSent),
+        actions(
+          // With several waiting, the person may have picked the wrong one: back to the list. With one there is nothing to go back to.
+          state.devices.length > 1 ? pill(w.another, "quiet", () => this.#deps.setup.backToDevices(), { key: "another" }) : null,
+          pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" }),
+        ),
+      ),
+    );
+  }
+
+  /** Several devices are waiting: their names, to pick from. */
+  #chooseDeviceScreen(state: Extract<SetupState, { step: "approve-device" }>): HTMLElement {
+    const w = WORDS.approve;
+    return screen(
+      w.title,
+      w.chooseLine,
+      card(
+        text(w.chooseText),
+        ...state.devices.map((device) => pill(device.label === "" ? w.unnamed : device.label, "quiet", () => this.#deps.setup.chooseDevice(device.signInCode), { key: `device:${device.signInCode}` })),
         actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
+      ),
+    );
+  }
+
+  /** No device is waiting (or Nexus could not say which are): Nexus's own words if it refused, and a way to look again. */
+  #noDeviceScreen(state: Extract<SetupState, { step: "approve-device" }>): HTMLElement {
+    const w = WORDS.approve;
+    return screen(
+      w.title,
+      w.noneLine,
+      card(
+        text(w.noneText),
+        state.message === null ? null : faultLine(state.message),
+        actions(
+          pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" }),
+          pill(w.again, "main", () => this.#run(this.#deps.setup.startApprovingDevice()), { key: "look-again" }),
+        ),
       ),
     );
   }
@@ -722,7 +773,7 @@ export class SetupScreens {
 
   #workingScreen(doing: Extract<SetupState, { step: "working" }>["doing"]): HTMLElement {
     const w = WORDS.working;
-    const words = doing === "looking" ? w.looking : doing === "starting-sign-in" ? w.signIn : doing === "saving" ? w.saving : doing === "opening" ? w.opening : w.approving;
+    const words = doing === "looking" ? w.looking : doing === "listing" ? w.listing : doing === "starting-sign-in" ? w.signIn : doing === "saving" ? w.saving : doing === "opening" ? w.opening : w.approving;
     return screen(w.title, w.line, card(small(words)));
   }
 

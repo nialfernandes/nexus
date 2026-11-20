@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { API_APPROVE, API_DENY, API_PENDING, APPROVED, CODE, DENIED, GONE, GONE_EXPIRED, PAGE_PATH, PENDING } from "../src/__fixtures__/approve-answers";
+import { API_APPROVE, API_DENY, API_PENDING, APPROVED, CODE, DENIED, GONE, GONE_EXPIRED, PAGE_PATH, PENDING, PENDING_NO_KEY } from "../src/__fixtures__/approve-answers";
 
 const ORIGIN = "https://nexus.example.test";
 const PUBLIC = path.join(import.meta.dirname, "..", "public", "nexus");
@@ -41,10 +41,11 @@ interface Call {
 }
 
 /**
- * Stands in for the Worker. The page and its files come from disk. Nexus's routes answer as the fixtures say, and 401 until the
- * owner is known: the browser holds the owner's cookie (`knownOwner`), or the call carries the owner secret in its header.
+ * Stands in for the Worker. The page and its files come from disk. Nexus's routes answer as the fixtures say (`pending` is what
+ * device/pending answers, the fixture's by default), and 401 until the owner is known: the browser holds the owner's cookie
+ * (`knownOwner`), or the call carries the owner secret in its header.
  */
-async function serve(page: Page, options: { knownOwner: boolean }): Promise<Call[]> {
+async function serve(page: Page, options: { knownOwner: boolean; pending?: Record<string, unknown> }): Promise<Call[]> {
   const calls: Call[] = [];
   await page.route(`${ORIGIN}/**`, async (route: Route) => {
     const request = route.request();
@@ -63,7 +64,7 @@ async function serve(page: Page, options: { knownOwner: boolean }): Promise<Call
     const asked = code ?? (body as { code?: string } | null)?.code ?? null;
     if (asked === RAN_OUT) return json(410, GONE_EXPIRED);
     if (asked === USED) return json(410, GONE);
-    if (url.pathname === API_PENDING) return json(200, PENDING);
+    if (url.pathname === API_PENDING) return json(200, options.pending ?? PENDING);
     if (url.pathname === API_APPROVE) return json(200, APPROVED);
     if (url.pathname === API_DENY) return json(200, DENIED);
     return json(404, { error: "no such route" });
@@ -132,15 +133,37 @@ for (const width of [375, 1280]) {
       await page.locator("#owner-go").click();
       await expect(page.locator("#question")).toHaveText("Allow lab-m to use Nexus as agents?");
       await expect(page.locator("#owner")).toBeHidden();
-      await expect(page.locator(".code__box")).toHaveCount(8);
-      await expect(page.locator(".code__group")).toHaveCount(2);
-      expect(await page.locator(".code__box").allTextContents(), "the code, as the device shows it").toEqual([..."K7QM4XNP"]);
+      await expect(page.locator(".code__box")).toHaveCount(10);
+      await expect(page.locator(".code__group")).toHaveCount(3);
+      expect(await page.locator(".code__box").allTextContents(), "the code, as the new device shows it").toEqual([...PENDING.deviceCode.replace("-", "")]);
       await expectLayout(page, "#ask");
 
       expect(calls.map((call) => call.secret), "each call sent the secret in the header it was typed for: none, the wrong one, the right one").toEqual([null, "b".repeat(64), OWNER_SECRET]);
       // Nothing is kept: no cookie and no storage hold the secret, and the field is empty.
       expect(await page.evaluate(() => document.cookie)).toBe("");
       expect(await page.evaluate(() => JSON.stringify([localStorage.length, sessionStorage.length]))).toBe("[0,0]");
+    });
+
+    test("worked example: a new device 'MacBook' that shows the key code ABCD EFGH JK is shown by that name and that code, in groups of 4, 4 and 2", async ({ page }) => {
+      await serve(page, { knownOwner: true, pending: { ...PENDING, label: "MacBook", deviceCode: "ABCDE-FGHJK" } });
+      await open(page, WAITING);
+      await expect(page.locator("#question")).toHaveText("Allow MacBook to use Nexus as agents?");
+      await expect(page.locator(".code__label")).toHaveText("DEVICE CODE");
+      expect(await page.locator(".code__group").evaluateAll((groups) => groups.map((group) => group.querySelectorAll(".code__box").length)), "the groups are 4, 4 and 2").toEqual([4, 4, 2]);
+      expect(await page.locator(".code__group").evaluateAll((groups) => groups.map((group) => group.textContent)), "the code is read the way the new device draws it").toEqual(["ABCD", "EFGH", "JK"]);
+      await expect(page.locator("#code")).toHaveAttribute("aria-label", "Device code ABCDEFGHJK");
+      // Ten boxes on one row, none squeezed to nothing at the phone's width and none left over to wrap.
+      const boxes = await page.locator(".code__box").evaluateAll((all) => all.map((box) => box.getBoundingClientRect()));
+      expect(new Set(boxes.map((box) => Math.round(box.top))).size, "one row").toBe(1);
+      expect(Math.min(...boxes.map((box) => box.width)), "each box is wide enough to read").toBeGreaterThanOrEqual(20);
+      await expectLayout(page, "#ask");
+    });
+
+    test("a device that sent no key has no key code, and the page shows its sign-in code as it did", async ({ page }) => {
+      await serve(page, { knownOwner: true, pending: PENDING_NO_KEY });
+      await open(page, WAITING);
+      await expect(page.locator("#question")).toHaveText("Allow lab-m to use Nexus as agents?");
+      expect(await page.locator(".code__group").evaluateAll((groups) => groups.map((group) => group.textContent))).toEqual(["K7QM", "4XNP"]);
     });
 
     test("Allow sends the code and shows the allowed card", async ({ page }) => {

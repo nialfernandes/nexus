@@ -4,12 +4,13 @@
 
 import { Stop, type Io } from "./io";
 import { ENV, LABEL } from "./labels";
-import { asOwner, checkOwnerSecret, readOwnerSecret, signInAndAllow } from "./owner";
+import { asOwner, requireSecureAddress, checkOwnerSecret, readOwnerSecret, signInAndAllow } from "./owner";
 import { need } from "./settings";
 
 export async function ownerSignIn(io: Io, options: { identity: string | undefined; label: string | undefined }): Promise<number> {
   if (options.identity === undefined) throw new Stop("Say the owner's name: nexus-agent owner-sign-in --identity <the owner's name>. It is the server's NEXUS_OWNER setting.");
   const address = need(io, [ENV.address])[ENV.address];
+  requireSecureAddress(address);
   const owner = asOwner(io, address, await readOwnerSecret(io));
   await checkOwnerSecret(owner);
 

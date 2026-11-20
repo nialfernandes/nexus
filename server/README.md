@@ -103,8 +103,8 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `POST /wrap/delete` `{ kid, kind }` | owner | Removes a wrap |
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
-| `GET /device/waiting[?code=C]` | owner | `200 { signins: [ { label, code } ] }`: the sign-ins still waiting for an answer (not answered, not run out), oldest first, with nothing secret in them. With `code`, only the sign-in that code is, however a person typed it (small letters, spaces, with or without the dash), so a device that is typed the code from the new device's screen finds the sign-in from that code alone. An empty list when none matches. Any identity that is not the owner is `403` and gets no list |
-| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes (`error` is "That code has run out.") and `"used"` when it was answered already ("That code was already used."); the approval page draws a different card for each, in those words. A poll of a finished code is the same `410`. A code Nexus has no sign-in for is `404` |
+| `GET /device/waiting` | owner | `200 { signins: [ { label, code, deviceKey } ] }`: the sign-ins still waiting for an answer (not answered, not run out), oldest first, with nothing secret in them (`deviceKey` is the public key the device sent, base64, or null when it sent none). The approving device shows the labels so a person can say which device is meant, lists the ones that sent a key, and checks the code a person types against the key of the one chosen, which it works out itself: the list has no `code` to search by and carries no key code to believe. Any identity that is not the owner is `403` and gets no list |
+| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. `pending` answers `{ code, identity, label, expiresAt, deviceKey, deviceCode }`: `deviceKey` is the public key the device sent and `deviceCode` the code the device shows for it (such as `4TQ8M-W2K0B`, the first 50 bits of SHA-256 over a label and the key: docs/FORMAT.md 7.4), which the approval page draws in boxes for the owner to compare with the new device's screen; both are null for a sign-in that sent no key, and the page then shows the sign-in code. Nothing in either is secret. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes (`error` is "That code has run out.") and `"used"` when it was answered already ("That code was already used."); the approval page draws a different card for each, in those words. A poll of a finished code is the same `410`. A code Nexus has no sign-in for is `404` |
 
 A note id is 1 to 128 letters, digits, hyphens or underscores (what url-safe base64, hex and a UUID are written in): a
 path, with its slashes and dots, is refused as an id so it cannot be used as one by mistake.
@@ -313,11 +313,10 @@ npx playwright install chromium          # once: a browser, which npm ci does no
 npm run test:browser --workspace nexus-server
 ```
 
-It is not part of `npm run check`. That command has to run on a machine that has Node and nothing else, and in
-`.github/workflows/check.yml`, which installs with `npm ci` only; the spec needs Playwright's browser (about 150 MB) downloaded
-first, so putting it in `check` would fail it for anyone without that browser. To run it in the workflow, add a step after
-"Install every package" that runs `npx playwright install --with-deps chromium`, and one after "Check every package" that runs
-`npm run test:browser --workspace nexus-server`.
+It is not part of `npm run check`: that command has to run on a machine that has Node and nothing else, and the spec needs Playwright's
+browser (about 150 MB) downloaded first. `.github/workflows/check.yml` runs it as two steps of its own after "Check every package":
+`npx playwright install --with-deps chromium` and `npm run test:browser`, both in `server/`. Neither uses an action, so
+`.github/check-pinned-actions.sh` has nothing new to pin.
 
 ```
 e2e/                 the browser spec of the approval page (Playwright)

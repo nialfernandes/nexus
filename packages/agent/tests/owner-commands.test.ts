@@ -8,7 +8,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ENV, LABEL } from "../src/cli/labels";
 import { AgentVault } from "../src/index";
-import { Nexus } from "../src/nexus";
+import { Nexus, ownerSecretMayGoTo } from "../src/nexus";
+import { API } from "../../../plugin/tests/real-nexus";
 import { ADDRESS, askNexus, bodyOf, fetchOverNexus, openWorld, run, setUpVault, timesIn, valueOf, type Ran, type SetUp, type World } from "./world";
 
 let world: World;
@@ -41,6 +42,56 @@ function expectNoLeak(secretText: string, ran: Ran[], argv: string[][], what: st
   expect(timesIn(JSON.stringify(fetched.seen), secretText), `${what} is in no body or address sent to Nexus`).toBe(0);
   expect(ran.length).toBeGreaterThan(0);
 }
+
+/** The addresses of the server's own test of where it takes the owner secret from (server/src/owner-secret-header.test.ts): plain http to these is refused by it. */
+const PLAIN_HTTP_ELSEWHERE = [`http://nexus.example.test${API}`, `http://192.168.1.20:8787${API}`];
+/** And the ones it takes the secret from over plain http: this machine's own. */
+const PLAIN_HTTP_LOCAL = [`http://localhost:8787${API}`, `http://127.0.0.1:8787${API}`, `http://[::1]:8787${API}`];
+
+describe("the owner's secret over plain http", () => {
+  it("is let go to https and to this machine's own addresses only: the server's own rule", () => {
+    for (const address of [ADDRESS, ...PLAIN_HTTP_LOCAL]) expect(ownerSecretMayGoTo(address), address).toBe(true);
+    for (const address of PLAIN_HTTP_ELSEWHERE) expect(ownerSecretMayGoTo(address), address).toBe(false);
+    expect(ownerSecretMayGoTo("not an address"), "what is no address is for cleanAddress to say").toBe(true);
+  });
+
+  it("is not sent by any owner command to plain http at another host: each says to use https, asks for no secret, sends nothing, and does not say the secret is wrong", async () => {
+    const waiting = await startedBy("agents", "a device that must stay waiting");
+    for (const address of PLAIN_HTTP_ELSEWHERE) {
+      for (const [argv, stdin] of [
+        [["make-identity", "--name", "scribe", "--kind", "agent"], undefined],
+        [["allow", waiting.code], "yes\n"],
+        [["deny", waiting.code], "yes\n"],
+        [["owner-sign-in", "--identity", "owner"], undefined],
+        [["set-up-agent", "--name", "scribe"], undefined],
+      ] as const) {
+        fetched.seen.length = 0;
+        // No secret in the environment and none on standard input: a command that asked for it first would stop with "No owner secret was given".
+        const ran = await run([...argv], { env: { [ENV.address]: address }, fetch: fetched.fetch, ...(stdin === undefined ? {} : { stdin }) });
+        const what = `${argv[0]} to ${address}`;
+        expect(ran.code, what).toBe(1);
+        expect(ran.stderr, what).toMatch(/plain http address/);
+        expect(ran.stderr, what).toMatch(/Use the https address of the server instead/);
+        expect(ran.stderr, what).not.toMatch(/wrong|did not accept|No owner secret was given|Owner secret \(typing is hidden\)/);
+        expect(ran.stdout, what).toBe("");
+        expect(fetched.seen, `${what}: nothing was sent`).toEqual([]);
+      }
+    }
+    expect(await identityExists("scribe"), "no identity was made").toBe(false);
+    expect((await polled(waiting)).body, "the waiting sign-in was neither allowed nor denied").toEqual({ status: "pending" });
+  });
+
+  it("does not stop a command at this machine's own address: it goes on to ask Nexus", async () => {
+    for (const [index, address] of PLAIN_HTTP_LOCAL.entries()) {
+      fetched.seen.length = 0;
+      const name = `local-${index}`;
+      const ran = await run(["make-identity", "--name", name, "--kind", "agent"], { env: { [ENV.address]: address, [ENV.ownerSecret]: secret }, fetch: fetched.fetch });
+      expect(ran.code, `${address}: ${ran.stderr}`).toBe(0);
+      expect(fetched.seen.map((s) => `${s.method} ${s.route}`), address).toEqual(["GET tokens", "POST identity"]);
+      expect(await identityExists(name), address).toBe(true);
+    }
+  });
+});
 
 describe("the owner's secret", () => {
   it("is sent as the owner's cookie only, never with a token, never as an argument, and never printed", async () => {

@@ -3,7 +3,7 @@
 
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
-import { asOwner, checkOwnerSecret, ownerRefusal, readOwnerSecret } from "./owner";
+import { asOwner, requireSecureAddress, checkOwnerSecret, ownerRefusal, readOwnerSecret } from "./owner";
 import { need } from "./settings";
 
 /** The kinds of identity Nexus knows (server/src/identities.ts). */
@@ -15,6 +15,7 @@ export async function makeIdentity(io: Io, options: { name: string | undefined; 
     throw new Stop("Say the identity's kind, one of agent, person or app: nexus-agent make-identity --name <name> --kind agent|person|app.");
   }
   const address = need(io, [ENV.address])[ENV.address];
+  requireSecureAddress(address);
   const owner = asOwner(io, address, await readOwnerSecret(io));
   await checkOwnerSecret(owner);
 

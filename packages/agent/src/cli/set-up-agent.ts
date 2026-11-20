@@ -12,7 +12,7 @@ import { encodeBase64 } from "../base64";
 import { approvalForAgent } from "../setup";
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
-import { asOwner, checkOwnerSecret, ownerRefusal, readOwnerSecret, signInAndAllow } from "./owner";
+import { asOwner, requireSecureAddress, checkOwnerSecret, ownerRefusal, readOwnerSecret, signInAndAllow } from "./owner";
 import { Prompter } from "./prompt";
 import { openWithTypedKey, recoveryWrapHeld } from "./recovery";
 import { need } from "./settings";
@@ -24,6 +24,7 @@ export async function setUpAgent(io: Io, options: { name: string | undefined; la
   let vaultKey: Uint8Array | null = null;
   let privateKey: Uint8Array | null = null;
   try {
+    requireSecureAddress(address);
     const owner = asOwner(io, address, await readOwnerSecret(io, prompter));
     await checkOwnerSecret(owner);
 

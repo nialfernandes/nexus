@@ -5,6 +5,10 @@
 # the scripts the release workflow (release.yml) stands on, then builds the
 # encryption package and the agent library, type-checks every package, builds the linking job and the plugin and runs every package's tests. A package added to the
 # workspaces in the root package.json is checked here without a change to this file.
+#
+# After that, the approval page is looked at in a real browser (server/e2e/approve.spec.ts, at 375 and 1280 px). That needs Playwright's
+# Chromium, which `npm ci` does not download, so it is its own two steps here and not part of `npm run check` (which has to run on a
+# machine with Node and nothing else). Neither step uses an action: the browser comes from the Playwright that package-lock.json pins.
 name: check
 
 on:
@@ -29,5 +33,11 @@ jobs:
         run: npm ci
       - name: Check every package
         run: npm run check
+      - name: Install the browser the approval page is checked in
+        run: npx playwright install --with-deps chromium
+        working-directory: server
+      - name: Check the approval page in a browser
+        run: npm run test:browser
+        working-directory: server
       - name: Check the citations in the docs
         run: bash docs/check-citations.sh

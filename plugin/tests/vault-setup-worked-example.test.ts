@@ -61,7 +61,7 @@ describe("the setup controller, worked through", () => {
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device"); // B shows the link and its device code
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       await a.setup.approveDevice(waiting.keyCode); // the device code is the one code typed on A
       matching = at(a, "device-approved").code; // A shows the matching code
     };
