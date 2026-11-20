@@ -313,11 +313,10 @@ npx playwright install chromium          # once: a browser, which npm ci does no
 npm run test:browser --workspace nexus-server
 ```
 
-It is not part of `npm run check`. That command has to run on a machine that has Node and nothing else, and in
-`.github/workflows/check.yml`, which installs with `npm ci` only; the spec needs Playwright's browser (about 150 MB) downloaded
-first, so putting it in `check` would fail it for anyone without that browser. To run it in the workflow, add a step after
-"Install every package" that runs `npx playwright install --with-deps chromium`, and one after "Check every package" that runs
-`npm run test:browser --workspace nexus-server`.
+It is not part of `npm run check`: that command has to run on a machine that has Node and nothing else, and the spec needs Playwright's
+browser (about 150 MB) downloaded first. `.github/workflows/check.yml` runs it as two steps of its own after "Check every package":
+`npx playwright install --with-deps chromium` and `npm run test:browser`, both in `server/`. Neither uses an action, so
+`.github/check-pinned-actions.sh` has nothing new to pin.
 
 ```
 e2e/                 the browser spec of the approval page (Playwright)

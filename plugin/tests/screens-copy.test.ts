@@ -111,7 +111,7 @@ describe("the matching code on the approved screen (board 17)", () => {
 
 describe("a code that is typed, not read", () => {
   it("has no Copy button: the device code the approving device types is checked by being typed", async () => {
-    const { root } = await openScreens({ step: "approve-device", message: null, problem: null });
+    const { root } = await openScreens({ step: "approve-device", message: null, problem: null, devices: [{ label: "New phone", signInCode: "ABCD-EFGH" }], device: { label: "New phone", signInCode: "ABCD-EFGH" } });
     expect(buttons(root)).toEqual(["Cancel"]);
   });
 });

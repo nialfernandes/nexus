@@ -35,7 +35,7 @@ export function installDom(): () => void {
 /** Every event name the screens may send the controller. */
 const EVENTS = [
   "begin", "startFirstRun", "typeBack", "backToKey", "finishSetup", "tryAgain", "typeRecoveryKey", "typePassword", "askAnotherDevice",
-  "typeMatchingCode", "refuseCode", "startApprovingDevice", "approveDevice", "startApprovingAgent", "approveAgent", "done", "cancel", "lock",
+  "typeMatchingCode", "refuseCode", "startApprovingDevice", "chooseDevice", "backToDevices", "approveDevice", "startApprovingAgent", "approveAgent", "done", "cancel", "lock",
 ] as const;
 type EventName = (typeof EVENTS)[number];
 
@@ -51,7 +51,7 @@ export class FakeSetup {
     for (const name of EVENTS) {
       (this as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
         this.calls.push([name, ...args]);
-        return name === "typeBack" || name === "backToKey" || name === "done" || name === "cancel" || name === "startApprovingDevice" || name === "lock" || name === "refuseCode" ? undefined : Promise.resolve();
+        return name === "typeBack" || name === "backToKey" || name === "done" || name === "cancel" || name === "chooseDevice" || name === "backToDevices" || name === "lock" || name === "refuseCode" ? undefined : Promise.resolve();
       };
     }
   }

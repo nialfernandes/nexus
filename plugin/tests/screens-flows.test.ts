@@ -211,7 +211,12 @@ describe("the password step", () => {
 });
 
 describe("adding a device", () => {
-  const asking: SetupState = { step: "approve-device", message: null, problem: null };
+  const NEW_PHONE = { label: "New phone", signInCode: "ABCD-EFGH" };
+  const OLD_TABLET = { label: "Old tablet", signInCode: "WXYZ-2345" };
+  /** One device waits, so it is the one: named in the slab, its code asked for. */
+  const asking: SetupState = { step: "approve-device", message: null, problem: null, devices: [NEW_PHONE], device: NEW_PHONE };
+  /** Two wait, and none is picked. */
+  const choosing: SetupState = { step: "approve-device", message: null, problem: null, devices: [OLD_TABLET, NEW_PHONE], device: null };
 
   it("asks for the device code alone, in ten boxes, and sends it the moment the tenth character is typed", async () => {
     const { root, setup } = await openScreens(asking, "approve");
@@ -262,6 +267,63 @@ describe("adding a device", () => {
     tap(root, "cancel");
     expect(setup.sent("cancel")).toHaveLength(1);
     expect(setup.sent("approveDevice")).toEqual([]);
+  });
+
+  it("names the one device that waits in the slab line, and asks for its code at once", async () => {
+    const { root } = await openScreens(asking, "approve");
+    expect(root.querySelector(".nx-slab__line")?.textContent).toBe("New phone");
+    expect(buttons(root), "with one waiting there is nothing to go back to").toEqual(["Cancel"]);
+    expect(boxes(root, "device")).toHaveLength(10);
+  });
+
+  it("names a device that sent no name as a new device, and shows a name as text, never as markup", async () => {
+    const unnamed = { label: "", signInCode: "AAAA-BBBB" };
+    expect((await openScreens({ ...asking, devices: [unnamed], device: unnamed } as SetupState)).root.querySelector(".nx-slab__line")?.textContent).toBe("A new device");
+    document.body.replaceChildren();
+    const markup = { label: "<img src=x onerror=alert(1)> phone", signInCode: "AAAA-CCCC" };
+    const { root } = await openScreens({ ...asking, devices: [markup], device: markup } as SetupState);
+    expect(root.querySelector(".nx-slab__line")?.textContent).toBe("<img src=x onerror=alert(1)> phone");
+    expect(root.querySelector("img"), "no element was made from a name").toBeNull();
+  });
+
+  it("lists several waiting devices by name, and picking one sends the controller its choice and no code", async () => {
+    const { root, setup } = await openScreens(choosing, "approve");
+    expect(root.querySelector(".nx-slab__line")?.textContent).toBe("Which device?");
+    expect(buttons(root)).toEqual(["Old tablet", "New phone", "Cancel"]);
+    expect(boxes(root, "device"), "no code is typed before a device is picked").toHaveLength(0);
+    tap(root, `device:${NEW_PHONE.signInCode}`);
+    expect(setup.sent("chooseDevice")).toEqual([[NEW_PHONE.signInCode]]);
+    expect(setup.sent("approveDevice")).toEqual([]);
+  });
+
+  it("with one of several picked, has a way back to the list, which asks the controller for it", async () => {
+    const { root, setup } = await openScreens({ ...choosing, device: OLD_TABLET } as SetupState);
+    expect(root.querySelector(".nx-slab__line")?.textContent).toBe("Old tablet");
+    expect(buttons(root)).toEqual(["Not this one", "Cancel"]);
+    tap(root, "another");
+    expect(setup.sent("backToDevices")).toHaveLength(1);
+  });
+
+  it("starts the boxes empty for another device: what was typed for one is not sent for the next", async () => {
+    const { root, setup } = await openScreens({ ...choosing, device: OLD_TABLET } as SetupState);
+    typeInto(root, "device", "AB12CD34E");
+    setup.show(choosing);
+    setup.show({ ...choosing, device: NEW_PHONE } as SetupState);
+    expect(boxes(root, "device").map((box) => box.value).join(""), "empty for the device picked after").toBe("");
+  });
+
+  it("says no device is waiting, with a way to look again and no boxes", async () => {
+    const none = { step: "approve-device", message: null, problem: null, devices: [], device: null } as SetupState;
+    const { root, setup } = await openScreens(none);
+    expect(root.querySelector(".nx-slab__line")?.textContent).toBe("No device is waiting.");
+    expect(buttons(root)).toEqual(["Cancel", "Look again"]);
+    expect(boxes(root, "device")).toHaveLength(0);
+    tap(root, "look-again");
+    expect(setup.sent("startApprovingDevice")).toHaveLength(1);
+    // Nexus could not say: its words are in red beside the same way to look again.
+    setup.show({ ...none, problem: "unreachable", message: "Nexus could not be reached. Check you are online." } as SetupState);
+    expect(root.querySelector(".nx-fault-line")?.textContent).toBe("Nexus could not be reached. Check you are online.");
+    expect(buttons(root)).toEqual(["Cancel", "Look again"]);
   });
 
   it("is told it may not approve: the grey screen with Close, which is done", async () => {
@@ -453,7 +515,7 @@ describe("no button of the drawings' rule", () => {
     const states: SetupState[] = [
       { step: "no-vault" }, SHOW_KEY, { step: "choose-password", message: null }, { step: "set-up", password: false, message: null },
       { step: "waiting-for-device", link: "l", code: "ABCD-EFGH", keyCode: "AB12C-D34EF" }, { step: "type-matching-code", triesLeft: 3, message: null },
-      { step: "device-unlocked" }, { step: "approve-device", message: null, problem: null },
+      { step: "device-unlocked" }, { step: "approve-device", message: null, problem: null, devices: [{ label: "x", signInCode: "A" }], device: { label: "x", signInCode: "A" } },
       { step: "device-approved", code: "4TKP8-MXD2Q", label: "x" }, { step: "has-vault", message: null, problem: null, hasPassword: true },
       { step: "stopped", reason: "expired", message: "x" }, { step: "stopped", reason: "denied", message: "x" }, { step: "signed-out" },
     ];

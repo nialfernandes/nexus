@@ -45,7 +45,8 @@ npm run check     # checks the CI actions are pinned to commit hashes, builds th
 ```
 
 `npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
-`bash docs/check-citations.sh`. `probe/` is not part of the workspace: it is a small test
+`bash docs/check-citations.sh` and the approval page's browser spec (`npm run test:browser` in `server/`, which
+needs Playwright's Chromium, so it is two steps of its own: server/README.md, "The browser spec"). `probe/` is not part of the workspace: it is a small test
 plugin that ships its own built files, with its own `npm ci` and `npm run check`.
 
 ## Read before you trust it

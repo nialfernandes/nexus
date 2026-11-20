@@ -363,6 +363,7 @@ export async function openWorld(): Promise<World> {
 /** Before each test: no notes and no versions, so every test starts from a feed that begins at its own first change. */
 export async function emptyNexus(): Promise<void> {
   nexus().emptyNotes();
+  nexus().emptySignIns();
 }
 
 // ── a device: a vault, its data and an engine over them ──────────────────────

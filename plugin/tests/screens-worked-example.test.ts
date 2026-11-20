@@ -207,7 +207,7 @@ describe("the setup screens, from the person's side", () => {
     a.deps.data.token = await world.tokenFor("agents", "not the owner");
     const { screens, root } = screensFor(a);
     await screens.start("approve");
-    typeInto(root, "device", "ABCDE12345");
+    // Nexus refuses the list of the devices waiting, so this account is told so at once: it is never asked for a code.
     await until("not allowed", () => (a.setup.state as { problem?: unknown }).problem === "not-allowed");
     expect(title(root)).toBe("not allowed");
     expect(buttons(root)).toEqual(["Close"]);

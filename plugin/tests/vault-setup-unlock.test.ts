@@ -192,8 +192,11 @@ describe("a new device approved from another", () => {
       expect(waiting.link).toContain("/");
       expect(b.opened, "the link was opened in a browser").toEqual([waiting.link]);
       expect(waiting.keyCode).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
-      a.setup.startApprovingDevice();
-      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null });
+      await a.setup.startApprovingDevice();
+      expect(a.setup.state, "the one device that waits is named, and its code is asked for").toEqual({
+        step: "approve-device", message: null, problem: null,
+        devices: [{ label: "New phone", signInCode: waiting.code }], device: { label: "New phone", signInCode: waiting.code },
+      });
       await a.setup.approveDevice(waiting.keyCode);
       const approved = at(a, "device-approved");
       expect(approved.label).toBe("New phone");
@@ -226,7 +229,7 @@ describe("a new device approved from another", () => {
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
-      a.setup.startApprovingDevice();
+      await a.setup.startApprovingDevice();
       await a.setup.approveDevice(waiting.keyCode);
       matching = at(a, "device-approved").code;
     };
