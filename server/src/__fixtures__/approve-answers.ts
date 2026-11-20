@@ -1,5 +1,5 @@
-// What Nexus's device routes answer the approval page, and the one place those shapes and words are written. A browser
-// check of the page could answer the page's calls from them (this package has none); approval-page-actions.test.ts
+// What Nexus's device routes answer the approval page, and the one place those shapes and words are written. The browser
+// spec of the page (e2e/approve.spec.ts) answers the page's calls from them; approval-page-actions.test.ts
 // takes the addresses and the words of a refusal from here.
 //
 // approval-page.test.ts holds these to the real handlers: it starts a real sign-in through the Worker and checks that
@@ -26,9 +26,9 @@ export const APPROVED = { result: 'approved', code: CODE, identity: 'agents', la
 export const DENIED = { result: 'denied', code: CODE, identity: 'agents', label: 'lab-m' };
 
 /**
- * What every route answers with a refusal. A code that is finished says why in `reason` (the words are the same either way):
- * the page draws "code ran out" for expired and "code used" for used. A code Nexus has no sign-in for has no reason.
+ * What every route answers with a refusal. A code that is finished says why in `reason` and in its own words for each: the page draws
+ * "code ran out" for expired and "code used" for used, each with the server's words. A code Nexus has no sign-in for has no reason.
  */
-export const GONE = { error: 'That code has expired or has already been used.', reason: 'used' };
-export const GONE_EXPIRED = { error: 'That code has expired or has already been used.', reason: 'expired' };
+export const GONE = { error: 'That code was already used.', reason: 'used' };
+export const GONE_EXPIRED = { error: 'That code has run out.', reason: 'expired' };
 export const NOT_FOUND = { error: 'There is no sign-in with that code.' };

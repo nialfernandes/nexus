@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// A code the person has to carry to another device (the sign-in code and the device code on the waiting screen, the matching code on the
+// A code the person has to carry to another device (the device code on the waiting screen, the matching code on the
 // approved screen) can be copied: it is text they can select, and a Copy button on the label's row puts exactly the code on the clipboard
 // and says Copied for two seconds. The Recovery Key's own Copy key is held by screens-flows.test.ts. The boards draw no Copy beside a
 // code, so it is the quiet pill of board 7's Copy key.
@@ -38,68 +38,58 @@ function copyOf(code: Element, selected: string | null): string {
   return given["text/plain"]!;
 }
 
-describe("the codes on the waiting screen (board 14)", () => {
-  it("each have a Copy button on the label's row, and the whole code is text in the page", async () => {
+describe("the device code on the waiting screen (board 14)", () => {
+  it("is the one code, with a Copy button on the label's row, and the whole code is text in the page", async () => {
     const { root } = await openScreens(WAITING);
-    expect(buttons(root)).toEqual(["Copy", "Copy", "Cancel"]);
+    expect(buttons(root)).toEqual(["Copy", "Cancel"]);
     const fields = [...root.querySelectorAll(".nx-field")];
-    expect(fields.map((field) => field.querySelector(".nx-field__head .nx-label")?.textContent)).toEqual(["Sign-in code", "Device code"]);
-    expect(fields.map((field) => field.querySelector(".nx-field__head button")?.textContent)).toEqual(["Copy", "Copy"]);
-    expect(fields.map((field) => field.querySelector(".nx-code")?.textContent)).toEqual(["WXYZ2345", "AB12CD34EF"]);
-    expect(fields.map((field) => field.querySelector(".nx-field__head button")?.getAttribute("aria-label"))).toEqual(["Copy Sign-in code", "Copy Device code"]);
-    expect(root.querySelectorAll(".nx-code--read")).toHaveLength(2);
+    expect(fields.map((field) => field.querySelector(".nx-field__head .nx-label")?.textContent), "no sign-in code beside it").toEqual(["Device code"]);
+    expect(fields.map((field) => field.querySelector(".nx-field__head button")?.textContent)).toEqual(["Copy"]);
+    expect(fields.map((field) => field.querySelector(".nx-code")?.textContent)).toEqual(["AB12CD34EF"]);
+    expect(fields.map((field) => field.querySelector(".nx-field__head button")?.getAttribute("aria-label"))).toEqual(["Copy Device code"]);
+    expect(root.querySelectorAll(".nx-code--read")).toHaveLength(1);
+    expect(root.textContent, "the sign-in code the controller holds is not on the screen at all").not.toContain("WXYZ");
+    expect(root.querySelector("[data-key=copy-sign-in]"), "and has no Copy for it").toBeNull();
   });
 
-  it("Copy on the sign-in code puts exactly that code on the clipboard, says Copied for two seconds, and the other Copy is untouched", async () => {
+  it("Copy puts exactly the device code on the clipboard, says Copied for two seconds, then Copy again", async () => {
     const { root, copied, timers } = await openScreens(WAITING);
-    tap(root, "copy-sign-in");
-    await settle();
-    expect(copied).toEqual(["WXYZ2345"]);
-    expect(control(root, "copy-sign-in").textContent).toBe("Copied");
-    expect(control(root, "copy-sign-in").getAttribute("aria-label")).toBe("Copied Sign-in code");
-    expect(control(root, "copy-device").textContent).toBe("Copy");
-    expect(timers.map((timer) => timer.ms)).toEqual([COPIED_FOR_MS]);
-    timers[0]!.run();
-    expect(control(root, "copy-sign-in").textContent).toBe("Copy");
-  });
-
-  it("Copy on the device code puts exactly that code on the clipboard, with the Copied wording", async () => {
-    const { root, copied } = await openScreens(WAITING);
     tap(root, "copy-device");
     await settle();
     expect(copied).toEqual(["AB12CD34EF"]);
     expect(control(root, "copy-device").textContent).toBe("Copied");
-    expect(control(root, "copy-sign-in").textContent).toBe("Copy");
+    expect(control(root, "copy-device").getAttribute("aria-label")).toBe("Copied Device code");
+    expect(timers.map((timer) => timer.ms)).toEqual([COPIED_FOR_MS]);
+    timers[0]!.run();
+    expect(control(root, "copy-device").textContent).toBe("Copy");
   });
 
-  it("a second copy while Copied shows moves Copied to its button and starts the two seconds again", async () => {
+  it("a second copy while Copied shows starts the two seconds again", async () => {
     const { root, copied, timers } = await openScreens(WAITING);
-    tap(root, "copy-sign-in");
+    tap(root, "copy-device");
     await settle();
     tap(root, "copy-device");
     await settle();
-    expect(copied).toEqual(["WXYZ2345", "AB12CD34EF"]);
+    expect(copied).toEqual(["AB12CD34EF", "AB12CD34EF"]);
     expect(timers.map((timer) => timer.stopped)).toEqual([true, false]);
-    expect([control(root, "copy-sign-in").textContent, control(root, "copy-device").textContent]).toEqual(["Copy", "Copied"]);
+    expect(control(root, "copy-device").textContent).toBe("Copied");
   });
 
   it("copying the selected code gives its characters with nothing between the boxes", async () => {
     const { root } = await openScreens(WAITING);
-    const device = root.querySelectorAll(".nx-code--read")[1]!;
+    const device = root.querySelector(".nx-code--read")!;
     expect(copyOf(device, "A\nB\n1\n2\nC\nD\n3\n4\nE\nF\n")).toBe("AB12CD34EF");
     // Nothing readable selected: the whole code.
     expect(copyOf(device, null)).toBe("AB12CD34EF");
   });
 
-  it("still shows the same words, and only the Copy buttons are new", async () => {
+  it("still shows the same words, and only the Copy button is new", async () => {
     const { root } = await openScreens(WAITING);
     expect(words(root).filter((word) => word !== "Copy")).toEqual([
       "nexus",
       "new device",
       "Waiting for approval.",
       "On a device that is already signed in, open Nexus settings and choose Approve a device. It will ask for this code.",
-      "Sign-in code",
-      ..."WXYZ2345",
       "Device code",
       ..."AB12CD34EF",
       "Waiting. The code works for 10 minutes.",
@@ -121,7 +111,7 @@ describe("the matching code on the approved screen (board 17)", () => {
 
 describe("a code that is typed, not read", () => {
   it("has no Copy button: the device code the approving device types is checked by being typed", async () => {
-    const { root } = await openScreens({ step: "approve-device", message: null, problem: null, device: { signInCode: "WXYZ-2345", label: "Work laptop" } });
+    const { root } = await openScreens({ step: "approve-device", message: null, problem: null });
     expect(buttons(root)).toEqual(["Cancel"]);
   });
 });
@@ -129,7 +119,7 @@ describe("a code that is typed, not read", () => {
 describe("closing the screens while Copied shows", () => {
   it("stops the two seconds, so nothing draws after it is gone", async () => {
     const { root, screens, timers } = await openScreens(WAITING);
-    tap(root, "copy-sign-in");
+    tap(root, "copy-device");
     await settle();
     screens.dispose();
     expect(timers.map((timer) => timer.stopped)).toEqual([true]);

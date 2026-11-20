@@ -3,7 +3,7 @@
 // never builds markup from what a device sent, and that the answers a browser check would give the page
 // (__fixtures__/approve-answers.ts) are the answers the real routes give. What the page does when the owner taps is
 // run against the real Worker in approval-page-actions.test.ts. What the page looks like on a screen (its layout, its
-// size on a phone, its colours in both looks) is checked nowhere: this package has no browser tests.
+// size on a phone, its colours) is checked by the browser spec in approve.spec.ts, not here: this package's own tests have no browser.
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { parseRules } from "./__fixtures__/css-rules";
@@ -138,6 +138,20 @@ describe("the page takes every colour from its own token variables", () => {
     const raw = sheets.flatMap(rawColours);
     for (const attribute of parts.styleAttributes) raw.push(...rawColours(`x { ${attribute} }`));
     expect(raw, "colours written out instead of taken from the token variables").toEqual([]);
+  });
+
+  it("has no dark set: the boards are drawn light only, so no stylesheet has a prefers-color-scheme block and the page asks for the light scheme alone", async () => {
+    const html = await openPage();
+    const parts = partsOf(html);
+    expect(parts.stylesheets.length).toBeGreaterThan(0);
+    for (const href of parts.stylesheets) {
+      const sheet = await fetchLinked(href);
+      expect(sheet, `${href} has a dark set`).not.toMatch(/prefers-color-scheme/i);
+      expect(sheet, `${href} asks the browser for a dark scheme`).not.toMatch(/color-scheme\s*:[^;]*dark/i);
+      expect(sheet, "the one scheme it asks for is light").toMatch(/color-scheme\s*:\s*light\s*;/i);
+    }
+    for (const css of parts.inlineStyles) expect(css).not.toMatch(/prefers-color-scheme/i);
+    expect(html, "the page's own meta tag").not.toMatch(/<meta\s+name="color-scheme"[^>]*dark/i);
   });
 
   it("reaches the token variables at all: its stylesheets read variables", async () => {

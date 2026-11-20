@@ -25,3 +25,12 @@ and a font is not sold on its own. The three licence texts sit beside the font f
 here needs its own licence text beside it, named in this table (`src/font-licences.test.ts` checks it). The page's route
 serves the three font files and nothing else in this folder, so these texts and this file are in the repository and in the
 assets, not at an address the page answers.
+
+## The plugin's copies
+
+The Obsidian plugin (`plugin/`) carries cut-down copies of the same three fonts, so its screens look as the boards do in an
+app that has none of them: each is cut to the weights and the Latin characters the screens use (`plugin/tools/embed-fonts.py`
+reads the files in this folder and writes them) and is written into `plugin/styles.css` as a base64 `@font-face`. Because a
+plugin is three files, the licence text of each typeface is written into `styles.css` too, unchanged, just after the rules
+(`plugin/tests/fonts.test.ts` checks that each text there is the text in this folder). Each copy keeps the copyright and licence
+records in its name table. A change to a text in this folder needs `plugin/tools/embed-fonts.py` run again.

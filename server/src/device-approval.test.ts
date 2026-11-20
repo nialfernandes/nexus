@@ -103,6 +103,7 @@ describe("the owner allows a sign-in and the device is handed its token once", (
 
     const second = await device().poll(sign.secret);
     expectRefusal(second, 410, "a second poll");
+    expect(second.body, "the device is told in the used code's words").toMatchObject({ error: "That code was already used.", reason: "used" });
     expect(second.text).not.toContain(first.token);
     expectRefusal(await device().poll(sign.secret), 410, "a third poll");
     expect(await tokensLabelled("lab-once"), "one sign-in, one token").toHaveLength(1);
@@ -176,7 +177,9 @@ describe("a code lasts ten minutes", () => {
     vi.setSystemTime(now + TEN_MINUTES + 1000);
     expectRefusal(await device(owner).pending(sign.code), 410, "opening an expired code");
     expectRefusal(await device(owner).approve(sign.code), 410, "allowing an expired code");
-    expectRefusal(await device().poll(sign.secret), 410, "polling an expired code");
+    const polled = await device().poll(sign.secret);
+    expectRefusal(polled, 410, "polling an expired code");
+    expect(polled.body, "the device is told in the ran-out words").toMatchObject({ error: "That code has run out.", reason: "expired" });
     expect(await tokensLabelled("lab-too-late")).toEqual([]);
   });
 
@@ -195,8 +198,8 @@ describe("a code lasts ten minutes", () => {
 });
 
 describe("a code that is gone says why", () => {
-  // The words and the status are the same for both (the page and the plugin read them); `reason` is what lets the approval
-  // page draw "code ran out" for one and "code used" for the other.
+  // The status is the same for both (the page and the plugin read it), and each has its own words and its own `reason`: the approval
+  // page draws "code ran out" for one and "code used" for the other, each in the words Nexus sent (boards 4 and 5).
   it("says used for a code that was allowed, one that was denied, and an answer that lost to another answer", async () => {
     const allowed = await started("lab-why-allowed");
     bodyOf(await device(owner).approve(allowed.code));
@@ -204,6 +207,7 @@ describe("a code that is gone says why", () => {
       const refused = await call;
       expectRefusal(refused, 410, "an allowed code");
       expect(refused.body?.reason).toBe("used");
+      expect(refused.body?.error, "its own words").toBe("That code was already used.");
     }
 
     const denied = await started("lab-why-denied");
@@ -211,12 +215,14 @@ describe("a code that is gone says why", () => {
     const refused = await device(owner).pending(denied.code);
     expectRefusal(refused, 410, "a denied code");
     expect(refused.body?.reason).toBe("used");
+    expect(refused.body?.error).toBe("That code was already used.");
 
     const racing = await started("lab-why-racing");
     const answers = await Promise.all([device(owner).approve(racing.code), device(owner).deny(racing.code)]);
     const lost = answers.filter((a) => a.status === 410);
     expect(lost, "one answer got in, the other lost").toHaveLength(1);
     expect(lost[0].body?.reason).toBe("used");
+    expect(lost[0].body?.error).toBe("That code was already used.");
   });
 
   it("says expired for a code nobody answered in ten minutes, and used again for one that was answered and then ran out", async () => {
@@ -232,11 +238,12 @@ describe("a code that is gone says why", () => {
       const refused = await call;
       expectRefusal(refused, 410, "an expired code");
       expect(refused.body?.reason).toBe("expired");
-      expect(refused.body?.error, "the words are the same as ever").toBe("That code has expired or has already been used.");
+      expect(refused.body?.error, "its own words, not the used code's").toBe("That code has run out.");
     }
     const gone = await device(owner).pending(answered.code);
     expectRefusal(gone, 410, "an answered code that ran out");
     expect(gone.body?.reason, "it was answered, so it is used").toBe("used");
+    expect(gone.body?.error, "and says so in the used code's words, not the ran-out ones").toBe("That code was already used.");
   });
 
   it("says nothing of the kind for a code nobody was given", async () => {

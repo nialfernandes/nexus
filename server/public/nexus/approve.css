@@ -1,15 +1,13 @@
-/* THE DEVICE APPROVAL PAGE'S STYLESHEET: a reset, the token variables (the light set as drawn, then the dark set the page
-   takes when the device is in dark mode), and the layout. Every colour, space, radius and font below the token blocks is
-   read from those tokens, and the page loads nothing from outside Nexus (the three typefaces are served beside it, in
-   fonts/). The look is docs/design/nexus boards 1 to 5 of the nialfernandes repository. Those boards are drawn light only:
-   the dark set is made from the estate's dark palette and is not drawn. A host that wants its own look changes the values
-   in the token blocks. */
+/* THE DEVICE APPROVAL PAGE'S STYLESHEET: a reset, the token variables (the light set as drawn), and the layout. Every colour,
+   space, radius and font below the token block is read from those tokens, and the page loads nothing from outside Nexus (the
+   three typefaces are served beside it, in fonts/). The look is docs/design/nexus boards 1 to 5 of the nialfernandes repository.
+   Those boards are drawn light only, and so is the page: it has no dark set, whatever the device's setting, until one is drawn.
+   A host that wants its own look changes the values in the token block. */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 button { font: inherit; cursor: pointer; }
 
-/* The typefaces, as files served to the owner with the page (page.ts lists them). The same address, so the owner's own
-   sign-in goes with each request. */
+/* The typefaces, as files served with the page, to whoever opens it (page.ts lists them). */
 @font-face {
   font-family: 'Unbounded';
   src: url('fonts/unbounded-var.woff2') format('woff2');
@@ -30,11 +28,11 @@ button { font: inherit; cursor: pointer; }
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Colours: the slab's teal, the ink, and the ground. Red and the grey circle are only for the answers that need them. */
   --slab:           #2fcdb8;
-  /* The words and the divider on the slab stay dark in both looks: the teal does not change. */
+  /* The words and the divider on the slab are dark ink on the teal. */
   --on-slab:        #0f1013;
   --slab-divider:   #0f101333;
   --ink:            #0f1013;
@@ -69,24 +67,6 @@ button { font: inherit; cursor: pointer; }
   /* The widest the page gets on a desktop, and the widest a card gets: the same screen, never a second design. */
   --page-max: 720px;
   --card-max: 420px;
-}
-
-/* The dark look: the estate's dark palette (paper 131418, 1d1f24, ink f0eee9, b8b8bc, alert ef4444). The teal slab and its dark
-   words are the same in both looks. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink:            #f0eee9;
-    --ink-soft:       #b8b8bc;
-    --on-ink:         #131418;
-    --ground:         #131418;
-    --card:           #1d1f24;
-    --code-box:       #131418;
-    --neutral-circle: #2c2f36;
-    --fault:          #ef4444;
-    --fault-soft:     #3a1d21;
-    --card-shadow:    #00000066;
-    --ink-outline:    #f0eee94d;
-  }
 }
 
 [hidden] { display: none !important; }

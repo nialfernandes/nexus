@@ -16,8 +16,7 @@ import { STYLES, box, boxes, buttons, control, isDim, openScreens, pasteInto, ta
 const KEY = ["A1B2", "C3D4", "E5F6", "G7H8", "J9K1", "M2N3", "P4Q5", "R6S7", "T8V9", "W1X2", "Y3Z4", "A5B6", "C7D8", "E9F1"];
 const KEY_TEXT = KEY.join("-");
 const CODE = "AB12CD34EF"; // a ten-character code, as typed or shown
-const SIGN_IN = "WXYZ-2345"; // a sign-in code as Nexus writes it
-const LABEL = "Work laptop";
+const SIGN_IN = "WXYZ-2345"; // a sign-in code as Nexus writes it: the controller holds it, no screen draws it
 const characters = (code: string): string[] => [...code.replace(/-/g, "")];
 
 const SHOW_KEY: SetupState = { step: "show-key", recoveryKey: KEY_TEXT, ask: [3, 8, 12], wrong: [], message: "shown once" };
@@ -235,23 +234,21 @@ describe("setup: done", () => {
 });
 
 describe("adding a device: the new device waits", () => {
-  it("shows the codes to read out, one sand-grey box per character grouped 4, 4, 2, a waiting line with a dot that does not pulse, and Cancel", async () => {
+  it("shows one code to read out, the device code, one sand-grey box per character grouped 4, 4, 2, with Copy, a waiting line with a dot that does not pulse, and Cancel", async () => {
     const { root } = await drawn("new-device-waiting", { step: "waiting-for-device", link: "https://nexus.example.com/nexus/api/approve", code: SIGN_IN, keyCode: "AB12C-D34EF" });
     expect(words(root)).toEqual([
       "nexus",
       "new device",
       "Waiting for approval.",
       "On a device that is already signed in, open Nexus settings and choose Approve a device. It will ask for this code.",
-      "Sign-in code",
-      "Copy",
-      ...characters(SIGN_IN),
       "Device code",
       "Copy",
       ...characters(CODE),
       "Waiting. The code works for 10 minutes.",
       "Cancel",
     ]);
-    const device = root.querySelectorAll(".nx-field")[1]!;
+    expect(root.querySelectorAll(".nx-field"), "the sign-in code is not drawn: one code, not two").toHaveLength(1);
+    const device = root.querySelector(".nx-field")!;
     expect([...device.querySelectorAll(".nx-code__group")].map((group) => group.querySelectorAll(".nx-box").length)).toEqual([4, 4, 2]);
     expect(device.querySelectorAll(".nx-box--read")).toHaveLength(10);
     expect(device.getAttribute("aria-label"), "the whole code is one label").toBe("Device code A B 1 2 C D 3 4 E F");
@@ -263,15 +260,15 @@ describe("adding a device: the new device waits", () => {
 
 describe("adding a device: the approving device", () => {
   const asking = (problem: Extract<SetupState, { step: "approve-device" }>["problem"], message: string | null = null): SetupState => ({
-    step: "approve-device", message, problem, device: { signInCode: SIGN_IN, label: LABEL },
+    step: "approve-device", message, problem,
   });
 
-  it("names the new device in the slab, as text, and asks for its device code in ten empty boxes with Cancel", async () => {
+  it("asks for the device code, and only that, in ten empty boxes with Cancel", async () => {
     const { root } = await drawn("approve-device", asking(null));
     expect(words(root)).toEqual([
       "nexus",
       "approve device",
-      LABEL,
+      "Type the device code.",
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
       "Device code",
       "Nothing is sent to the new device until the code is right.",
@@ -291,7 +288,7 @@ describe("adding a device: the approving device", () => {
     expect(words(root)).toEqual([
       "nexus",
       "approve device",
-      LABEL,
+      "Type the device code.",
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
       "Device code",
       ..."AB12CD34EX",
@@ -301,7 +298,7 @@ describe("adding a device: the approving device", () => {
   });
 
   it("shows the matching code to read out, tells the person not to use a device that does not accept it, and has Done", async () => {
-    const { root } = await drawn("approved", { step: "device-approved", code: "4TKP8-MXD2Q", label: LABEL });
+    const { root } = await drawn("approved", { step: "device-approved", code: "4TKP8-MXD2Q", label: "Work laptop" });
     expect(words(root)).toEqual([
       "nexus",
       "approved",

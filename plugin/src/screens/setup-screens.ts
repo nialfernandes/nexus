@@ -36,7 +36,6 @@ const CODE_MINUTES = 10;
 const KEY_GROUPS = 14;
 const GROUP_SIZE = 4;
 const CODE_BOXES = 10;
-const SIGN_IN_BOXES = 8;
 
 /** The words on the screens. */
 export const WORDS = {
@@ -97,14 +96,12 @@ export const WORDS = {
     title: "new device",
     line: "Waiting for approval.",
     text: "On a device that is already signed in, open Nexus settings and choose Approve a device. It will ask for this code.",
-    signInCode: "Sign-in code",
     deviceCode: "Device code",
     status: `Waiting. The code works for ${CODE_MINUTES} minutes.`,
   },
   approve: {
     title: "approve device",
-    signInLine: "Type the sign-in code first.",
-    signInText: "The new device shows a sign-in code and a device code. Type the sign-in code first.",
+    line: "Type the device code.",
     text: "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
     nothingSent: "Nothing is sent to the new device until the code is right.",
     wrongCode: "That is not the code on the new device, so nothing was sent. Read it again from its screen. If it keeps failing, cancel and start again on the new device.",
@@ -170,10 +167,10 @@ export const WORDS = {
 } as const;
 
 /** The ids of the code fields, which tell their boxes apart. */
-const FIELD = { typeBack: "type-back", signIn: "sign-in", device: "device", matching: "matching", key: "recovery-key" } as const;
+const FIELD = { typeBack: "type-back", device: "device", matching: "matching", key: "recovery-key" } as const;
 /** The keys of the Copy buttons: the Recovery Key's, and one for each code that is read out. */
 const COPY_KEY = "copy";
-const COPY_CODE = { signIn: "copy-sign-in", device: "copy-device", matching: "copy-matching" } as const;
+const COPY_CODE = { device: "copy-device", matching: "copy-matching" } as const;
 /** The ids of the other things the caret is put back in after a screen draws itself anew. */
 const KEY = { password: "password", again: "again", unlockPassword: "unlock-password" } as const;
 
@@ -199,7 +196,6 @@ export class SetupScreens {
   #password = "";
   #again = "";
   // Approving a device.
-  readonly #signIn = new CodeEntry(Array(SIGN_IN_BOXES).fill(1));
   readonly #deviceCode = new CodeEntry(Array(CODE_BOXES).fill(1));
   // A new device typing the matching code.
   readonly #matching = new CodeEntry(Array(CODE_BOXES).fill(1));
@@ -238,7 +234,6 @@ export class SetupScreens {
     this.#stopCopied?.();
     this.#deps.setup.cancel();
     this.#typeBack.clear();
-    this.#signIn.clear();
     this.#deviceCode.clear();
     this.#matching.clear();
     this.#recoveryKey.clear();
@@ -288,12 +283,8 @@ export class SetupScreens {
         }
         break;
       case "approve-device":
-        if (isNew) {
-          this.#signIn.clear();
-          this.#deviceCode.clear();
-        }
-        if (state.device === null && state.problem !== null && state.problem !== "not-allowed") this.#signIn.wrong = true;
-        if (state.problem === "wrong-key-code") this.#deviceCode.wrong = true;
+        if (isNew) this.#deviceCode.clear();
+        if (state.problem !== null && state.problem !== "not-allowed") this.#deviceCode.wrong = true;
         break;
       case "type-matching-code":
         if (isNew) this.#matching.clear();
@@ -358,7 +349,7 @@ export class SetupScreens {
       case "device-unlocked":
         return this.#unlockedScreen();
       case "approve-device":
-        return state.problem === "not-allowed" ? this.#notAllowedScreen() : state.device === null ? this.#signInCodeScreen(state.message) : this.#deviceCodeScreen(state);
+        return state.problem === "not-allowed" ? this.#notAllowedScreen() : this.#deviceCodeScreen(state);
       case "device-approved":
         return this.#approvedScreen(state);
       case "has-vault":
@@ -567,7 +558,6 @@ export class SetupScreens {
       w.line,
       card(
         text(w.text),
-        this.#readCode(w.signInCode, state.code, COPY_CODE.signIn),
         this.#readCode(w.deviceCode, state.keyCode, COPY_CODE.device),
         el("div", { class: "nx-status" }, el("span", { class: "nx-status__dot" }), small(w.status)),
         actions(pill(WORDS.buttons.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
@@ -575,29 +565,11 @@ export class SetupScreens {
     );
   }
 
-  #signInCodeScreen(message: string | null): HTMLElement {
-    const w = WORDS.approve;
-    return screen(
-      w.title,
-      w.signInLine,
-      card(
-        text(w.signInText),
-        codeField(
-          { id: FIELD.signIn, name: WORDS.waiting.signInCode, entry: this.#signIn, onEdit: (edit) => this.#edited(FIELD.signIn, this.#signIn.complete ? () => this.#run(this.#deps.setup.lookUpDevice(this.#signIn.text)) : null)(edit) },
-          WORDS.waiting.signInCode,
-        ),
-        message !== null && this.#signIn.wrong ? faultLine(message) : small(w.nothingSent),
-        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
-      ),
-    );
-  }
-
   #deviceCodeScreen(state: Extract<SetupState, { step: "approve-device" }>): HTMLElement {
     const w = WORDS.approve;
-    const device = state.device!;
     return screen(
       w.title,
-      device.label,
+      w.line,
       card(
         text(w.text),
         codeField(
@@ -605,7 +577,7 @@ export class SetupScreens {
             id: FIELD.device,
             name: WORDS.waiting.deviceCode,
             entry: this.#deviceCode,
-            onEdit: (edit) => this.#edited(FIELD.device, this.#deviceCode.complete ? () => this.#run(this.#deps.setup.approveDevice(device.signInCode, this.#deviceCode.text)) : null)(edit),
+            onEdit: (edit) => this.#edited(FIELD.device, this.#deviceCode.complete ? () => this.#run(this.#deps.setup.approveDevice(this.#deviceCode.text)) : null)(edit),
           },
           WORDS.waiting.deviceCode,
         ),

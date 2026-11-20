@@ -33,7 +33,7 @@
 //                                                 `deviceKey` is the device's X25519 public key, for an approval to be sealed to
 //   GET  device/pending ?code=C                   the owner only
 //       200 { code, identity, label, expiresAt, deviceKey }  what the approval page shows (`deviceKey` is null when none was sent)
-//       404 no such code        410 { error, reason } the code has expired (`reason` "expired"), or has been allowed or denied already ("used")
+//       404 no such code        410 { error, reason } the code ran out ("That code has run out.", `reason` "expired"), or was allowed or denied already ("That code was already used.", "used")
 //   GET  device/waiting [?code=C]                 the owner only: the sign-ins still waiting for an answer (not answered, not run out)
 //       200 { signins: [ { label, code } ] }      oldest first; nothing secret is in it. With `code`, only the sign-in that code is, whatever its
 //                                                 capitals, spaces and dash (the code as a person types it); an empty list when none is

@@ -2,7 +2,7 @@
 // first device, a second device, and an agent.
 //
 //   Device A runs the first-run setup (the Recovery Key is shown; three of its groups are typed back wrong, then right; no password) and syncs two
-//   notes. Device B is new: it asks to be approved, A approves it with both codes typed (the key code on A, the matching code on B), B
+//   notes. Device B is new: it asks to be approved, A approves it with one code typed on A (the device code) and the matching code typed on B, B
 //   unlocks and syncs the two notes. A approves an agent from the agent's public key, and the approval A shows opens in packages/agent,
 //   which reads A's notes. Then A locks: its engine says the vault is locked and syncs nothing.
 
@@ -55,14 +55,14 @@ describe("the setup controller, worked through", () => {
     );
     expect(onNexus.sort(), "opened with the key A made").toEqual(["Ideas/one.md", "Ideas/two.md"]);
 
-    // ── device B: approved from A, with both codes typed ───────────────────────
+    // ── device B: approved from A, with the device code typed ───────────────────────
     const b = await setupDevice(world, { token: null, name: "Device B" });
     let matching = "";
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
-      const waiting = at(b, "waiting-for-device"); // B shows the link, the sign-in code and the key code
+      const waiting = at(b, "waiting-for-device"); // B shows the link and its device code
       a.setup.startApprovingDevice();
-      await a.setup.approveDevice(waiting.code, waiting.keyCode); // the key code is typed on A
+      await a.setup.approveDevice(waiting.keyCode); // the device code is the one code typed on A
       matching = at(a, "device-approved").code; // A shows the matching code
     };
     await b.setup.askAnotherDevice();

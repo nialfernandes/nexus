@@ -177,7 +177,7 @@ describe("a vault exists and this device has the Recovery Key", () => {
 });
 
 describe("a new device approved from another", () => {
-  it("waits, shows the link, the sign-in code and the key code, and is unlocked once the matching code the approving device shows is typed", async () => {
+  it("waits, shows the link and the device code, and is unlocked once the matching code the approving device shows is typed", async () => {
     const { device: a } = await firstRun(world, { files: { "Ideas/one.md": "first\n", "Ideas/two.md": "second\n" }, name: "Device A" });
     await a.engine.sync();
 
@@ -193,8 +193,8 @@ describe("a new device approved from another", () => {
       expect(b.opened, "the link was opened in a browser").toEqual([waiting.link]);
       expect(waiting.keyCode).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
       a.setup.startApprovingDevice();
-      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null, device: null });
-      await a.setup.approveDevice(waiting.code, waiting.keyCode);
+      expect(a.setup.state).toEqual({ step: "approve-device", message: null, problem: null });
+      await a.setup.approveDevice(waiting.keyCode);
       const approved = at(a, "device-approved");
       expect(approved.label).toBe("New phone");
       matching = approved.code;
@@ -227,7 +227,7 @@ describe("a new device approved from another", () => {
       if (pause !== 1) return;
       const waiting = at(b, "waiting-for-device");
       a.setup.startApprovingDevice();
-      await a.setup.approveDevice(waiting.code, waiting.keyCode);
+      await a.setup.approveDevice(waiting.keyCode);
       matching = at(a, "device-approved").code;
     };
     await b.setup.askAnotherDevice();

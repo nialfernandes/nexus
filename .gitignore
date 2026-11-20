@@ -1,1 +1,4 @@
 node_modules/
+# What a Playwright run of the browser spec leaves behind.
+server/test-results/
+server/playwright-report/

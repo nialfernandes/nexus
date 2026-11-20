@@ -150,9 +150,8 @@ the file names every state and every event in plain words. It covers:
   When Nexus holds a password wrap, the password opens it the same way.
 - **A new device, approved from another.** The two-code exchange below, as states:
   waiting, type the matching code, unlocked or refused.
-- **This device approves another device,** with the sign-in code and the key code
-  typed here. The sign-in code is looked up first, so the person is shown which device
-  they are approving.
+- **This device approves another device,** with the device code typed here, and nothing
+  else: the one code the new device shows. This device finds the new device from it.
 - **This device approves an agent.** The person pastes the agent's public key, and
   the controller seals the vault key to it and shows the approval, for the person to save beside the agent's
   private key. It is the same text `nexus-agent approve-agent` prints, so either can be used, and it is never sent through Nexus.
@@ -180,8 +179,13 @@ Encryption row of the settings tab, and the commands of the same names.
 
 They are shown in Obsidian's own modal, on a phone and on a desktop, and are styled by `styles.css`, which
 writes every colour, radius and size once, as a token, at its top. The type faces they are drawn in
-(Unbounded, Instrument Sans and JetBrains Mono) are not bundled: where a reader's device has none, the
-system's type is used.
+(Unbounded, Instrument Sans and JetBrains Mono) are written into `styles.css` as base64 `@font-face` rules, so
+the screens look as drawn on a device that has none of them. Each is cut down to the weights and the Latin letters
+the screens use (about 41 KB of font files in all, 55 KB as base64), and its licence (the SIL Open Font License
+1.1, with its copyright line) is written beside it in the same file, because the licence asks that it travels with
+the font and a plugin is three files. The fonts are the ones the approval page serves, in
+`server/public/nexus/fonts`; `python3 plugin/tools/embed-fonts.py` (needs `pip install fonttools brotli`) writes
+the block again, and only the block, if a font or a weight changes. `styles.css` is 86 KB with them, 15 KB before.
 
 ## Giving a new device the vault key
 
@@ -190,10 +194,11 @@ above draw. A device that holds the vault key can approve a new one, so that the
 unlocks the vault with no Recovery Key typed.
 
 - The new device makes a key pair of its own for the attempt, keeps the private half in memory only,
-  and asks to be signed in with its public key. It shows a **key code** for that key.
-- The approving device is unlocked and signed in as the owner. The person types the new device's sign-in
-  code, which finds the device, and then its key code on it. It refuses to go on unless that is the code of the key Nexus gave it, so a server that
-  swapped the new device's key for its own is not sent the vault key. Otherwise it seals the vault key to the
+  and asks to be signed in with its public key. It shows one code, its **device code**, which is the code of that key.
+- The approving device is unlocked and signed in as the owner. The person types the device code, and only that. This device asks
+  Nexus which sign-ins are waiting and for the public key of each, works out each key's code itself, and takes the sign-in whose
+  key has the code typed. It goes on only if there is one, so a server that swapped the new device's key for its own is not sent the
+  vault key: the swapped key has another code. Otherwise it seals the vault key to the
   new device's key and leaves that with Nexus, which cannot open it, hands it over once and deletes it.
   The approving device shows a **matching code**.
 - The new device works out the matching code from both devices' keys and what it was handed. It uses nothing

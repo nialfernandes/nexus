@@ -61,7 +61,23 @@ describe("the owner secret in the header", () => {
     for (const local of ["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"]) {
       expect((await raw(`${local}${path}`, { [OWNER_SECRET_HEADER]: OWNER_SECRET })).status, local).toBe(200);
     }
-    expect((await raw(`http://nexus.example.test${path}`, { cookie: ownerCookie })).status, "the cookie is as it was").toBe(200);
+  });
+
+  it("is taken over https only in the cookie too: the owner's cookie over plain http to another host is no credential, at a loopback address it is", async () => {
+    const path = `${API}/tokens`;
+    expect((await raw(`https://nexus.example.test${path}`, { cookie: ownerCookie })).status, "the cookie over https").toBe(200);
+    const plain = await raw(`http://nexus.example.test${path}`, { cookie: ownerCookie });
+    expect(plain.status, "the cookie over plain http to another host").toBe(401);
+    expect(plain.text).not.toContain(OWNER_SECRET);
+    expect((await raw(`http://192.168.1.20:8787${path}`, { cookie: ownerCookie })).status, "nor to a network address").toBe(401);
+    for (const local of ["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"]) {
+      expect((await raw(`${local}${path}`, { cookie: ownerCookie })).status, local).toBe(200);
+    }
+    // Nothing the owner can do is done with it over plain http: a sign-in stays waiting.
+    const sign = bodyOf(await device().start("agents", "lab-cookie-plain-http"));
+    const refused = await raw(`http://nexus.example.test${API}/device/approve`, { cookie: ownerCookie }, "POST", { code: sign.code });
+    expect(refused.status).toBe(401);
+    expect(bodyOf(await device().poll(sign.secret)), "nothing was allowed").toMatchObject({ status: "pending" });
   });
 
   it("is kept nowhere: no cookie is set, it is not in any answer, and it is in no row of the database", async () => {

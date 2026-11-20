@@ -35,7 +35,7 @@ export function installDom(): () => void {
 /** Every event name the screens may send the controller. */
 const EVENTS = [
   "begin", "startFirstRun", "typeBack", "backToKey", "finishSetup", "tryAgain", "typeRecoveryKey", "typePassword", "askAnotherDevice",
-  "typeMatchingCode", "refuseCode", "startApprovingDevice", "lookUpDevice", "approveDevice", "startApprovingAgent", "approveAgent", "done", "cancel", "lock",
+  "typeMatchingCode", "refuseCode", "startApprovingDevice", "approveDevice", "startApprovingAgent", "approveAgent", "done", "cancel", "lock",
 ] as const;
 type EventName = (typeof EVENTS)[number];
 

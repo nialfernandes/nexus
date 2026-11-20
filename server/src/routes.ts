@@ -36,7 +36,7 @@
 //   POST /device/deny    { code }                      owner only
 //
 // WHO IS CALLING. The owner's session (the host's sign-in plug, ports.ts) is the identity named by the `owner`
-// setting: on Cloudflare, a cookie or, for the approval page, a header, each holding the owner secret (plugs/cloudflare/signin.ts). A header `Authorization: Bearer <token>` is the identity the token was made for. Both missing, a token Nexus does not know, a revoked one, and a header that is
+// setting: on Cloudflare, a cookie or, for the approval page, a header, each holding the owner secret and each taken over https or at a loopback address only (plugs/cloudflare/signin.ts). A header `Authorization: Bearer <token>` is the identity the token was made for. Both missing, a token Nexus does not know, a revoked one, and a header that is
 // not a Bearer one are all 401, before any route runs. Only the two device routes a device itself calls (start and
 // poll) need no credential: a device has none yet.
 //

@@ -21,6 +21,13 @@ const NAME = new RegExp(['ni', 'al'].join(''), 'i');
 const SKIPPED_FOLDERS = new Set(['node_modules', 'dist']);
 const SKIPPED_FILES = new Set(['main.js']);
 
+/**
+ * A line without the base64 text of an embedded font (styles.css carries the three typefaces as `data:font/woff2;base64,...`). Like the
+ * bundle's WebAssembly, that text is not the plugin's writing, and a search for a name in any case finds letters of it by chance. Everything
+ * else on the line, and every other line of the stylesheet, is still searched.
+ */
+const withoutBase64 = (line: string): string => line.replace(/base64,[A-Za-z0-9+/=]{40,}/g, 'base64,');
+
 /** Every file under `folder`, as a path from the plugin's folder. */
 function filesUnder(folder: string): string[] {
   return readdirSync(folder).flatMap((entry) => {
@@ -45,7 +52,7 @@ describe('the plugin folder', () => {
     const hits = files.flatMap((file) =>
       readFileSync(path.join(PLUGIN, file), 'utf8')
         .split('\n')
-        .flatMap((line, index) => (NAME.test(line) ? [`${file}:${index + 1}: ${line.trim().slice(0, 80)}`] : [])),
+        .flatMap((line, index) => (NAME.test(withoutBase64(line)) ? [`${file}:${index + 1}: ${line.trim().slice(0, 80)}`] : [])),
     );
     expect(hits).toEqual([]);
   });
@@ -69,5 +76,13 @@ describe('the plugin folder', () => {
       const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((url) => !/^https?:\/\/(?:[a-z]+\.)?example\.com(?:\/|$)/.test(url) && url !== 'http://www.w3.org/2000/svg');
       expect(urls, `${file} holds no address of a real server`).toEqual([]);
     }
+  });
+});
+
+describe('the search for a name', () => {
+  it('skips the base64 text of an embedded font, and nothing else on the line', () => {
+    const font = `src: url(data:font/woff2;base64,${'A'.repeat(20)}${['ni', 'al'].join('')}${'B'.repeat(20)}) format("woff2");`;
+    expect(NAME.test(withoutBase64(font))).toBe(false);
+    expect(NAME.test(withoutBase64(`/* ${['Ni', 'al'].join('')} */ ${font}`)), 'a name beside the font text is still found').toBe(true);
   });
 });

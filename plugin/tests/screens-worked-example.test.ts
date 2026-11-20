@@ -5,8 +5,8 @@
 //
 //   Device A is a first run: the start screen, the Recovery Key shown once and saved, three groups typed back (wrong, then right), no
 //   password, done. A's engine then syncs a note.
-//   Device B is new: it asks another to approve it and shows its two codes. A opens the approving screens, types B's sign-in code, sees
-//   B's name, types B's device code (wrong, then right) and is shown the matching code. B types the matching code (wrong, which opens
+//   Device B is new: it asks another to approve it and shows one code, its device code. A opens the approving screens and types that code
+//   and nothing else (wrong, then right) and is shown the matching code. B types the matching code (wrong, which opens
 //   nothing, then right), and its engine syncs A's note.
 //   Device C joins with the password A set up.
 
@@ -132,23 +132,20 @@ describe("the setup screens, from the person's side", () => {
     let approving: ReturnType<typeof screensFor> | null = null;
     const walkToA = async (pause: number): Promise<void> => {
       if (pause !== 1) return;
-      // B shows the link, the sign-in code and the device code.
+      // B shows one code to read out, its device code, and Copy beside it: no sign-in code.
       expect(title(second.root)).toBe("new device");
-      const signIn = shownCode(second.root, "Sign-in code");
       const device = shownCode(second.root, "Device code");
-      expect(signIn).toHaveLength(8);
       expect(device).toHaveLength(10);
-      expect(second.root.querySelectorAll("input"), "the codes are only shown on B").toHaveLength(0);
+      expect(second.root.textContent, "the sign-in code is not on B's screen").not.toContain("Sign-in code");
+      expect(second.root.querySelectorAll("input"), "the code is only shown on B").toHaveLength(0);
 
-      // A opens the approving screens and types B's codes.
+      // A opens the approving screens and types B's device code, and nothing before it.
       approving = screensFor(a);
       await approving.screens.start("approve");
       const there = approving.root;
       expect(title(there)).toBe("approve device");
-      typeInto(there, "sign-in", signIn);
-      await until("B's name", () => (a.setup.state as { device?: unknown }).device !== undefined && (a.setup.state as { device: unknown }).device !== null);
-      expect(line(there), "A is told which device it is approving, as text").toBe("New phone");
       expect(boxes(there, "device")).toHaveLength(10);
+      expect(boxes(there, "sign-in"), "A is not asked for a sign-in code").toHaveLength(0);
 
       const wrong = `${device.slice(0, 9)}${device[9] === "Z" ? "Y" : "Z"}`;
       typeInto(there, "device", wrong);
@@ -210,7 +207,7 @@ describe("the setup screens, from the person's side", () => {
     a.deps.data.token = await world.tokenFor("agents", "not the owner");
     const { screens, root } = screensFor(a);
     await screens.start("approve");
-    typeInto(root, "sign-in", "ABCDEFGH");
+    typeInto(root, "device", "ABCDE12345");
     await until("not allowed", () => (a.setup.state as { problem?: unknown }).problem === "not-allowed");
     expect(title(root)).toBe("not allowed");
     expect(buttons(root)).toEqual(["Close"]);

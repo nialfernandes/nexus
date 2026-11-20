@@ -2,17 +2,18 @@
 // with no Recovery Key typed. This file is the engine of that exchange, both halves of it. The setup controller (vault-setup.ts) drives it, and the screens in src/screens draw that.
 //
 //   THE NEW DEVICE (`signInForKey`). It makes an X25519 key pair for this attempt, keeps the private half in memory only, and
-//   asks Nexus for a sign-in with the public half. It shows the person the link, the sign-in code and a KEY CODE (a short code
-//   of its own public key). When the owner's device allows it, the first poll hands over the token and the approval: the vault key
+//   asks Nexus for a sign-in with the public half. It shows the person the link and a DEVICE CODE (a short code of its own
+//   public key, the key code); the person types that code, and only that, on the approving device. When the owner's device allows it, the first poll hands over the token and the approval: the vault key
 //   sealed to the device's public key. The device opens the approval, works out a MATCHING CODE from both devices' public
 //   keys and the sealed bytes, and then holds everything back. It uses nothing from the approval (no key, not even the token)
 //   until the person types, on this device, the matching code the approving device shows, and `confirm` finds it is the same.
 //
-//   THE APPROVING DEVICE (`approveDevice`). It is unlocked. The person has read the key code off the new device and types it
-//   here. Nexus told this device the new device's public key, and Nexus cannot be trusted with that: a key of its own put
-//   in its place would be sent the vault key. So this device works out the key code of the key it was given, and seals
-//   nothing unless it is the one the person typed. Then it seals the vault key to that key, with the vault id and the kid,
-//   and sends the approval with the allow, and a public key of its own for this approval. It shows the person the matching code.
+//   THE APPROVING DEVICE (`approveDevice`). It is unlocked. The person has read the DEVICE CODE (the key code) off the new device and
+//   types only that here. Nexus is asked which sign-ins are waiting (GET /device/waiting) and, for each, for the public key it was
+//   given. Nexus cannot be trusted with those keys: a key of its own put in a new device's place would be sent the vault key. So this
+//   device works out the key code of every key it was given itself and takes the sign-in whose key has the code the person typed, and
+//   seals nothing if there is none. Then it seals the vault key to that key, with the vault id and the kid, and sends the approval with
+//   the allow, and a public key of its own for this approval. It shows the person the matching code.
 //
 // What a hostile server can and cannot do (docs/FORMAT.md section 7.4): it cannot get the vault key by swapping the new
 // device's key (the approving device refuses); it cannot get a device to use a key of its own by making or swapping an
@@ -154,7 +155,7 @@ export const UNREACHABLE = "Nexus could not be reached. Check you are online.";
 /** Why a device could not be approved, in words a person can read. `reason` is for a screen that wants to act on it. */
 export class ApprovalError extends Error {
   constructor(
-    readonly reason: "locked" | "signed-out" | "not-set-up" | "unreachable" | "no-such-code" | "gone" | "not-allowed" | "no-key" | "wrong-key-code" | "refused",
+    readonly reason: "locked" | "signed-out" | "not-set-up" | "unreachable" | "no-such-code" | "gone" | "not-allowed" | "wrong-key-code" | "refused",
     message: string,
   ) {
     super(message);
@@ -186,16 +187,6 @@ const body = (response: HttpResponse): any => {
 
 type Call = (request: Parameters<Http>[0]) => Promise<HttpResponse>;
 
-/**
- * A sign-in code as Nexus writes it (four characters, a hyphen, four), from what a person typed: capitals or small letters, a hyphen,
- * spaces or none do not matter, and O reads as 0, I and L as 1 (Nexus's codes use none of those letters). Text that is not eight
- * characters is handed back as it was, trimmed, for Nexus to say it has no such sign-in.
- */
-export function readSignInCode(typed: string): string {
-  const symbols = typed.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
-  return symbols.length === 8 ? `${symbols.slice(0, 4)}-${symbols.slice(4)}` : typed.trim();
-}
-
 /** What Nexus says about a sign-in that waits to be approved. */
 interface PendingSignIn {
   label: string;
@@ -221,48 +212,74 @@ function approverCalls(deps: ApproveDeps): { keys: NonNullable<ReturnType<Unlock
   return { keys, base, call };
 }
 
-/** Asks Nexus which device is waiting under `signInCode`. */
+/** Asks Nexus about the sign-in under `signInCode`. Throws a "no-such-code" or "gone" ApprovalError when it is not there or has run out. */
 async function askWhatIsPending(base: string, call: Call, signInCode: string): Promise<PendingSignIn> {
   const found = await call({ url: `${base}/device/pending?code=${encodeURIComponent(signInCode)}`, method: "GET" });
   const pending = body(found);
   if (found.status === 404) throw new ApprovalError("no-such-code", "Nexus has no sign-in with that code.");
-  if (found.status === 410) throw new ApprovalError("gone", "That sign-in has run out or was answered already. Start it again on the new device.");
-  if (found.status === 401 || found.status === 403) throw new ApprovalError("not-allowed", "Only the owner can approve a device.");
+  if (found.status === 410) throw new ApprovalError("gone", GONE);
+  if (found.status === 401 || found.status === 403) throw new ApprovalError("not-allowed", NOT_OWNER);
   if (found.status !== 200) throw new ApprovalError("refused", typeof pending.error === "string" ? pending.error : "Nexus would not show that sign-in.");
   const deviceKey = typeof pending.deviceKey === "string" ? decodeBase64(pending.deviceKey) : null;
   return { label: typeof pending.label === "string" ? pending.label : "", deviceKey: deviceKey !== null && deviceKey.length === 32 ? deviceKey : null };
 }
 
-/**
- * Asks Nexus which device waits under `signInCode` and answers the label it sent, to show the person which device is being approved.
- * Sends nothing that could carry the key. Throws an ApprovalError as `approveDevice` does.
- */
-export async function findPendingDevice(deps: ApproveDeps, signInCode: string): Promise<{ label: string; signInCode: string }> {
-  const { base, call } = approverCalls(deps);
-  const code = readSignInCode(signInCode);
-  const { label } = await askWhatIsPending(base, call, code);
-  return { label, signInCode: code };
+/** What is said when no waiting device has the code that was typed (or what was typed is not a code): the same words either way, and nothing was sent. */
+const NO_DEVICE_HAS_THAT_CODE = "No device that is waiting has that code, so nothing was sent. Check the code on the new device, and try again.";
+const GONE = "That sign-in has run out or was answered already. Start it again on the new device.";
+const NOT_OWNER = "Only the owner can approve a device.";
+
+/** The sign-in a device code belongs to, as the approving device found it: never taken from Nexus's word, only from the key itself. */
+interface FoundDevice {
+  signInCode: string;
+  label: string;
+  deviceKey: Uint8Array;
 }
 
 /**
- * Approves the sign-in with `signInCode` (what the new device showed with its link) and leaves it the vault key. `typedKeyCode`
- * is what the person read off the new device's screen: the key code of the public key the new device made.
- * Throws an ApprovalError, with nothing sent that could carry the key, when this device is locked or signed out, when Nexus
- * has no such sign-in, or when the key Nexus gave this device is not the one the person's code is for.
+ * Finds the waiting sign-in whose public key has the key code `deviceCode` (as `readApprovalCode` wrote it). Nexus lists what waits
+ * (GET /device/waiting: label and sign-in code, nothing secret) and gives each sign-in's public key (GET /device/pending). The code is
+ * worked out here from each key, so Nexus is believed about nothing but which sign-ins exist: a key it swapped in has another code and
+ * is never taken. A sign-in that sent no key cannot be found this way, and one that ran out while the list was read is passed over.
+ * Answers null when no waiting device has that code.
  */
-export async function approveDevice(deps: ApproveDeps, typedSignInCode: string, typedKeyCode: string): Promise<Approved> {
+async function findByDeviceCode(base: string, call: Call, deviceCode: string): Promise<FoundDevice | null> {
+  const listed = await call({ url: `${base}/device/waiting`, method: "GET" });
+  const said = body(listed);
+  if (listed.status === 401 || listed.status === 403) throw new ApprovalError("not-allowed", NOT_OWNER);
+  if (listed.status !== 200) throw new ApprovalError("refused", typeof said.error === "string" ? said.error : "Nexus would not say which devices are waiting.");
+  const signins: unknown[] = Array.isArray(said.signins) ? said.signins : [];
+  for (const entry of signins) {
+    const signInCode = typeof (entry as { code?: unknown })?.code === "string" ? (entry as { code: string }).code : null;
+    if (signInCode === null) continue;
+    let pending: PendingSignIn;
+    try {
+      pending = await askWhatIsPending(base, call, signInCode);
+    } catch (error) {
+      if (error instanceof ApprovalError && (error.reason === "no-such-code" || error.reason === "gone")) continue;
+      throw error;
+    }
+    if (pending.deviceKey !== null && (await deviceKeyCode(pending.deviceKey)) === deviceCode) {
+      return { signInCode, label: pending.label, deviceKey: pending.deviceKey };
+    }
+  }
+  return null;
+}
+
+/**
+ * Approves the new device that shows `typedDeviceCode` and leaves it the vault key. The person read that code off the new device's own
+ * screen and types nothing else: it is the key code of the public key the new device made, and it finds the sign-in too.
+ * Throws an ApprovalError, with nothing sent that could carry the key, when this device is locked or signed out, when no waiting
+ * device has that code (what was typed is not a code, or Nexus has no sign-in whose key it is, or Nexus gave a key that is not the one
+ * the person's code is for), or when Nexus refuses.
+ */
+export async function approveDevice(deps: ApproveDeps, typedDeviceCode: string): Promise<Approved> {
   const { keys, base, call } = approverCalls(deps);
-  const signInCode = readSignInCode(typedSignInCode);
-  const pending = await askWhatIsPending(base, call, signInCode);
-  const deviceKey = pending.deviceKey;
-  if (deviceKey === null) {
-    throw new ApprovalError("no-key", "That device did not ask to be sent a key, so it can be allowed, but it cannot be given the vault key this way.");
-  }
-  // Nexus gave this device that key. Only a person who read the code off the new device's own screen can say it is the new device's.
-  const typed = readApprovalCode(typedKeyCode);
-  if (typed === null || typed !== (await deviceKeyCode(deviceKey))) {
-    throw new ApprovalError("wrong-key-code", "The code does not match the key Nexus gave this device, so nothing was sent. Check the code on the new device, and try again.");
-  }
+  const typed = readApprovalCode(typedDeviceCode);
+  if (typed === null) throw new ApprovalError("wrong-key-code", NO_DEVICE_HAS_THAT_CODE);
+  const found = await findByDeviceCode(base, call, typed);
+  if (found === null) throw new ApprovalError("wrong-key-code", NO_DEVICE_HAS_THAT_CODE);
+  const { signInCode, deviceKey } = found;
 
   const sealed = await sealApproval(deviceKey, keys.vaultKey, { vaultId: keys.vaultId, kid: keys.kid });
   // A key pair for this approval alone: only its public half is used, to tie the code to this approval, and the private half is dropped.
@@ -278,9 +295,9 @@ export async function approveDevice(deps: ApproveDeps, typedSignInCode: string, 
   });
   if (answered.status !== 200) {
     const said = body(answered);
-    if (answered.status === 410) throw new ApprovalError("gone", "That sign-in has run out or was answered already. Start it again on the new device.");
-    if (answered.status === 401 || answered.status === 403) throw new ApprovalError("not-allowed", "Only the owner can approve a device.");
+    if (answered.status === 410) throw new ApprovalError("gone", GONE);
+    if (answered.status === 401 || answered.status === 403) throw new ApprovalError("not-allowed", NOT_OWNER);
     throw new ApprovalError("refused", typeof said.error === "string" ? said.error : "Nexus would not take the approval.");
   }
-  return { code, label: pending.label };
+  return { code, label: found.label };
 }

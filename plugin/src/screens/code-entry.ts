@@ -1,5 +1,5 @@
 // What a code field is, with no look and no element: a row of boxes, each holding up to `capacities[i]` characters, typed into one at a
-// time or pasted into all at once. A code is one box per character (the sign-in code, the device code, the matching code, the three
+// time or pasted into all at once. A code is one box per character (the device code, the matching code, the three
 // groups of the Recovery Key that are typed back), and the Recovery Key itself is one box per group of four. Typing the last character,
 // or pasting the whole code into any box, is a complete entry: the screen then asks the controller to check it, so there is no button.
 //
