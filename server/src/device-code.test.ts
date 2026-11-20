@@ -50,13 +50,12 @@ describe("the code the page shows for a new device", () => {
     expect(asked.deviceKey).toBeNull();
   });
 
-  it("is not in the list of sign-ins waiting: that list is only the label and the sign-in's code", async () => {
+  it("is not in the list of sign-ins waiting: that list has the key, which anyone can work the code out from, and not the code", async () => {
     const sign = await startedAs("lab-list-no-key-code", PINNED_KEY.key);
     const answer = await device(owner).waiting();
-    expect(answer.text, "no key code, no key").not.toContain(PINNED_KEY.code);
-    expect(answer.text).not.toContain(PINNED_KEY.key);
+    expect(answer.text, "the key code is not handed out in the list: the approving device works it out itself").not.toContain(PINNED_KEY.code);
     const mine = (bodyOf(answer).signins as Array<Record<string, unknown>>).find((entry) => entry.label === "lab-list-no-key-code");
-    expect(mine).toEqual({ label: "lab-list-no-key-code", code: sign.code });
+    expect(mine).toEqual({ label: "lab-list-no-key-code", code: sign.code, deviceKey: PINNED_KEY.key });
   });
 
   it("is given to the owner only, and a code that is finished is refused as it was", async () => {

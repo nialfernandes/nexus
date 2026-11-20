@@ -198,15 +198,17 @@ export async function pending(host: NexusHost, codeInput: unknown) {
 }
 
 /**
- * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent and the sign-in's
- * code (the one `pending`, `approve` and `deny` take), and nothing else, so nothing secret is in it. The approving device shows the
- * labels, so the person can say which device is meant, and then asks `pending` for the one chosen and checks the code it is typed
- * against that device's key itself; the list is not searched by any code, and carries no key or device code that it would have to be trusted for.
+ * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent, the sign-in's code
+ * (the one `pending`, `approve` and `deny` take) and the public key it sent (`deviceKey`, base64, or null when it sent none). Nothing
+ * in it is secret. The approving device shows the labels, so the person can say which device is meant, lists only the entries that have
+ * a key (a sign-in with none cannot be sent the vault key), and checks the code a person types against the key of the one chosen; it
+ * works that code out from the key itself and is never told it, because a code or a key from here is believed about nothing until it
+ * matches what the person read off the new device's screen (docs/FORMAT.md section 7.4). The list is not searched by any code.
  */
 export async function waiting(host: NexusHost) {
-  const rows = await host.sql.all<{ code: string; label: string }>(
-    "SELECT code, label FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, code", [host.clock.now()]);
-  return { signins: rows.map((row) => ({ label: row.label, code: row.code })) };
+  const rows = await host.sql.all<{ code: string; label: string; device_key: string | null }>(
+    "SELECT code, label, device_key FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, code", [host.clock.now()]);
+  return { signins: rows.map((row) => ({ label: row.label, code: row.code, deviceKey: row.device_key })) };
 }
 
 /** The sign-in the owner is answering, or a refusal: no such code, or a code that has expired or been answered already. */

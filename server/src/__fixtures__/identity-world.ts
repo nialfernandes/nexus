@@ -36,7 +36,7 @@
 //                                                 `deviceCode` is the code the device shows for that key, such as 4TQ8M-W2K0B, null when there is no key)
 //       404 no such code        410 { error, reason } the code ran out ("That code has run out.", `reason` "expired"), or was allowed or denied already ("That code was already used.", "used")
 //   GET  device/waiting                           the owner only: the sign-ins still waiting for an answer (not answered, not run out)
-//       200 { signins: [ { label, code } ] }      oldest first; nothing secret is in it
+//       200 { signins: [ { label, code, deviceKey } ] }  oldest first; nothing secret is in it (`deviceKey` is the public key the device sent, null when none)
 //       401 nobody  403 someone who is signed in as another identity
 //   POST device/approve { code[, approval, approverKey] }   the owner only
 //       `approval` is the sealed vault key (base64) and `approverKey` the approving device's public key (base64, 32 bytes): both or neither,

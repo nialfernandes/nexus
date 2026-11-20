@@ -29,7 +29,7 @@
 //                                                      device left one, the sealed approval and its device's public key (`approval`,
 //                                                      `approverKey`, base64, else null), deleted as they are handed over
 //   GET  /device/pending ?code=C                       owner only: what is being asked, for the approval page, with its `deviceKey` and the `deviceCode` it shows
-//   GET  /device/waiting                               owner only: the sign-ins still waiting, { signins: [ { label, code } ] }, oldest first, nothing secret in it
+//   GET  /device/waiting                               owner only: the sign-ins still waiting, { signins: [ { label, code, deviceKey } ] }, oldest first, nothing secret in it
 //   POST /device/approve { code[, approval, approverKey] } owner only: the sealed approval and the approving device's public key go
 //                                                      together, and only to a sign-in that sent a `deviceKey`
 //   POST /device/deny    { code }                      owner only
