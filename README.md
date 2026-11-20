@@ -41,10 +41,12 @@ The repository is one npm workspace: the encryption (`packages/crypto`), the lin
 
 ```
 npm ci            # installs every package, with one lockfile
-npm run check     # checks the CI actions are pinned to commit hashes, builds the encryption package and the agent package, type-checks every package, builds the linking job and the plugin, runs every test
+npm run check     # checks the CI actions are pinned to commit hashes, tests the audit script, builds the encryption package and the agent package, type-checks every package, builds the linking job and the plugin, runs every test
+npm run check:audit   # asks npm for advisories: fails on a high or critical one in a package that ships, prints the dev-only ones (needs the network)
 ```
 
 `npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
+`npm run check:audit` (right after `npm ci`, and not part of `npm run check` because it needs the network),
 `bash docs/check-citations.sh` and the approval page's browser spec (`npm run test:browser` in `server/`, which
 needs Playwright's Chromium, so it is two steps of its own: server/README.md, "The browser spec"). `probe/` is not part of the workspace: it is a small test
 plugin that ships its own built files, with its own `npm ci` and `npm run check`.
@@ -64,7 +66,10 @@ Dependency updates come as reviewed pull requests. Each week GitHub proposes a n
 version of the CI actions (with the new full commit hash, so they stay pinned) and
 one grouped pull request for the npm packages, the encryption libraries included
 (`.github/dependabot.yml`). The same check that every pull request runs is run on
-each of them, and none is merged until a person has read it.
+each of them, and none is merged until a person has read it. That check fails on a
+high or critical npm advisory in a package that ships (`npm audit --omit=dev
+--audit-level=high`, run by `npm run check:audit`); an advisory in a tool used only
+to build and test is printed and does not fail it.
 
 ## Licence
 
