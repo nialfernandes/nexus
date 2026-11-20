@@ -207,28 +207,38 @@ unlock port and nowhere else; nothing here writes a key or an approval to disk.
 ## Install through BRAT
 
 [BRAT](https://github.com/TfTHacker/obsidian42-brat) installs a plugin straight from
-a GitHub release. It works on desktop and on mobile.
+a GitHub release, and updates it when there is a newer one. It works on desktop and on
+mobile, and there is nothing to build and no folder to make.
 
-1. In Obsidian, install the community plugin **BRAT** (its full name is Obsidian42 -
-   BRAT) and turn it on.
+1. In Obsidian, open Settings, Community plugins (turn community plugins on if they are
+   off), choose Browse, and install the plugin **BRAT** (its full name is Obsidian42 -
+   BRAT). Turn it on.
 2. Open BRAT's settings and choose **Add beta plugin**.
 3. Enter the path of this repository, in the form `owner/name`, as it appears in the
-   address bar of this page.
+   address bar of this page, and confirm. BRAT installs the latest release.
 4. Turn on **Nexus** under Community plugins, then set it up and sign in from its
    settings (see "Set up once" above).
 
-BRAT installs from a release, not from a folder of the repository. This repository
-also releases the test plugin in `probe/` (version 0.1.0), and BRAT reads one list of
-releases for the whole repository, so each release carries the files of one plugin.
-A release of this plugin carries `main.js`, `manifest.json` and `styles.css` from `dist/`, with
-a tag that is the version in `manifest.json` (for example `0.3.0`). Whoever maintains
-the repository makes that release; BRAT checks for new ones and updates the plugin.
+BRAT checks for a newer release and updates the plugin by itself, so these steps are done
+once on each device.
+
+BRAT installs from a release, not from a folder of the repository. A release of this
+plugin carries `main.js`, `manifest.json` and `styles.css` from `dist/`, with a tag that
+is the version in `manifest.json` (for example `0.3.0`). The repository's release
+workflow (`.github/workflows/release.yml`) makes it, from the tagged commit, when the
+maintainer pushes the tag, and it makes none when the tag is not that version. The test
+plugin in `probe/` is a separate plugin and is not released by it: BRAT reads one list
+of releases for the whole repository, so each release carries the files of one plugin.
 
 ## Install by copying the files
 
-1. Build it (above), or take `main.js`, `manifest.json` and `styles.css` from the release.
-2. Make the folder `<vault>/.obsidian/plugins/nexus/` and put `main.js`, `manifest.json`
-   and `styles.css` in it. The folder name has to be `nexus`, the plugin's id.
+Use this where BRAT cannot be used. The release is the same one.
+
+1. On this repository's page on GitHub, open **Releases**, open the latest release and
+   download its three files, `main.js`, `manifest.json` and `styles.css`.
+2. Put the three files in the folder `<vault>/.obsidian/plugins/nexus/` of your vault,
+   making the folders that are not there. The last folder's name has to be `nexus`, the
+   plugin's id.
 3. In Obsidian, Settings, Community plugins, turn on **Nexus** (turn on community
    plugins first if they are off).
 
@@ -239,6 +249,28 @@ folder (with `main.js`, `manifest.json` and `styles.css`) into `<vault>/.obsidia
 computer, let the vault reach the phone through iCloud Drive in the Files app, then
 restart Obsidian on the phone and turn on **Nexus** under Community plugins.
 Installing through BRAT on the phone needs none of this, so use it when you can.
+
+## Making a release
+
+For whoever maintains the repository. A release is one command and one tag:
+
+```
+npm run release:bump -- 0.3.1    # at the repository root: patch, minor or major work too
+git commit -am "chore(plugin): release 0.3.1"
+git tag 0.3.1                    # the tag is the version, with no "v"
+git push origin main 0.3.1
+```
+
+The bump (`.github/release/bump-version.mjs`) gives the new version to `manifest.json`
+and `versions.json` together (and to this folder's `package.json`, the lockfile and the
+two places in this README that name it, which the plugin's tests want to match), and
+adds `--min-app 1.9.0` when the oldest Obsidian the plugin runs on has changed. It
+changes nothing when the version is not later than the manifest's. Pushing the tag runs
+the release workflow, which checks that the tag is the manifest's version (and stops
+before building when it is not), builds the plugin with the repository's own build,
+checks that `dist/` holds exactly `main.js`, `manifest.json` and `styles.css`, and
+makes the release with those three files. `versions.json` is Obsidian's list of the
+oldest Obsidian each plugin version runs on.
 
 ## Good to know
 
