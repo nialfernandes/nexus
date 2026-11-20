@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { parseRules } from "./__fixtures__/css-rules";
 import { ORIGIN, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
 import { device, sendAs, type Who } from "./__fixtures__/identity-world";
-import { API_APPROVE, API_DENY, API_PENDING, APPROVED, DENIED, GONE, GONE_EXPIRED, NOT_FOUND, PAGE_PATH, PENDING } from "./__fixtures__/approve-answers";
+import { API_APPROVE, API_DENY, API_PENDING, APPROVED, DENIED, GONE, GONE_EXPIRED, NOT_FOUND, PAGE_PATH, PENDING, PENDING_NO_KEY } from "./__fixtures__/approve-answers";
 
 let owner: Who;
 let stranger: Who;
@@ -209,8 +209,13 @@ describe("the answers the browser checks use are the real answers", () => {
   }
 
   it("for a sign-in that is waiting, allowed and denied", async () => {
-    const waiting = bodyOf(await device().start("agents", "lab-m"));
-    expectSameShape(bodyOf(await device(owner).pending(waiting.code)), PENDING, "pending");
+    const waiting = bodyOf(await device().start("agents", "lab-m", PENDING.deviceKey));
+    const asked = bodyOf(await device(owner).pending(waiting.code));
+    expectSameShape(asked, PENDING, "pending");
+    expect(asked.deviceKey, "the key the fixture is for").toBe(PENDING.deviceKey);
+    expect(asked.deviceCode, "the fixture's code is the one the server works out for that key").toBe(PENDING.deviceCode);
+    const keyless = bodyOf(await device().start("agents", "lab-m"));
+    expectSameShape(bodyOf(await device(owner).pending(keyless.code)), PENDING_NO_KEY, "pending, no key");
     const approved = bodyOf(await device(owner).approve(waiting.code));
     expectSameShape(approved, APPROVED, "approved");
     expect(approved.result).toBe(APPROVED.result);

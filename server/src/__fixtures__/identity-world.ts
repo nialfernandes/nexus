@@ -32,11 +32,11 @@
 //       404 no such identity    400 a label that is missing or blank, or a `deviceKey` that is not 32 bytes of base64
 //                                                 `deviceKey` is the device's X25519 public key, for an approval to be sealed to
 //   GET  device/pending ?code=C                   the owner only
-//       200 { code, identity, label, expiresAt, deviceKey }  what the approval page shows (`deviceKey` is null when none was sent)
+//       200 { code, identity, label, expiresAt, deviceKey, deviceCode }  what the approval page shows (`deviceKey` is null when none was sent;
+//                                                 `deviceCode` is the code the device shows for that key, such as 4TQ8M-W2K0B, null when there is no key)
 //       404 no such code        410 { error, reason } the code ran out ("That code has run out.", `reason` "expired"), or was allowed or denied already ("That code was already used.", "used")
-//   GET  device/waiting [?code=C]                 the owner only: the sign-ins still waiting for an answer (not answered, not run out)
-//       200 { signins: [ { label, code } ] }      oldest first; nothing secret is in it. With `code`, only the sign-in that code is, whatever its
-//                                                 capitals, spaces and dash (the code as a person types it); an empty list when none is
+//   GET  device/waiting                           the owner only: the sign-ins still waiting for an answer (not answered, not run out)
+//       200 { signins: [ { label, code } ] }      oldest first; nothing secret is in it
 //       401 nobody  403 someone who is signed in as another identity
 //   POST device/approve { code[, approval, approverKey] }   the owner only
 //       `approval` is the sealed vault key (base64) and `approverKey` the approving device's public key (base64, 32 bytes): both or neither,
@@ -148,8 +148,8 @@ export function device(who: Who = null, env?: NexusEnv) {
   return {
     start: (identity: string, label: string, deviceKey?: string) => post("start", { identity, label, ...(deviceKey === undefined ? {} : { deviceKey }) }),
     pending: (code: string) => sendAs("GET", `${API}/device/pending${query({ code })}`, who, undefined, env),
-    /** The owner's list of sign-ins still waiting; with `code`, only the one that code is. */
-    waiting: (code?: string) => sendAs("GET", `${API}/device/waiting${query({ code })}`, who, undefined, env),
+    /** The owner's list of sign-ins still waiting. */
+    waiting: () => sendAs("GET", `${API}/device/waiting`, who, undefined, env),
     /** `sealed` is the sealed approval and the approving device's public key, both base64, sent with the allow. */
     approve: (code: string, sealed?: { approval?: unknown; approverKey?: unknown }) => post("approve", { code, ...sealed }),
     deny: (code: string) => post("deny", { code }),

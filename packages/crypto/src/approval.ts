@@ -10,9 +10,10 @@ import {
   u32be,
   utf8,
 } from "./bytes.js";
-import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, DEVICE_KEY_CODE_LABEL, FORMAT_VERSION, KEY_BYTES, Kind, MAX_ID_BYTES, RECOVERY_ALPHABET } from "./constants.js";
+import { APPROVAL_CODE_LABEL, APPROVAL_CODE_SYMBOLS, FORMAT_VERSION, KEY_BYTES, Kind, MAX_ID_BYTES, RECOVERY_ALPHABET } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
-import { normalise, symbolsFromBits } from "./recovery-key.js";
+import { deviceKeyCodeInput, deviceKeyCodeOf, symbolsFromBits, writeCode } from "./key-code.js";
+import { normalise } from "./recovery-key.js";
 import { loadSodium } from "./sodium.js";
 
 /** A device's or agent's own X25519 keys. The private half never leaves it. */
@@ -175,11 +176,8 @@ export async function approvalCode(input: ApprovalCodeInput): Promise<string> {
 export async function deviceKeyCode(devicePublicKey: Uint8Array): Promise<string> {
   const sodium = await loadSodium();
   requireBytes(devicePublicKey, sodium.crypto_box_PUBLICKEYBYTES, "devicePublicKey");
-  return writeCode(symbolsFromBits(sodium.crypto_hash_sha256(concatBytes(utf8(DEVICE_KEY_CODE_LABEL), devicePublicKey)), APPROVAL_CODE_SYMBOLS));
+  return deviceKeyCodeOf(sodium.crypto_hash_sha256(deviceKeyCodeInput(devicePublicKey)));
 }
-
-/** Ten symbols, in two groups of five. */
-const writeCode = (symbols: string): string => `${symbols.slice(0, APPROVAL_CODE_SYMBOLS / 2)}-${symbols.slice(APPROVAL_CODE_SYMBOLS / 2)}`;
 
 /**
  * What a person typed from the other device's screen, written the way `approvalCode` and `deviceKeyCode` write them, or null when it is

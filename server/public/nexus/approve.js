@@ -13,6 +13,11 @@
 // sent over a secure connection only (window.isSecureContext), it is held in one variable of this script and nowhere else (no
 // storage, no cookie, nothing on the page: the field is emptied as it is sent), and it is dropped as soon as the code has an answer.
 //
+// THE CODE ON THE PAGE is the one the new device shows on its own screen: the code of the key it sent (`deviceCode` in what pending
+// answers: ten symbols, drawn in groups of 4, 4 and 2), so the owner can compare the two by eye. Nexus works it out from the device's
+// public key; the page only draws what it is sent. A device that sent no key has no such code and shows its sign-in code, which is then
+// the one code on its screen, so the page draws that instead (the code the link carries).
+//
 // What the page shows:
 //   the owner secret, when nobody is signed in
 //   the question, the device's code and Allow and Deny
@@ -169,7 +174,8 @@
     return Math.max(1, Math.ceil((expiresAt - Date.now()) / MINUTE));
   }
 
-  // The device's code, one box per character, in groups of four so it can be matched against the device's own screen.
+  // The device's code, one box per character, in groups of four (a ten-symbol code is 4, 4 and 2) so it can be matched against the
+  // device's own screen.
   function showCode(raw) {
     var characters = String(raw).replace(/[^A-Za-z0-9]/g, '').split('');
     codeBoxes.setAttribute('aria-label', 'Device code ' + characters.join(''));
@@ -194,7 +200,8 @@
     var minutes = typeof found.expiresAt === 'number' ? minutesLeft(found.expiresAt) : null;
     hint.textContent = 'Only allow it if you just asked for it.' +
       (minutes === null ? '' : ' The code stops working in ' + minutes + (minutes === 1 ? ' minute.' : ' minutes.'));
-    showCode(typeof found.code === 'string' ? found.code : code);
+    // The code the device shows for its key; for a device with no key, its sign-in code.
+    showCode(typeof found.deviceCode === 'string' && found.deviceCode !== '' ? found.deviceCode : typeof found.code === 'string' ? found.code : code);
     ask.hidden = false;
     owner.hidden = true;
     result.hidden = true;

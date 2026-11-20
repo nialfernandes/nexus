@@ -1,11 +1,11 @@
-// The owner's list of sign-ins that are still waiting: GET /device/waiting. The approving device (a plugin that has only the
-// code a person typed from the new device's screen, boards 14 and 15 of docs/design/nexus) finds the sign-in from that code
-// alone. The list has each sign-in's label and device code and nothing secret, it answers only the owner, and a sign-in
-// that was answered or has run out is not on it. Through the real Worker (see __fixtures__/identity-world.ts for the shape).
+// The owner's list of sign-ins that are still waiting: GET /device/waiting. The approving device (the plugin, boards 14 and 15 of
+// docs/design/nexus) shows the labels, one name in its slab or a list to pick from, and then checks the code a person types against the
+// key of the one chosen. The list has each sign-in's label and its sign-in code and nothing secret, it answers only the owner, a sign-in
+// that was answered or has run out is not on it, and it is not searched by any code. Through the real Worker (see __fixtures__/identity-world.ts for the shape).
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
-import { device, tokenFor, type Who } from "./__fixtures__/identity-world";
+import { API, bodyOf, expectRefusal, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
+import { device, sendAs, tokenFor, type Who } from "./__fixtures__/identity-world";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -37,7 +37,7 @@ async function listed(...labels: string[]): Promise<Array<{ label: string; code:
 }
 
 describe("the list of sign-ins that are waiting", () => {
-  it("has the label and the device code of each sign-in a device started, oldest first, and nothing else", async () => {
+  it("has the label and the sign-in code of each sign-in a device started, oldest first, and nothing else", async () => {
     const now = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
@@ -52,7 +52,7 @@ describe("the list of sign-ins that are waiting", () => {
     ]);
   });
 
-  it("holds nothing secret: every entry has only a label and a code, and the device's secret and its token are nowhere in the answer", async () => {
+  it("holds nothing secret: every entry has only a label and a sign-in code, and the device's secret and its token are nowhere in the answer", async () => {
     const sign = await started("lab-leaks-nothing");
     const answer = await device(owner).waiting();
     const entries = bodyOf(answer).signins as Array<Record<string, unknown>>;
@@ -87,28 +87,15 @@ describe("the list of sign-ins that are waiting", () => {
   });
 });
 
-describe("finding one sign-in from its device code", () => {
-  it("gives the sign-in that code is, and only that one", async () => {
+describe("the list is not searched by a code", () => {
+  it("is the whole list whatever is put in the address: no code narrows it, so the approving device shows the labels and picks one itself", async () => {
     const mine = await started("lab-find-mine");
     await started("lab-find-other");
-    const found = bodyOf(await device(owner).waiting(mine.code));
-    expect(found.signins).toEqual([{ label: "lab-find-mine", code: mine.code }]);
-  });
-
-  it("finds it however a person types the code: small letters, spaces, no dash", async () => {
-    const mine = await started("lab-find-typed");
-    const plain = mine.code.replace("-", "");
-    for (const typed of [mine.code.toLowerCase(), plain, plain.toLowerCase(), `${plain.slice(0, 4)} ${plain.slice(4)}`.toLowerCase(), ` ${mine.code} `]) {
-      expect(bodyOf(await device(owner).waiting(typed)).signins, `typed as "${typed}"`).toEqual([{ label: "lab-find-typed", code: mine.code }]);
-    }
-  });
-
-  it("gives an empty list, not an error, for a code no waiting sign-in has, and for one already answered", async () => {
-    const answered = await started("lab-find-answered");
-    bodyOf(await device(owner).approve(answered.code));
-    expect(bodyOf(await device(owner).waiting("ZZZZ-ZZZZ"))).toEqual({ signins: [] });
-    expect(bodyOf(await device(owner).waiting(answered.code))).toEqual({ signins: [] });
-    expect(bodyOf(await device(owner).waiting("---")), "a code with nothing in it finds nothing, not everything").toEqual({ signins: [] });
+    const labels = (answer: { body: { signins?: Array<{ label: string }> } }) => (answer.body.signins ?? []).map((s) => s.label);
+    const whole = labels(await device(owner).waiting());
+    expect(whole).toEqual(expect.arrayContaining(["lab-find-mine", "lab-find-other"]));
+    const asked = await sendAs("GET", `${API}/device/waiting?code=${encodeURIComponent(mine.code)}`, owner);
+    expect(labels(asked), "a code in the address changes nothing").toEqual(whole);
   });
 });
 
@@ -119,15 +106,12 @@ describe("only the owner is let see the list", () => {
     expectRefusal(answer, 403, "an agent asking for the list");
     expect(answer.body.signins).toBeUndefined();
     expect(answer.text).not.toContain(sign.code);
-    const byCode = await device(agents).waiting(sign.code);
-    expectRefusal(byCode, 403, "an agent finding a sign-in from its code");
-    expect(byCode.text).not.toContain("lab-not-for-agents");
   });
 
   it("is 401 for nobody and for a session that is not the owner's, with no list", async () => {
     const sign = await started("lab-not-for-strangers");
     for (const [who, what] of [[null, "nobody"], [stranger, "a stranger"]] as const) {
-      const answer = await device(who).waiting(sign.code);
+      const answer = await device(who).waiting();
       expectRefusal(answer, 401, what);
       expect(answer.text).not.toContain(sign.code);
     }

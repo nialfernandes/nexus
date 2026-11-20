@@ -1,6 +1,7 @@
 import { concatBytes, utf8 } from "./bytes.js";
 import { KEY_BYTES, RECOVERY_ALPHABET, RECOVERY_CHECK_LABEL } from "./constants.js";
 import { NexusCryptoError } from "./errors.js";
+import { symbolsFromBits } from "./key-code.js";
 import { loadSodium, type Sodium } from "./sodium.js";
 
 /** 256 bits written 5 bits at a time: 52 symbols, the last one carrying a single bit. */
@@ -68,25 +69,6 @@ export function normalise(text: string): string {
     .replace(/[\s-]/g, "")
     .replace(/O/g, "0")
     .replace(/[IL]/g, "1");
-}
-
-/** The first `count` symbols of the bytes, five bits each, most significant bit first. */
-export function symbolsFromBits(bytes: Uint8Array, count: number): string {
-  let out = "";
-  let buffer = 0;
-  let bits = 0;
-  let next = 0;
-  for (let i = 0; i < count; i++) {
-    while (bits < BITS_PER_SYMBOL) {
-      buffer = (buffer << 8) | (next < bytes.length ? bytes[next]! : 0);
-      next++;
-      bits += 8;
-    }
-    bits -= BITS_PER_SYMBOL;
-    out += RECOVERY_ALPHABET[(buffer >> bits) & 31];
-    buffer &= (1 << bits) - 1;
-  }
-  return out;
 }
 
 /** The reverse of symbolsFromBits for the 52 key symbols; null if the unused low 4 bits are not zero. */

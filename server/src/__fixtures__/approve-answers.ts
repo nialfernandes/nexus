@@ -18,8 +18,18 @@ export const API_PENDING = '/nexus/api/device/pending';
 export const API_APPROVE = '/nexus/api/device/approve';
 export const API_DENY = '/nexus/api/device/deny';
 
-/** What GET device/pending answers for a sign-in that is waiting for the owner. */
-export const PENDING = { code: CODE, identity: 'agents', label: 'lab-m', expiresAt: 1790000600000 };
+/**
+ * What GET device/pending answers for a sign-in that is waiting for the owner and sent a key: `deviceKey` is the device's public key and
+ * `deviceCode` the code the device shows for it (a real pair, the first of __fixtures__/device-keys.ts: approval-page.test.ts starts a
+ * sign-in with this key and holds the server's `deviceCode` to this one). The page draws `deviceCode`, in groups of four.
+ */
+export const PENDING = {
+  code: CODE, identity: 'agents', label: 'lab-m', expiresAt: 1790000600000,
+  deviceKey: 'VDpzOdVNk5HCX/pw4SUzKXSdtlE1boxNAInF5nXJWAE=', deviceCode: 'NW18D-NK7HZ',
+};
+
+/** What it answers for a sign-in that sent no key: no key and no device code, and the page draws the sign-in code instead. */
+export const PENDING_NO_KEY = { code: CODE, identity: 'agents', label: 'lab-m', expiresAt: 1790000600000, deviceKey: null, deviceCode: null };
 
 /** What POST device/approve and device/deny answer when they work. */
 export const APPROVED = { result: 'approved', code: CODE, identity: 'agents', label: 'lab-m' };

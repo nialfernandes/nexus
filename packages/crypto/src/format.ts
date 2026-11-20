@@ -1,11 +1,13 @@
 // How long the things Nexus writes are, and the two numbers that begin them. Nothing here is secret or runs any
-// encryption: it is the layout of docs/FORMAT.md as numbers, in a file with no imports of its own beyond constants.ts,
-// so a part of Nexus that only looks at the first bytes of a blob (the server, which never opens one) can take the
-// numbers from here, as `@nexus/crypto/format`, without taking libsodium.
+// encryption: it is the layout of docs/FORMAT.md as numbers, in a file whose imports (constants.ts, key-code.ts) take no
+// encryption library either, so a part of Nexus that only looks at the first bytes of a blob (the server, which never opens one)
+// can take the numbers from here, as `@nexus/crypto/format`, without taking libsodium. The two functions from key-code.ts are how
+// it writes the code a device shows for its key from a SHA-256 digest that it works out itself.
 
 import { FORMAT_VERSION, KEY_BYTES, KID_BYTES, Kind, MIN_PADDED_RECORD_BYTES, NONCE_BYTES, SALT_BYTES, TAG_BYTES } from "./constants.js";
 
 export { FORMAT_VERSION, Kind };
+export { deviceKeyCodeInput, deviceKeyCodeOf } from "./key-code.js";
 
 /** The bytes of a note blob before its ciphertext: version (1), kid (4) and nonce (24). */
 export const NOTE_HEADER_BYTES = 1 + KID_BYTES + NONCE_BYTES;

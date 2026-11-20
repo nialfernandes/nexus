@@ -4,7 +4,7 @@
 //      short CODE (safe to show on a screen), a LINK to the approval page, and a long SECRET that only it knows.
 //   2. The owner opens the link on a phone or a computer, signed in (or types the owner secret on the page, which is how a
 //      first device is set up), sees what is being asked, and allows or denies it (`pending`, `approve`, `deny`, all the
-//      owner's only). An approving device that is only typed the code finds the sign-in with `waiting`.
+//      owner's only). An approving device lists the sign-ins waiting by name with `waiting`.
 //   3. The device polls with its secret. After an allow, the first poll is handed a token, once. Every later poll
 //      is refused.
 //
@@ -26,6 +26,7 @@
 // an approval of its own or swap one, which is why the new device does not use the key until a person has compared the
 // matching code on both screens (section 7.4): nothing here is trusted for that.
 
+import { deviceKeyCodeInput, deviceKeyCodeOf } from "@nexus/crypto/format";
 import { APPROVE_PATH } from "./addresses";
 import { base64Length, decodeBase64 } from "./bytes";
 import { onlyFields } from "./fields";
@@ -169,27 +170,43 @@ function stillWaiting(host: NexusHost, row: SigninRow): void {
   if (row.expires_at <= host.clock.now()) throw new Refusal(410, RAN_OUT, EXPIRED);
 }
 
-/** What the approval page shows, and what a device that can approve needs: the public key to seal to, or null when the device sent none. */
-export async function pending(host: NexusHost, codeInput: unknown) {
-  const row = await waitingFor(host, codeInput);
-  return { code: row.code, identity: row.identity, label: row.label, expiresAt: row.expires_at, deviceKey: row.device_key };
+/**
+ * The code a new device shows for its own public key (docs/FORMAT.md section 7.4), worked out here from the key it sent, or null for a
+ * sign-in that sent no key (it has no such code). The approval page shows it, so the owner can compare it with the new device's screen.
+ * The server holds no encryption, so it hashes the key itself with the host's SHA-256 and writes the code with the one function the
+ * encryption package writes it with (`deviceKeyCodeOf`): the code is not made twice.
+ */
+async function deviceCodeOf(host: NexusHost, deviceKey: string | null): Promise<string | null> {
+  const key = deviceKey === null ? null : decodeBase64(deviceKey);
+  if (key === null) return null;
+  const hex = await host.secrets.hashBytes(deviceKeyCodeInput(key));
+  // Only the first 50 bits of the digest are used; seven bytes hold them.
+  return deviceKeyCodeOf(Uint8Array.from(hex.slice(0, 14).match(/../g)!, (pair) => parseInt(pair, 16)));
 }
 
-/** A code as a person types it, made comparable: capitals, with no spaces, dash or other mark between the characters. */
-const typedCode = (value: string): string => value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+/**
+ * What the approval page shows, and what a device that can approve needs: the public key to seal to (`deviceKey`) and the code the
+ * device shows for it (`deviceCode`, the one code the owner compares: such as 4TQ8M-W2K0B), each null when the device sent no key.
+ * Nothing in it is secret: both come from the device's public key.
+ */
+export async function pending(host: NexusHost, codeInput: unknown) {
+  const row = await waitingFor(host, codeInput);
+  return {
+    code: row.code, identity: row.identity, label: row.label, expiresAt: row.expires_at,
+    deviceKey: row.device_key, deviceCode: await deviceCodeOf(host, row.device_key),
+  };
+}
 
 /**
- * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent and
- * its device code, and nothing else, so nothing secret is in it. The approving device is typed the code from the new
- * device's screen and has nothing but that, so with `codeInput` the list is narrowed to the sign-in that code is,
- * however it was typed (small letters, spaces, with or without the dash). A code with no characters in it matches none.
+ * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent and the sign-in's
+ * code (the one `pending`, `approve` and `deny` take), and nothing else, so nothing secret is in it. The approving device shows the
+ * labels, so the person can say which device is meant, and then asks `pending` for the one chosen and checks the code it is typed
+ * against that device's key itself; the list is not searched by any code, and carries no key or device code that it would have to be trusted for.
  */
-export async function waiting(host: NexusHost, codeInput: unknown) {
+export async function waiting(host: NexusHost) {
   const rows = await host.sql.all<{ code: string; label: string }>(
     "SELECT code, label FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, code", [host.clock.now()]);
-  const typed = typeof codeInput === "string" ? typedCode(codeInput) : null;
-  const found = typed === null ? rows : rows.filter((row) => typed !== "" && typedCode(row.code) === typed);
-  return { signins: found.map((row) => ({ label: row.label, code: row.code })) };
+  return { signins: rows.map((row) => ({ label: row.label, code: row.code })) };
 }
 
 /** The sign-in the owner is answering, or a refusal: no such code, or a code that has expired or been answered already. */
