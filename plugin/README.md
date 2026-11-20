@@ -179,8 +179,13 @@ Encryption row of the settings tab, and the commands of the same names.
 
 They are shown in Obsidian's own modal, on a phone and on a desktop, and are styled by `styles.css`, which
 writes every colour, radius and size once, as a token, at its top. The type faces they are drawn in
-(Unbounded, Instrument Sans and JetBrains Mono) are not bundled: where a reader's device has none, the
-system's type is used.
+(Unbounded, Instrument Sans and JetBrains Mono) are written into `styles.css` as base64 `@font-face` rules, so
+the screens look as drawn on a device that has none of them. Each is cut down to the weights and the Latin letters
+the screens use (about 41 KB of font files in all, 55 KB as base64), and its licence (the SIL Open Font License
+1.1, with its copyright line) is written beside it in the same file, because the licence asks that it travels with
+the font and a plugin is three files. The fonts are the ones the approval page serves, in
+`server/public/nexus/fonts`; `python3 plugin/tools/embed-fonts.py` (needs `pip install fonttools brotli`) writes
+the block again, and only the block, if a font or a weight changes. `styles.css` is 86 KB with them, 15 KB before.
 
 ## Giving a new device the vault key
 
