@@ -29,7 +29,7 @@ describe("the tokens", () => {
       "--nx-red-line": "#D1293D",
       "--nx-red-fill": "#FDECEE",
       "--nx-radius-card": "16px",
-      "--nx-radius-slab": "28px",
+      "--nx-radius-slab": "22px",
       "--nx-radius-pill": "999px",
     });
     expect(tokens()["--nx-font-display"]).toMatch(/^"Unbounded"/);
@@ -59,14 +59,26 @@ describe("the drawn sizes", () => {
     return found[1]!;
   };
 
-  it("have a 28 px slab, a 16 px card with 14 px of padding and 12 px between things, and 30 px pills", () => {
+  it("have a slab with 22 px corners and 10 px above and below its one 32 px line, a 16 px card with 14 px of padding and 12 px between things, and 30 px pills", () => {
     expect(rule(".nx-slab")).toContain("var(--nx-radius-slab)");
+    expect(rule(".nx-slab")).toMatch(/padding: 10px 16px/);
+    expect(rule(".nx-slab__bar")).toMatch(/height: 32px/);
     expect(rule(".nx-card")).toMatch(/padding: 14px/);
     expect(rule(".nx-card")).toMatch(/gap: 12px/);
     expect(rule(".nx-card")).toContain("var(--nx-radius-card)");
     expect(rule(".nexus-screen .nx-pill")).toMatch(/height: 30px/);
-    expect(rule(".nx-slab__title")).toMatch(/font-size: 22px/);
-    expect(rule(".nx-slab__title")).toMatch(/font-weight: 800/);
+    expect(rule(".nx-slab__mark")).toMatch(/font-size: 22px/);
+    expect(rule(".nx-slab__mark")).toMatch(/font-weight: 900/);
+    expect(rule(".nx-slab__divider")).toMatch(/width: 1px/);
+    expect(rule(".nx-slab__divider")).toMatch(/height: 16px/);
+    expect(rule(".nx-slab__title")).toMatch(/font-size: 15px/);
+    expect(rule(".nx-slab__title")).toMatch(/font-weight: 700/);
+  });
+
+  it("have the line under the title in the body, 13 px at 85 percent, with 16 px under it", () => {
+    expect(rule(".nx-slab__line")).toMatch(/font-size: 13px/);
+    expect(rule(".nx-slab__line")).toMatch(/opacity: 0\.85/);
+    expect(rule(".nx-slab__line")).toMatch(/padding: 0 0 16px/);
   });
 
   it("have code boxes 44 px high with 4 px inside a group and 12 px between groups, the key's boxes 38 px, the typed-back boxes 44 px square", () => {

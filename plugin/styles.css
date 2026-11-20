@@ -1,7 +1,7 @@
 /*
- * The Nexus screens: setup, adding a device and unlocking. Drawn mobile first, 375 wide, in a slab look: a teal band with a lowercase
- * title, white cards on a sand-grey ground, ink text and pill buttons. In desktop Obsidian it is the same layout in a centred modal about
- * 560 px wide, with the teal band as the modal's top. Light only.
+ * The Nexus screens: setup, adding a device and unlocking. Drawn mobile first, 375 wide, in a slab look: a teal band holding one slim
+ * line (the nexus mark, a thin divider and the lowercase title), white cards on a sand-grey ground, ink text and pill buttons. In
+ * desktop Obsidian it is the same layout in a centred modal about 560 px wide, with the teal band as the modal's top. Light only.
  *
  * Every colour, radius and size is a token, written once in the first rule below. Nothing after it writes a colour out by hand
  * (plugin/tests/styles.test.ts holds the file to that).
@@ -24,6 +24,7 @@
   --nx-grey-circle: #E4E2DD;
   --nx-switch-off: #C9C9D0;
   --nx-ink-14: rgba(15, 16, 19, 0.14);
+  --nx-ink-20: rgba(15, 16, 19, 0.2);
   --nx-ink-25: rgba(15, 16, 19, 0.25);
   --nx-ink-40: rgba(15, 16, 19, 0.4);
   --nx-shadow: rgba(15, 16, 19, 0.078);
@@ -37,7 +38,7 @@
   --nx-radius-panel: 10px;
   --nx-radius-box: 8px;
   --nx-radius-tick: 5px;
-  --nx-radius-slab: 28px;
+  --nx-radius-slab: 22px;
   --nx-radius-pill: 999px;
 }
 
@@ -85,33 +86,68 @@
 }
 
 .nx-slab {
-  display: flex;
-  flex-direction: column;
   flex-shrink: 0;
+  padding: 10px 16px;
   background-color: var(--nx-teal);
   border-bottom-left-radius: var(--nx-radius-slab);
   border-bottom-right-radius: var(--nx-radius-slab);
 }
 
-.nx-slab__title {
+/* The one slim line: the mark, a thin divider and the title on the left, and room on the right for the estate's controls (none here). */
+.nx-slab__bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-shrink: 0;
+  width: 100%;
+  height: 32px;
+}
+
+.nx-slab__name {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
-  height: 42px;
-  padding-inline: 16px;
-  padding-top: 12px;
-  margin: 0;
+}
+
+.nx-slab__mark {
+  flex-shrink: 0;
   font-family: var(--nx-font-display);
   font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 28px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 24px;
+  white-space: pre;
   color: var(--nx-ink);
 }
 
+.nx-slab__divider {
+  align-self: center;
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  background-color: var(--nx-ink-20);
+}
+
+.nx-slab__title {
+  margin: 0;
+  font-family: var(--nx-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+  white-space: pre;
+  color: var(--nx-ink);
+}
+
+.nx-slab__tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* The line under the title: drawn as the first line of the body. */
 .nx-slab__line {
-  padding: 4px 16px 16px;
+  padding: 0 0 16px;
   margin: 0;
   font-size: 13px;
   line-height: 17px;
@@ -339,9 +375,22 @@
   gap: 6px;
 }
 
+.nx-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .nx-code {
   display: flex;
   gap: 12px;
+}
+
+/* A code that is read out is text a person can select: a tap selects the whole of it. */
+.nx-code--read {
+  -webkit-user-select: all;
+  user-select: all;
 }
 
 .nx-code__group {
@@ -622,4 +671,12 @@
   height: 8px;
   border-radius: var(--nx-radius-pill);
   background-color: var(--nx-teal);
+}
+
+/* ── the settings tab ───────────────────────────────────────────────────────────── */
+
+/* A code to carry to another device or page, where Obsidian's own settings would not let it be selected. */
+.nexus-selectable {
+  -webkit-user-select: text;
+  user-select: text;
 }

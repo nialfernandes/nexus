@@ -89,8 +89,21 @@ export class Setting {
     this.name = name;
     return this;
   }
-  setDesc(desc: string | DocumentFragment): this {
-    this.desc = typeof desc === "string" ? desc : "[a link and a code]";
+  /** What the setting's description is drawn into, as Obsidian's `descEl`: made when something first needs it, as only a test with a page has one. */
+  get descEl(): HTMLElement {
+    this.#descEl ??= document.createElement("div");
+    return this.#descEl;
+  }
+  #descEl: HTMLElement | null = null;
+  setDesc(desc: string | DocumentFragment | HTMLElement): this {
+    if (typeof desc === "string") {
+      this.desc = desc;
+      this.#descEl?.replaceChildren(desc);
+    } else {
+      // Words with a link or a code in them: the text of it is `desc`, and the elements are in `descEl`, as in Obsidian.
+      this.descEl.replaceChildren(desc);
+      this.desc = this.descEl.textContent ?? "";
+    }
     return this;
   }
   addButton(callback: (button: FakeButton) => unknown): this {

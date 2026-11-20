@@ -44,6 +44,7 @@ describe("setup: the start screen", () => {
   it("promises scrambled notes, keeps the Not yet audited box, says a Recovery Key comes next, and has Cancel and Continue", async () => {
     const { root } = await drawn("start", { step: "no-vault" });
     expect(words(root)).toEqual([
+      "nexus",
       "set up nexus",
       "Step 1 of 4.",
       "Your notes are scrambled on this device before they leave it. The Nexus server only ever holds scrambled text.",
@@ -63,6 +64,7 @@ describe("setup: the Recovery Key, shown once", () => {
   it("shows the 14 groups four to a row, the last row two groups, Copy key, the tick box and a dim Continue", async () => {
     const { root } = await drawn("recovery-key", SHOW_KEY, ({ root: screen }) => tap(screen, "continue")); // from the start screen to the key
     expect(words(root)).toEqual([
+      "nexus",
       "recovery key",
       "Step 2 of 4.",
       "This is the only time it is shown. Save it now in your password manager, or write it on paper.",
@@ -100,6 +102,7 @@ describe("setup: typing three groups back", () => {
       tap(screen, "continue");
     });
     expect(words(root)).toEqual([
+      "nexus",
       "check key",
       "Step 3 of 4.",
       "Type three groups of it back from where you saved it. This shows it was written down right.",
@@ -126,6 +129,7 @@ describe("setup: typing three groups back", () => {
     });
     expect(setup.sent("typeBack"), "the twelve characters went to the controller as typed").toEqual([["4TNB3WVRY8JK"]]);
     expect(words(root)).toEqual([
+      "nexus",
       "check key",
       "Step 3 of 4.",
       "Type three groups of it back from where you saved it. This shows it was written down right.",
@@ -162,6 +166,7 @@ describe("setup: the password step", () => {
   it("with the switch off: says it is optional, Off is safer, and keeps the cream warning; Finish setup works", async () => {
     const { root } = await drawn("password-off", choose);
     expect(words(root)).toEqual([
+      "nexus",
       "password",
       "Step 4 of 4.",
       "Optional. Your Recovery Key already opens your notes. A password only saves typing it.",
@@ -183,6 +188,7 @@ describe("setup: the password step", () => {
       typeText(screen, "password", "twelve chars");
     });
     expect(words(root)).toEqual([
+      "nexus",
       "password",
       "Step 4 of 4.",
       "Optional. Your Recovery Key already opens your notes. A password only saves typing it.",
@@ -207,6 +213,7 @@ describe("setup: done", () => {
   it("shows the tick, the summary (Recovery Key saved, Password off, Not yet audited) and Done", async () => {
     const { root } = await drawn("done", { step: "set-up", password: false, message: null });
     expect(words(root)).toEqual([
+      "nexus",
       "all set",
       "Nexus is set up.",
       "Your notes are scrambled on this device before they are sent. The first sync starts when you close this.",
@@ -231,12 +238,15 @@ describe("adding a device: the new device waits", () => {
   it("shows the codes to read out, one sand-grey box per character grouped 4, 4, 2, a waiting line with a dot that does not pulse, and Cancel", async () => {
     const { root } = await drawn("new-device-waiting", { step: "waiting-for-device", link: "https://nexus.example.com/nexus/api/approve", code: SIGN_IN, keyCode: "AB12C-D34EF" });
     expect(words(root)).toEqual([
+      "nexus",
       "new device",
       "Waiting for approval.",
       "On a device that is already signed in, open Nexus settings and choose Approve a device. It will ask for this code.",
       "Sign-in code",
+      "Copy",
       ...characters(SIGN_IN),
       "Device code",
+      "Copy",
       ...characters(CODE),
       "Waiting. The code works for 10 minutes.",
       "Cancel",
@@ -259,6 +269,7 @@ describe("adding a device: the approving device", () => {
   it("names the new device in the slab, as text, and asks for its device code in ten empty boxes with Cancel", async () => {
     const { root } = await drawn("approve-device", asking(null));
     expect(words(root)).toEqual([
+      "nexus",
       "approve device",
       LABEL,
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
@@ -278,6 +289,7 @@ describe("adding a device: the approving device", () => {
     });
     expect(wrongBoxes(root)).toBe(10);
     expect(words(root)).toEqual([
+      "nexus",
       "approve device",
       LABEL,
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
@@ -291,10 +303,12 @@ describe("adding a device: the approving device", () => {
   it("shows the matching code to read out, tells the person not to use a device that does not accept it, and has Done", async () => {
     const { root } = await drawn("approved", { step: "device-approved", code: "4TKP8-MXD2Q", label: LABEL });
     expect(words(root)).toEqual([
+      "nexus",
       "approved",
       "Now go to the new device.",
       "It will ask you to type this matching code before it opens your notes.",
       "Matching code",
+      "Copy",
       ..."4TKP8MXD2Q",
       "If the new device does not accept it, do not use that device. Approve it again from here.",
       "Done",
@@ -305,6 +319,7 @@ describe("adding a device: the approving device", () => {
   it("says the account may not approve, with a grey circle and a cross, and Close as the only button", async () => {
     const { root } = await drawn("not-allowed", asking("not-allowed", "Only the owner can approve a device."));
     expect(words(root)).toEqual([
+      "nexus",
       "not allowed",
       "This device cannot approve.",
       "Nexus says the account this device is signed in as cannot approve new devices. Only the owner's devices can.",
@@ -323,6 +338,7 @@ describe("adding a device: the new device types the matching code", () => {
   it("asks for the matching code in ten empty boxes, says why, and has Cancel", async () => {
     const { root } = await drawn("matching-code", typing(null));
     expect(words(root)).toEqual([
+      "nexus",
       "matching code",
       "Your other device approved this one.",
       "It is showing a matching code. Type it here to open your notes.",
@@ -341,6 +357,7 @@ describe("adding a device: the new device types the matching code", () => {
     });
     expect(wrongBoxes(root)).toBe(10);
     expect(words(root)).toEqual([
+      "nexus",
       "matching code",
       "Your other device approved this one.",
       "That code does not match.",
@@ -356,13 +373,15 @@ describe("adding a device: the new device types the matching code", () => {
 
   it("is unlocked: a tick, one line, and Done", async () => {
     const { root } = await drawn("unlocked", { step: "device-unlocked" });
-    expect(words(root)).toEqual(["unlocked", "Your notes are opening.", "This device is unlocked. The first sync starts when you close this.", "Done"]);
+    expect(words(root)).toEqual([
+      "nexus","unlocked", "Your notes are opening.", "This device is unlocked. The first sync starts when you close this.", "Done"]);
     expect(root.querySelector(".nx-circle--done svg")).not.toBeNull();
   });
 
   it("has the wait run out: a light red clock, Use Recovery Key on the left and Start again on the right", async () => {
     const { root } = await drawn("wait-ran-out", { step: "stopped", reason: "expired", message: "The Nexus sign-in ran out. Try again." });
     expect(words(root)).toEqual([
+      "nexus",
       "wait ran out",
       "No approval in 10 minutes.",
       "Nobody approved this device in time, or the answer got lost. An approval works once, so start again.",
@@ -382,6 +401,7 @@ describe("unlocking with the Recovery Key", () => {
   it("asks for the key in 14 boxes of four characters, four to a row and the last row two, with the password link only when a password was set up", async () => {
     const { root } = await drawn("locked", locked(true));
     expect(words(root)).toEqual([
+      "nexus",
       "locked",
       "Signed in, no key yet.",
       "This device is signed in to Nexus but does not have your key. Type your Recovery Key, or approve this device from another one.",
@@ -406,6 +426,7 @@ describe("unlocking with the Recovery Key", () => {
       setup.show(locked(true, "incomplete", "not whole"));
     });
     expect(words(root)).toEqual([
+      "nexus",
       "locked",
       "Signed in, no key yet.",
       "This device is signed in to Nexus but does not have your key. Type your Recovery Key, or approve this device from another one.",

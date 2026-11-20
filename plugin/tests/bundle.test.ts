@@ -1,6 +1,6 @@
 // What Obsidian loads from the Nexus plugin: manifest.json says the plugin is called Nexus, has the id nexus and runs
 // on mobile; `npm run build` in the plugin's folder writes the three files a person copies into a vault (main.js,
-// manifest.json and styles.css) into its dist folder, with the manifest at version 0.3.0; and the bundle asks for no
+// manifest.json and styles.css) into its dist folder, with the manifest's version the one in the plugin's own manifest.json; and the bundle asks for no
 // Node or Electron module, which an iPhone does not have. Obsidian itself supplies `obsidian` and the editor's own
 // packages, and those are the only modules the bundle may require.
 //
@@ -22,8 +22,8 @@ const DIST = path.join(PLUGIN, 'dist');
 const MANIFEST = path.join(DIST, 'manifest.json');
 const MAIN = path.join(DIST, 'main.js');
 const STYLES = path.join(DIST, 'styles.css');
-/** The version this build of the plugin is released as. */
-const VERSION = '0.3.0';
+/** The version this build of the plugin is released as: the one in the plugin's own manifest.json, so a version bump needs no edit here. */
+const VERSION = (JSON.parse(readFileSync(path.join(PLUGIN, 'manifest.json'), 'utf8')) as { version: string }).version;
 const README = path.join(PLUGIN, 'README.md');
 
 /** The environment the build runs in. Vitest's own VITEST* variables are dropped: left in, a nested tool may print nothing. */
@@ -80,7 +80,7 @@ describe('the Nexus plugin as Obsidian loads it', () => {
     expect(statSync(STYLES).size, 'styles.css has the screens in it').toBeGreaterThan(1000);
   }, BUILD_TIME);
 
-  it('is version 0.3.0, in the manifest and in the package', async () => {
+  it("is the version of the plugin's manifest.json, in the built manifest and in the package", async () => {
     await build();
     expect((JSON.parse(readFileSync(MANIFEST, 'utf8')) as { version: string }).version).toBe(VERSION);
     expect((JSON.parse(readFileSync(path.join(PLUGIN, 'package.json'), 'utf8')) as { version: string }).version).toBe(VERSION);

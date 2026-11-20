@@ -6,6 +6,7 @@
 //
 // Everything a device sent (the name it signed in with) is shown as text, never as markup (dom.ts).
 
+import { COPIED_FOR_MS, COPY_WORDS } from "../copied";
 import { passwordsAgree, type SetupState, type VaultSetup } from "../vault-setup";
 import { CodeEntry, codeCharacters, type Edit } from "./code-entry";
 import { el } from "./dom";
@@ -27,8 +28,7 @@ export interface ScreenDeps {
   close: () => void;
 }
 
-/** How long the Copy key button says Copied. */
-export const COPIED_FOR_MS = 2_000;
+export { COPIED_FOR_MS };
 /** How long a device code works, as the screens say it. */
 const CODE_MINUTES = 10;
 
@@ -55,7 +55,7 @@ export const WORDS = {
     cannot: "Nexus cannot show it again or reset it. Lose it and every signed-in device, and your notes cannot be opened.",
     saved: "I saved my Recovery Key somewhere safe",
     copy: "Copy key",
-    copied: "Copied",
+    copied: COPY_WORDS.copied,
   },
   check: {
     title: "check key",
@@ -171,6 +171,9 @@ export const WORDS = {
 
 /** The ids of the code fields, which tell their boxes apart. */
 const FIELD = { typeBack: "type-back", signIn: "sign-in", device: "device", matching: "matching", key: "recovery-key" } as const;
+/** The keys of the Copy buttons: the Recovery Key's, and one for each code that is read out. */
+const COPY_KEY = "copy";
+const COPY_CODE = { signIn: "copy-sign-in", device: "copy-device", matching: "copy-matching" } as const;
 /** The ids of the other things the caret is put back in after a screen draws itself anew. */
 const KEY = { password: "password", again: "again", unlockPassword: "unlock-password" } as const;
 
@@ -185,7 +188,8 @@ export class SetupScreens {
   // What the key screens keep.
   #phase: Phase = "start";
   #saved = false;
-  #copied = false;
+  /** The key of the Copy button that says Copied now, if one does. */
+  #copied: string | null = null;
   #stopCopied: (() => void) | null = null;
   readonly #typeBack = new CodeEntry(Array(3 * GROUP_SIZE).fill(1));
   /** The rows (0 to 2) of the three groups that are drawn red. */
@@ -413,7 +417,7 @@ export class SetupScreens {
       card(
         text(w.once),
         el("div", { class: "nx-panel" }, ...rows),
-        pill(this.#copied ? w.copied : w.copy, "quiet", () => this.#copyKey(recoveryKey), { start: true, key: "copy" }),
+        pill(this.#copied === COPY_KEY ? w.copied : w.copy, "quiet", () => this.#copy(COPY_KEY, recoveryKey.split("-").join(" ")), { start: true, key: COPY_KEY }),
         small(w.cannot),
         el(
           "div",
@@ -563,8 +567,8 @@ export class SetupScreens {
       w.line,
       card(
         text(w.text),
-        readCode(w.signInCode, codeCharacters(state.code)),
-        readCode(w.deviceCode, codeCharacters(state.keyCode)),
+        this.#readCode(w.signInCode, state.code, COPY_CODE.signIn),
+        this.#readCode(w.deviceCode, state.keyCode, COPY_CODE.device),
         el("div", { class: "nx-status" }, el("span", { class: "nx-status__dot" }), small(w.status)),
         actions(pill(WORDS.buttons.cancel, "quiet", () => this.#cancelThenLook(), { key: "cancel" })),
       ),
@@ -616,7 +620,7 @@ export class SetupScreens {
     return screen(
       w.title,
       w.line,
-      card(text(w.text), readCode(w.matching, codeCharacters(state.code)), small(w.warning), actions(pill(WORDS.buttons.done, "main", () => this.#deps.setup.done(), { key: "done" }))),
+      card(text(w.text), this.#readCode(w.matching, state.code, COPY_CODE.matching), small(w.warning), actions(pill(WORDS.buttons.done, "main", () => this.#deps.setup.done(), { key: "done" }))),
     );
   }
 
@@ -797,14 +801,19 @@ export class SetupScreens {
     this.#render();
   }
 
-  /** Copy key: the whole key on the clipboard as one string, a space between groups, and the button says Copied for two seconds. */
-  #copyKey(recoveryKey: string): void {
+  /** A code to read out, with a Copy button that puts the code as the boxes show it on the clipboard. */
+  #readCode(name: string, code: string, key: string): HTMLElement {
+    return readCode(name, codeCharacters(code), { key, copied: this.#copied === key, onCopy: (shown) => this.#copy(key, shown) });
+  }
+
+  /** A Copy button: `words` go on the clipboard as one string, and the button (`key`) says Copied for two seconds. The Recovery Key goes with a space between groups. */
+  #copy(key: string, words: string): void {
     this.#run(
-      this.#deps.copy(recoveryKey.split("-").join(" ")).then(() => {
-        this.#copied = true;
+      this.#deps.copy(words).then(() => {
+        this.#copied = key;
         this.#stopCopied?.();
         this.#stopCopied = this.#deps.later(COPIED_FOR_MS, () => {
-          this.#copied = false;
+          this.#copied = null;
           this.#stopCopied = null;
           this.#render();
         });
