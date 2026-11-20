@@ -125,6 +125,7 @@ describe("adding a device with one code", () => {
     forbidFetch();
     const { device: a } = await firstRun(world);
     const b = await setupDevice(world, { token: null, name: "New phone" });
+    let refused = false;
     b.whenWaiting = async (pause) => {
       if (pause !== 1) return;
       const onA = screensFor(a);
@@ -134,8 +135,10 @@ describe("adding a device with one code", () => {
       await until("the refusal", () => (a.setup.state as { problem?: unknown }).problem === "wrong-key-code", () => a.setup.state);
       expect(onA.root.querySelectorAll(".nx-box--wrong"), "all ten boxes red").toHaveLength(10);
       expect(a.log.to("POST device/approve"), "nothing was sent to the new device").toEqual([]);
+      refused = true;
       b.setup.cancel();
     };
     await b.setup.askAnotherDevice();
+    expect(refused, "A's screen took the code and refused it").toBe(true);
   }, 30_000);
 });
