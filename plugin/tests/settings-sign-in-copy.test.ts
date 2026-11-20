@@ -77,9 +77,10 @@ function openTab() {
   return { tab, account, timers, written, opened };
 }
 
-/** Lets the sign-in get as far as waiting for the owner: Nexus has issued the code, and the tab shows it. */
+/** Lets the sign-in get as far as waiting for the owner: Nexus has issued the code, and the tab shows it. Waits on the clock, not a count of turns, as a busy machine answers slowly. */
 async function untilWaiting(timers: Timer[]): Promise<void> {
-  for (let turn = 0; turn < 200 && !timers.some((timer) => timer.ms === POLL_EVERY_MS); turn++) await new Promise((resolve) => setImmediate(resolve));
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline && !timers.some((timer) => timer.ms === POLL_EVERY_MS)) await new Promise((resolve) => setTimeout(resolve, 5));
   expect(timers.some((timer) => timer.ms === POLL_EVERY_MS), "the sign-in began and is waiting for the owner").toBe(true);
 }
 
