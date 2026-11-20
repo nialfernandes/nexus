@@ -9,8 +9,10 @@ for one host. The one plug today is for Cloudflare Workers and D1 (`src/plugs/cl
 
 **Status.** Not audited, like the rest of this repository (see the [top-level README](../README.md) and the
 [threat model](../docs/THREAT-MODEL.md), which says what the server can still see). The Obsidian plugin in `plugin/`
-now encrypts every note and uses the routes below, but the screens that make and unlock the vault key are not built yet, so
-it has no key and **does not sync with this server yet**. Nothing is deployed.
+encrypts every note and uses the routes below, and it has the screens that make and unlock the vault key and add another
+device (see "The screens" in the [plugin's README](../plugin/README.md)). It syncs once the vault is unlocked on a device,
+and until then it has no key and syncs nothing. The one page this server has is the device approval page (below). Nothing
+is deployed.
 
 ## What it stores
 
@@ -101,6 +103,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `POST /wrap/delete` `{ kid, kind }` | owner | Removes a wrap |
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
+| `GET /device/waiting[?code=C]` | owner | `200 { signins: [ { label, code } ] }`: the sign-ins still waiting for an answer (not answered, not run out), oldest first, with nothing secret in them. With `code`, only the sign-in that code is, however a person typed it (small letters, spaces, with or without the dash), so a device that is typed the code from the new device's screen finds the sign-in from that code alone. An empty list when none matches. Any identity that is not the owner is `403` and gets no list |
 | `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes and `"used"` when it was answered already (the approval page draws a different card for each); a code Nexus has no sign-in for is `404` |
 
 A note id is 1 to 128 letters, digits, hyphens or underscores (what url-safe base64, hex and a UUID are written in): a
@@ -135,8 +138,8 @@ answers: the older `/apps/nexus` prefix has been removed, and an address under i
 Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
 On Cloudflare the page's files (the page, its stylesheet and script, and its three typefaces in `public/nexus/fonts`) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
-`wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand them to anyone
-before the Worker could check for the owner. (The tests use a stand-in for the asset server, so this setting is the part
+`wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand out every file under
+`public/nexus` (the licence texts beside the typefaces, a folder) and not only the page's own six, which the Worker serves. (The tests use a stand-in for the asset server, so this setting is the part
 they cannot prove on Cloudflare itself.)
 
 ## A vault that was kept in plain text
@@ -191,9 +194,10 @@ package.
 Serve Nexus over HTTPS only. The owner's secret and every token travel in request headers.
 
 The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` to Nexus, gives the
-owner the device approval page (`public/nexus/`, served through the `ASSETS` binding), and answers 404 to everything
-else. The files of the page are static and identical for everyone and hold nothing private, and `run_worker_first`
-(above) makes the Worker the only way to them.
+device approval page (`public/nexus/`, served through the `ASSETS` binding) to whoever opens its link, and answers 404 to
+everything else. The files of the page are static and identical for everyone and hold nothing private, so they are served
+without a sign-in: the owner signs in on the page itself (below). Every call the page makes to Nexus is checked as the
+owner's, and `run_worker_first` (above) makes the Worker the only way to the files.
 
 ### Signing in as the owner
 
@@ -227,8 +231,15 @@ curl -X POST https://nexus.example.org/nexus/api/device/poll \
   -H 'content-type: application/json' -d '{"secret":"<the secret from the start answer>"}'
 ```
 
-The approval page needs the same cookie in the browser. A browser that holds it should keep it `Secure`, `HttpOnly`
-and `SameSite=Lax`. Nexus also refuses any request whose body is not declared `application/json`, as a second wall
+The cookie is one way in. The other is the same secret in the header `x-nexus-owner-secret`, which is how the approval page
+signs the owner in, so a first device can be set up with **no Terminal, no environment variable and no cookie to set by
+hand**: the owner opens the link the plugin shows, types the owner secret into the one field on the page, and presses Allow
+beside the code. The page sends the secret in that header with its calls over HTTPS and keeps it nowhere (no storage, no
+cookie): it is held by the page's script until the code has an answer. The header is taken over HTTPS only (or from a
+loopback address such as `localhost`, which a browser treats as a secure context), and a wrong one is no credential at all,
+`401`, even beside a right cookie. Nexus never answers a CORS preflight, so a page on another site cannot send the header.
+A browser that does hold the cookie is not asked for the secret, and it should keep the cookie `Secure`, `HttpOnly` and
+`SameSite=Lax`. Nexus also refuses any request whose body is not declared `application/json`, as a second wall
 against a page on another site acting for the owner.
 
 A better browser sign-in than a hand-set cookie (for example, Cloudflare Access in front of the page) is not built
@@ -261,7 +272,7 @@ Cloudflare, write one plug that builds a `NexusHost` and hands each request to `
 
 Besides the host, the plug must create the tables by applying the files in `migrations/` in name order (split at the
 semicolons: the files hold no semicolon inside a comment or a literal), and may serve the approval page in `public/`
-to the owner. The Cloudflare plug in `src/plugs/cloudflare/` is the worked example: `host.ts` builds the host,
+(it holds nothing private, and the owner may sign in on it). The Cloudflare plug in `src/plugs/cloudflare/` is the worked example: `host.ts` builds the host,
 `d1.ts` is the SQL plug, `secrets.ts` the secrets plug, `signin.ts` the sign-in plug, `settings.ts` reads the
 settings, `worker.ts` is the entry, and `app.ts` lets an app in the same Worker call the store without a token.
 
@@ -288,7 +299,7 @@ plug's use of the real D1 and of the real asset server is the part they do not p
 
 ```
 migrations/          the schema, in the SQL common ground of SQLite and Postgres
-public/nexus/        the device approval page (four static files)
+public/nexus/        the device approval page: its page, stylesheet and script, and its three typefaces
 src/ports.ts         what the logic needs from a host
 src/routes.ts        the routes, and the one place a request becomes an answer
 src/*.ts             the logic: the store, wraps, identities, devices, addresses

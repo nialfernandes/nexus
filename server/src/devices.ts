@@ -2,8 +2,9 @@
 //
 //   1. The device asks to start a sign-in for an identity and a label (`start`, no credential needed). It is handed a
 //      short CODE (safe to show on a screen), a LINK to the approval page, and a long SECRET that only it knows.
-//   2. The owner opens the link on a phone or a computer, signed in, sees what is being asked, and allows or
-//      denies it (`pending`, `approve`, `deny`, all the owner's only).
+//   2. The owner opens the link on a phone or a computer, signed in (or types the owner secret on the page, which is how a
+//      first device is set up), sees what is being asked, and allows or denies it (`pending`, `approve`, `deny`, all the
+//      owner's only). An approving device that is only typed the code finds the sign-in with `waiting`.
 //   3. The device polls with its secret. After an allow, the first poll is handed a token, once. Every later poll
 //      is refused.
 //
@@ -167,6 +168,23 @@ function stillWaiting(host: NexusHost, row: SigninRow): void {
 export async function pending(host: NexusHost, codeInput: unknown) {
   const row = await waitingFor(host, codeInput);
   return { code: row.code, identity: row.identity, label: row.label, expiresAt: row.expires_at, deviceKey: row.device_key };
+}
+
+/** A code as a person types it, made comparable: capitals, with no spaces, dash or other mark between the characters. */
+const typedCode = (value: string): string => value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+/**
+ * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent and
+ * its device code, and nothing else, so nothing secret is in it. The approving device is typed the code from the new
+ * device's screen and has nothing but that, so with `codeInput` the list is narrowed to the sign-in that code is,
+ * however it was typed (small letters, spaces, with or without the dash). A code with no characters in it matches none.
+ */
+export async function waiting(host: NexusHost, codeInput: unknown) {
+  const rows = await host.sql.all<{ code: string; label: string }>(
+    "SELECT code, label FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, code", [host.clock.now()]);
+  const typed = typeof codeInput === "string" ? typedCode(codeInput) : null;
+  const found = typed === null ? rows : rows.filter((row) => typed !== "" && typedCode(row.code) === typed);
+  return { signins: found.map((row) => ({ label: row.label, code: row.code })) };
 }
 
 /** The sign-in the owner is answering, or a refusal: no such code, or a code that has expired or been answered already. */

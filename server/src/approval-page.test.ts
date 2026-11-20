@@ -1,5 +1,5 @@
-// The approval page, read from what the Worker serves: that the link a device is handed opens a page for the owner and
-// for nobody else, that the page's stylesheets take every colour from the page's own token variables, that its script
+// The approval page, read from what the Worker serves: that the link a device is handed opens the page for anyone who has it
+// (the owner signs in on it, so it cannot wait for a sign-in), that the page's stylesheets take every colour from the page's own token variables, that its script
 // never builds markup from what a device sent, and that the answers a browser check would give the page
 // (__fixtures__/approve-answers.ts) are the answers the real routes give. What the page does when the owner taps is
 // run against the real Worker in approval-page-actions.test.ts. What the page looks like on a screen (its layout, its
@@ -50,7 +50,7 @@ async function openPage(): Promise<string> {
   const started = bodyOf(await device().start("agents", "lab-m"));
   const link = new URL(started.link);
   const answer = await sendAs("GET", link.pathname + link.search, owner);
-  expect(answer.status, `the link a device is handed opens a page for the owner (${answer.text.slice(0, 80)})`).toBe(200);
+  expect(answer.status, `the link a device is handed opens the page for the owner (${answer.text.slice(0, 80)})`).toBe(200);
   return answer.text;
 }
 
@@ -75,7 +75,7 @@ function rawColours(css: string): string[] {
 }
 
 describe("the link a device is handed opens the approval page", () => {
-  it("is a page for the owner: HTML that fits a phone, with a stylesheet and a script of its own", async () => {
+  it("is a page: HTML that fits a phone, with a stylesheet and a script of its own", async () => {
     const html = await openPage();
     expect(html).toMatch(/<html\b/i);
     expect(html).toMatch(/<meta name="viewport" content="[^"]*width=device-width/i);
@@ -84,15 +84,23 @@ describe("the link a device is handed opens the approval page", () => {
     expect(parts.scripts.length, "a script").toBeGreaterThan(0);
   });
 
-  it("is not for a request with no sign-in, which is told to sign in as the owner, nor for someone who is not the owner", async () => {
+  it("is the same page for the owner, for nobody and for someone who is not the owner: it holds nothing private, and the owner signs in on it", async () => {
     const asOwner = await sendAs("GET", `${PAGE_PATH}?code=ABCD`, owner);
     expect(asOwner.status, "the page for the owner").toBe(200);
-    const asNobody = await sendAs("GET", `${PAGE_PATH}?code=ABCD`, null);
-    expect(asNobody.status).toBe(401);
-    expect(asNobody.text).toMatch(/Sign in as the owner/);
-    const asStranger = await sendAs("GET", `${PAGE_PATH}?code=ABCD`, stranger);
-    expect(asStranger.status).not.toBe(200);
-    expect(asStranger.text).not.toMatch(/\bAllow\b/);
+    for (const [who, what] of [[null, "nobody"], [stranger, "a stranger"]] as const) {
+      const answer = await sendAs("GET", `${PAGE_PATH}?code=ABCD`, who);
+      expect(answer.status, `the page for ${what}`).toBe(200);
+      expect(answer.text, `the page for ${what} is the page the owner gets`).toBe(asOwner.text);
+    }
+  });
+
+  it("holds nothing of the sign-in it is opened for: the code in the link is not in the page, so the page asks Nexus, which asks for the owner", async () => {
+    const started = bodyOf(await device().start("agents", "lab-secret-label"));
+    const answer = await sendAs("GET", new URL(started.link).pathname + new URL(started.link).search, null);
+    expect(answer.status).toBe(200);
+    expect(answer.text).not.toContain(started.code);
+    expect(answer.text).not.toContain("lab-secret-label");
+    expect(answer.text).not.toContain(started.secret);
   });
 });
 
@@ -100,7 +108,7 @@ describe("the page's typefaces", () => {
   /** Every address a stylesheet's @font-face rules load a font from. */
   const fontAddresses = (css: string) => [...css.matchAll(/url\(\s*['"]?([^'")\s]+)['"]?\s*\)/gi)].map((m) => m[1]);
 
-  it("are the files its stylesheet names, served beside it to the owner and to nobody else", async () => {
+  it("are the files its stylesheet names, served beside it to the owner and to anyone else who opens the page", async () => {
     const parts = partsOf(await openPage());
     const addresses = new Set<string>();
     for (const href of parts.stylesheets) {
@@ -114,8 +122,8 @@ describe("the page's typefaces", () => {
       const asOwner = await sendAs("GET", address, owner);
       expect(asOwner.status, `${address} for the owner`).toBe(200);
       expect(asOwner.text.length, `${address} is a font file`).toBeGreaterThan(1000);
-      expect((await sendAs("GET", address, null)).status, `${address} signed out`).toBe(401);
-      expect((await sendAs("GET", address, stranger)).status, `${address} for a stranger`).not.toBe(200);
+      expect((await sendAs("GET", address, null)).status, `${address} signed out`).toBe(200);
+      expect((await sendAs("GET", address, stranger)).status, `${address} for a stranger`).toBe(200);
     }
   });
 });

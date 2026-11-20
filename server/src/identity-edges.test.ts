@@ -154,7 +154,7 @@ describe("routes that are not there, and the two a device calls", () => {
 });
 
 describe("the approval page's route", () => {
-  it("serves the page and the files it is made of to the owner, and nothing else under /nexus", async () => {
+  it("serves the page and the files it is made of, and nothing else under /nexus", async () => {
     for (const path of [
       "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js",
       "/nexus/fonts/unbounded-var.woff2", "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2",

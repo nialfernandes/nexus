@@ -15,7 +15,8 @@
 // THE WIRE CONTRACT OF IDENTITIES (all routes are under /nexus/api, JSON in and out, a refusal is
 // `{ error: "<plain words>" }`; the store routes of nexus-world.ts keep their shapes)
 //
-//   WHO IS CALLING. The owner's own session cookie is the identity `owner`. A header `Authorization: Bearer <token>` is
+//   WHO IS CALLING. The owner's own session cookie is the identity `owner`. So is the owner's secret sent in the header `x-nexus-owner-secret`
+//   (what the approval page does), over https only: over plain http the header is refused as no credential at all, 401. A header `Authorization: Bearer <token>` is
 //   the identity the token was made for. No credential, a token that is not known, and a revoked token are all 401,
 //   before any route runs. A signed-in person who is not the owner and sends no token is 401 too.
 //
@@ -33,6 +34,10 @@
 //   GET  device/pending ?code=C                   the owner only
 //       200 { code, identity, label, expiresAt, deviceKey }  what the approval page shows (`deviceKey` is null when none was sent)
 //       404 no such code        410 { error, reason } the code has expired (`reason` "expired"), or has been allowed or denied already ("used")
+//   GET  device/waiting [?code=C]                 the owner only: the sign-ins still waiting for an answer (not answered, not run out)
+//       200 { signins: [ { label, code } ] }      oldest first; nothing secret is in it. With `code`, only the sign-in that code is, whatever its
+//                                                 capitals, spaces and dash (the code as a person types it); an empty list when none is
+//       401 nobody  403 someone who is signed in as another identity
 //   POST device/approve { code[, approval, approverKey] }   the owner only
 //       `approval` is the sealed vault key (base64) and `approverKey` the approving device's public key (base64, 32 bytes): both or neither,
 //       and only for a sign-in that sent a `deviceKey` (else 400). The server keeps them until the device collects them or the code expires.
@@ -62,6 +67,7 @@
 import { expect } from "vitest";
 import { VAULT_ID } from "./device-blobs";
 import type { NexusEnv } from "../plugs/cloudflare/host";
+import { OWNER_SECRET_HEADER } from "../plugs/cloudflare/signin";
 import worker from "../plugs/cloudflare/worker";
 import { API, ORIGIN, appEnv, bodyOf, nexusDb, type Answer, type Sent } from "./nexus-world";
 
@@ -73,7 +79,9 @@ export const workerEnv = (): NexusEnv => appEnv();
  * token that is only made when it is first used (`tokenFor`), so a test that needs one fails in its own body and a
  * file does not fail whole before any test has run.
  */
-export type Who = { cookie: string } | { bearer: string } | { authorization: string } | { lazy: () => Promise<Who> } | null;
+export type Who = { cookie: string } | { ownerSecret: string } | { bearer: string } | { authorization: string } | { lazy: () => Promise<Who> } | null;
+
+export { OWNER_SECRET_HEADER };
 
 /** One request through the Nexus Worker, as `who`. */
 export async function sendAs(
@@ -82,6 +90,7 @@ export async function sendAs(
   const headers: Record<string, string> = {};
   while (who && "lazy" in who) who = await who.lazy();
   if (who && "cookie" in who) headers.cookie = who.cookie;
+  if (who && "ownerSecret" in who) headers[OWNER_SECRET_HEADER] = who.ownerSecret;
   if (who && "bearer" in who) headers.authorization = `Bearer ${who.bearer}`;
   if (who && "authorization" in who) headers.authorization = who.authorization;
   if (body !== undefined) headers["content-type"] = "application/json";
@@ -139,6 +148,8 @@ export function device(who: Who = null, env?: NexusEnv) {
   return {
     start: (identity: string, label: string, deviceKey?: string) => post("start", { identity, label, ...(deviceKey === undefined ? {} : { deviceKey }) }),
     pending: (code: string) => sendAs("GET", `${API}/device/pending${query({ code })}`, who, undefined, env),
+    /** The owner's list of sign-ins still waiting; with `code`, only the one that code is. */
+    waiting: (code?: string) => sendAs("GET", `${API}/device/waiting${query({ code })}`, who, undefined, env),
     /** `sealed` is the sealed approval and the approving device's public key, both base64, sent with the allow. */
     approve: (code: string, sealed?: { approval?: unknown; approverKey?: unknown }) => post("approve", { code, ...sealed }),
     deny: (code: string) => post("deny", { code }),

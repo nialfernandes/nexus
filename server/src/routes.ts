@@ -29,12 +29,14 @@
 //                                                      device left one, the sealed approval and its device's public key (`approval`,
 //                                                      `approverKey`, base64, else null), deleted as they are handed over
 //   GET  /device/pending ?code=C                       owner only: what is being asked, for the approval page, with its `deviceKey`
+//   GET  /device/waiting [?code=C]                     owner only: the sign-ins still waiting, { signins: [ { label, code } ] }, oldest first, nothing secret in it; with `code`,
+//                                                      only the sign-in that code is, however a person typed it (small letters, spaces, no dash)
 //   POST /device/approve { code[, approval, approverKey] } owner only: the sealed approval and the approving device's public key go
 //                                                      together, and only to a sign-in that sent a `deviceKey`
 //   POST /device/deny    { code }                      owner only
 //
 // WHO IS CALLING. The owner's session (the host's sign-in plug, ports.ts) is the identity named by the `owner`
-// setting. A header `Authorization: Bearer <token>` is the identity the token was made for. Both missing, a token Nexus does not know, a revoked one, and a header that is
+// setting: on Cloudflare, a cookie or, for the approval page, a header, each holding the owner secret (plugs/cloudflare/signin.ts). A header `Authorization: Bearer <token>` is the identity the token was made for. Both missing, a token Nexus does not know, a revoked one, and a header that is
 // not a Bearer one are all 401, before any route runs. Only the two device routes a device itself calls (start and
 // poll) need no credential: a device has none yet.
 //
@@ -109,6 +111,7 @@ const ROUTES: readonly Route[] = [
   { method: "POST", name: "device/start", who: "anyone", run: async (c) => ok(await devices.start(c.host, c.url.origin, await c.body())) },
   { method: "POST", name: "device/poll", who: "anyone", run: async (c) => ok(await devices.poll(c.host, (await c.body()).secret)) },
   { method: "GET", name: "device/pending", who: "owner", run: async (c) => ok(await devices.pending(c.host, param(c, "code"))) },
+  { method: "GET", name: "device/waiting", who: "owner", run: async (c) => ok(await devices.waiting(c.host, param(c, "code"))) },
   { method: "POST", name: "device/approve", who: "owner", run: async (c) => ok(await devices.approve(c.host, await c.body())) },
   { method: "POST", name: "device/deny", who: "owner", run: async (c) => ok(await devices.deny(c.host, (await c.body()).code)) },
 ];

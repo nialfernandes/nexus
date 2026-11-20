@@ -1,11 +1,14 @@
-// Serves the device approval page: a plain static page (public/nexus) that the Worker hands out to the owner. Only
+// Serves the device approval page: a plain static page (public/nexus) that the Worker hands out to whoever opens its link. Only
 // the files the page is made of are served (its page, stylesheet and script, and the three typefaces the stylesheet
 // asks for), each at its own address under /nexus, so no other file in the assets (and no folder) can be asked for by
 // name. The page is the same for everyone and needs nothing written into it per request: the code it shows is read
-// from its own address by its own script, and everything it asks of Nexus goes to the API, which checks the owner again.
+// from its own address by its own script, and everything it asks of Nexus goes to the API, which checks the owner on every call.
+// Nothing in a file is private, so none is held back from a browser that is not signed in: the page is where the owner
+// signs in with the owner secret for a first device.
 //
 // The files sit in the assets under /nexus, the same address the page is served at, so the asset server would hand
-// them to anyone before the Worker ran. wrangler.jsonc's `run_worker_first` makes the Worker see /nexus/* first.
+// them out before the Worker ran. wrangler.jsonc's `run_worker_first` makes the Worker see /nexus/* first, so that
+// only the files named here are served and a folder or any other file in the assets is a 404.
 
 import { NEXUS_PREFIX } from "../../addresses";
 import type { NexusEnv } from "./host";
@@ -24,7 +27,7 @@ export const isNexusAsset = (pathname: string): boolean => Object.hasOwn(FILES, 
 
 const NOT_FOUND = (): Response => new Response("Not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
 
-/** One of the page's files. The caller has already made sure the request is the owner's. */
+/** One of the page's files, for anyone. */
 export async function serveNexusAsset(request: Request, env: NexusEnv): Promise<Response> {
   const url = new URL(request.url);
   const target = Object.hasOwn(FILES, url.pathname) ? FILES[url.pathname] : undefined;

@@ -107,6 +107,7 @@ beforeAll(async () => {
   await call("POST", "token/revoke", owner, { id: "no-such-token" });
   const started = bodyOf(await call("POST", "device/start", null, { identity: "agents", label: "no-plaintext device" }));
   await call("GET", `device/pending?code=${started.code}`, owner);
+  await call("GET", "device/waiting", owner);
   await call("POST", "device/approve", owner, { code: started.code });
   await call("POST", "device/poll", null, { secret: started.secret });
   const refused = bodyOf(await call("POST", "device/start", null, { identity: "agents", label: "to deny" }));

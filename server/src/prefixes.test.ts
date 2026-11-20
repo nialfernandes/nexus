@@ -77,10 +77,10 @@ describe("the device approval page is at /nexus/approve", () => {
     "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
   ];
 
-  it("serves the page, its stylesheet, its script and its three typefaces to the owner only, and none of them under the old prefix", async () => {
+  it("serves the page, its stylesheet, its script and its three typefaces to anyone, and none of them under the old prefix", async () => {
     for (const file of FILES) {
       expect((await sendAs("GET", `/nexus/${file}`, owner)).status, file).toBe(200);
-      expect((await sendAs("GET", `/nexus/${file}`, null)).status, `${file} signed out`).toBe(401);
+      expect((await sendAs("GET", `/nexus/${file}`, null)).status, `${file} signed out`).toBe(200);
       expect((await sendAs("GET", `/apps/nexus/${file}`, owner)).status, `${file} at the old prefix`).toBe(404);
       expect((await sendAs("GET", `/apps/nexus/${file}`, null)).status, `${file} at the old prefix, signed out`).toBe(404);
     }
@@ -91,21 +91,21 @@ describe("the device approval page is at /nexus/approve", () => {
     expect(started.link).toBe(`https://nexus.example.test/nexus/approve?code=${encodeURIComponent(started.code)}`);
   });
 
-  it("refuses the page's files to anyone else without asking the asset server for them", async () => {
+  it("asks the asset server only for a file of the page, at its own address, whoever asks, and never for an address under the old prefix", async () => {
     const asked: string[] = [];
     const assets = staticAssets();
     const watching = { fetch: (request: Request) => { asked.push(new URL(request.url).pathname); return assets.fetch(request); } } as unknown as Fetcher;
     const env = await nexusEnv({ ASSETS: watching });
 
-    expect((await sendAs("GET", "/nexus/approve.js", null, undefined, env)).status).toBe(401);
-    expect((await sendAs("GET", "/nexus/approve.js", { cookie: "nexus_owner=wrong" }, undefined, env)).status).toBe(401);
-    expect(asked, "the asset server was not asked").toEqual([]);
+    expect((await sendAs("GET", "/nexus/approve.js", null, undefined, env)).status, "signed out").toBe(200);
+    expect((await sendAs("GET", "/nexus/approve.js", { cookie: "nexus_owner=wrong" }, undefined, env)).status, "with a wrong cookie").toBe(200);
+    expect(asked, "the file is asked for at its own address in the assets").toEqual(["/nexus/approve.js", "/nexus/approve.js"]);
 
+    asked.length = 0;
     expect((await sendAs("GET", "/apps/nexus/approve.js", owner, undefined, env)).status).toBe(404);
-    expect(asked, "the old prefix is never passed on to the asset server").toEqual([]);
-
-    expect((await sendAs("GET", "/nexus/approve.js", owner, undefined, env)).status).toBe(200);
-    expect(asked, "the file is asked for at its own address in the assets").toEqual(["/nexus/approve.js"]);
+    expect((await sendAs("GET", "/nexus/fonts/LICENSES.md", null, undefined, env)).status, "a file in the assets that is not the page's").toBe(404);
+    expect((await sendAs("GET", "/nexus/fonts/", null, undefined, env)).status, "a folder").toBe(404);
+    expect(asked, "an address that is not a file of the page is never passed on to the asset server").toEqual([]);
   });
 });
 
