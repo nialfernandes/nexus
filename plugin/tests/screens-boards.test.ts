@@ -259,7 +259,7 @@ describe("adding a device: the new device waits", () => {
 });
 
 describe("adding a device: the approving device", () => {
-  const NEW_PHONE = { label: "Obsidian on Nial's iPhone", signInCode: "ABCD-EFGH" };
+  const NEW_PHONE = { label: "Obsidian on Alex's iPhone", signInCode: "ABCD-EFGH" };
   const asking = (problem: Extract<SetupState, { step: "approve-device" }>["problem"], message: string | null = null): SetupState => ({
     step: "approve-device", message, problem, devices: [NEW_PHONE], device: NEW_PHONE,
   });
@@ -269,7 +269,7 @@ describe("adding a device: the approving device", () => {
     expect(words(root)).toEqual([
       "nexus",
       "approve device",
-      "Obsidian on Nial's iPhone",
+      "Obsidian on Alex's iPhone",
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
       "Device code",
       "Nothing is sent to the new device until the code is right.",
@@ -289,7 +289,7 @@ describe("adding a device: the approving device", () => {
     expect(words(root)).toEqual([
       "nexus",
       "approve device",
-      "Obsidian on Nial's iPhone",
+      "Obsidian on Alex's iPhone",
       "Type the code the new device is showing. This stops Nexus's server slipping in a device of its own.",
       "Device code",
       ..."AB12CD34EX",
