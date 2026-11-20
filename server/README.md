@@ -104,7 +104,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
 | `GET /device/waiting[?code=C]` | owner | `200 { signins: [ { label, code } ] }`: the sign-ins still waiting for an answer (not answered, not run out), oldest first, with nothing secret in them. With `code`, only the sign-in that code is, however a person typed it (small letters, spaces, with or without the dash), so a device that is typed the code from the new device's screen finds the sign-in from that code alone. An empty list when none matches. Any identity that is not the owner is `403` and gets no list |
-| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes and `"used"` when it was answered already (the approval page draws a different card for each); a code Nexus has no sign-in for is `404` |
+| `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes (`error` is "That code has run out.") and `"used"` when it was answered already ("That code was already used."); the approval page draws a different card for each, in those words. A poll of a finished code is the same `410`. A code Nexus has no sign-in for is `404` |
 
 A note id is 1 to 128 letters, digits, hyphens or underscores (what url-safe base64, hex and a UUID are written in): a
 path, with its slashes and dots, is refused as an id so it cannot be used as one by mistake.
@@ -203,7 +203,9 @@ owner's, and `run_worker_first` (above) makes the Worker the only way to the fil
 
 A Cloudflare Worker has no accounts, so the Cloudflare plug knows the owner by a secret: a request that carries the
 cookie `nexus_owner` holding the value of `NEXUS_OWNER_SECRET` is the owner's, as the identity named by `NEXUS_OWNER`.
-The secret is compared by its hash. Everything else that calls Nexus brings a bearer token.
+The secret is compared by its hash. It is taken over HTTPS only (the cookie as well as the header below), or at a loopback
+address such as `localhost`, which `wrangler dev` uses: over plain `http` to any other host it can be read on the wire, so it
+is no credential there and the call is a `401`. Everything else that calls Nexus brings a bearer token.
 
 The `nexus-agent` command makes these requests for you (`make-identity`, `allow`, `owner-sign-in` and `set-up-agent`,
 which sets an agent up end to end): see [the agent package's README](../packages/agent/README.md). The requests below are
@@ -235,9 +237,9 @@ The cookie is one way in. The other is the same secret in the header `x-nexus-ow
 signs the owner in, so a first device can be set up with **no Terminal, no environment variable and no cookie to set by
 hand**: the owner opens the link the plugin shows, types the owner secret into the one field on the page, and presses Allow
 beside the code. The page sends the secret in that header with its calls over HTTPS and keeps it nowhere (no storage, no
-cookie): it is held by the page's script until the code has an answer. The header is taken over HTTPS only (or from a
-loopback address such as `localhost`, which a browser treats as a secure context), and a wrong one is no credential at all,
-`401`, even beside a right cookie. Nexus never answers a CORS preflight, so a page on another site cannot send the header.
+cookie): it is held by the page's script until the code has an answer. The header is taken on the same terms as the cookie
+(HTTPS, or a loopback address such as `localhost`, which a browser treats as a secure context), and a wrong one is no
+credential at all, `401`, even beside a right cookie. Nexus never answers a CORS preflight, so a page on another site cannot send the header.
 A browser that does hold the cookie is not asked for the secret, and it should keep the cookie `Secure`, `HttpOnly` and
 `SameSite=Lax`. Nexus also refuses any request whose body is not declared `application/json`, as a second wall
 against a page on another site acting for the owner.

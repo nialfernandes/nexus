@@ -7,10 +7,15 @@
 //
 // The same secret in the header `x-nexus-owner-secret` is the owner's too. That is how the approval page signs the owner
 // in for a first device: a script cannot set a cookie header, and the page keeps no cookie, so it sends the secret the
-// owner typed with each call and keeps it nowhere. A header is taken over https only (or a loopback address, which a
-// browser treats as a secure context), since a secret in a header over plain http can be read on the wire. A page on
-// another site cannot send it: a custom header on a cross-site request needs a CORS preflight, which Nexus never answers.
-// When the header is there it alone decides, so a wrong one is refused even beside a right cookie.
+// owner typed with each call and keeps it nowhere. A page on another site cannot send it: a custom header on a cross-site
+// request needs a CORS preflight, which Nexus never answers. When the header is there it alone decides, so a wrong one is
+// refused even beside a right cookie.
+//
+// The secret is taken over https only, in the cookie as in the header, or at a loopback address (localhost, which a browser
+// treats as a secure context and which `wrangler dev` uses): over plain http to any other host it can be read on the wire, so
+// it is no credential there and the call is refused as if none was sent. A Worker on Cloudflare is always reached over https,
+// so this only turns away a copy of Nexus behind plain http on a network; no client of this repository sends the secret that
+// way (the Terminal's commands and the tests use https or a loopback address).
 //
 // With no owner set, or no secret set, nobody is let in by a cookie. The secret is compared by its hash, so the time
 // the comparison takes says nothing about how much of a guess was right.
@@ -27,7 +32,7 @@ export const OWNER_SECRET_HEADER = "x-nexus-owner-secret";
 /** The addresses a browser treats as a secure context over plain http: the machine's own. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Whether a secret in a header may be taken from this request: it came over https, or to the machine's own address. */
+/** Whether the owner's secret, in a cookie or a header, may be taken from this request: it came over https, or to the machine's own address. */
 function secureRequest(request: Request): boolean {
   const url = new URL(request.url);
   return url.protocol === "https:" || LOOPBACK.has(url.hostname);
@@ -66,8 +71,8 @@ export function ownerSignIn(env: SignInEnv, settings: NexusSettings, secrets: Se
   return {
     async identify(request) {
       if (settings.owner === null || secret === "") return null;
+      if (!secureRequest(request)) return null;
       const sent = request.headers.get(OWNER_SECRET_HEADER);
-      if (sent !== null && !secureRequest(request)) return null;
       const given = sent !== null ? sent.trim() : cookieValue(request, OWNER_COOKIE);
       if (given === undefined || given === "") return null;
       // Both are hashed to the same length first, so the comparison never depends on how long the guess was.

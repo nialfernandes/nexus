@@ -20,8 +20,8 @@
 //   code ran out                 code used
 // A refusal that says the code is finished takes the question away, so nothing can be tapped twice: a 410 says why in
 // its `reason` (expired is "code ran out", used is "code used") and a 404 (a code Nexus no longer has) is "code used".
-// "Code ran out" is in Nexus's own words when it sent some. Any other refusal, and a code missing from the address, is
-// shown in Nexus's own words.
+// Each of the two cards says it in Nexus's own words ("That code has run out." / "That code was already used."): the page
+// shows what the 410 said. Any other refusal, and a code missing from the address, is shown in Nexus's own words.
 (function () {
   'use strict';
 
@@ -149,10 +149,11 @@
     return null;
   }
 
-  // The card for a code that ran out or was used. The "ran out" card says it in Nexus's own words when it sent some.
+  // The card for a code that ran out or was used. It says it in the words Nexus sent with the 410, and in the page's own (the
+  // WORDS above) only when Nexus sent none: a 404 has other words, for a code Nexus no longer has, and the card is "code used".
   function showFinished(kind, answer) {
     var words = WORDS[kind];
-    if (kind === 'expired' && answer.body && typeof answer.body.error === 'string') {
+    if (answer.status === 410 && answer.body && typeof answer.body.error === 'string' && answer.body.error !== '') {
       words = { title: words.title, line: words.line, said: answer.body.error, quiet: words.quiet };
     }
     showResult(words, kind);

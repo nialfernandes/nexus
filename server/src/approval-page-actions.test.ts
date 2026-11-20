@@ -122,11 +122,13 @@ interface Browser {
   cookie?: boolean;
   /** False for a page opened over plain http, where a browser does not call the page a secure context. True by default. */
   secure?: boolean;
+  /** Answers a call of the page in place of Nexus, for a test that needs Nexus to say something it does not say by itself. Null lets it through. */
+  answer?: (path: string) => Response | null;
 }
 
 /** Opens the page at this address (path and query), the way a browser does (the owner's by default), and runs its script. Nexus can be out of reach from the start. */
 async function open(address: string, startUnreachable = false, browser: Browser = {}): Promise<OpenPage> {
-  const { cookie = true, secure = true } = browser;
+  const { cookie = true, secure = true, answer } = browser;
   const html = await served(address, cookie ? owner : null);
   const scripts = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).filter((src) => src.endsWith("approve.js"));
   expect(scripts, "the page loads its own script").toHaveLength(1);
@@ -155,6 +157,8 @@ async function open(address: string, startUnreachable = false, browser: Browser 
         body: options.body === undefined ? null : JSON.parse(options.body),
       });
       sentSecrets.push(options.headers[OWNER_SECRET_HEADER] ?? null);
+      const said = answer?.(url.pathname);
+      if (said) return said;
       // The owner's browser sends the owner's own cookie with a call to the page's own address. Another browser sends none.
       const headers = cookie ? { ...options.headers, cookie: (owner as { cookie: string }).cookie } : options.headers;
       return await worker.fetch(new Request(url, { method: options.method, headers, body: options.body }), appEnv());
@@ -345,7 +349,7 @@ describe("code ran out: a code that ran out", () => {
 
     expect(page.el.title.textContent).toBe("code ran out");
     expect(page.el.line.textContent).toBe("Ten minutes is up.");
-    expect(page.el.said.textContent, "in Nexus's own words").toBe(GONE_EXPIRED.error);
+    expect(page.el.said.textContent, "in Nexus's own words").toBe("That code has run out.");
     expect(page.el.quiet.textContent).toBe("Ask for a new one on the device.");
     expect(marksShown(page), "the red clock").toEqual(["expired"]);
     expect(questionShown(page)).toBe(false);
@@ -404,6 +408,27 @@ describe("code used: a code that was used", () => {
       expect(page.el.title.textContent).toBe("code used");
       expect(marksShown(page)).toEqual(["used"]);
     }
+  });
+
+  it("says it in the words Nexus sent with the 410, each card in its own: the page has none of its own to say when Nexus said some", async () => {
+    const started = bodyOf(await device().start("agents", "lab-words-from-nexus"));
+    const link = new URL(started.link);
+    for (const [reason, title] of [["used", "code used"], ["expired", "code ran out"]] as const) {
+      const words = `Words only Nexus could have sent for ${reason}.`;
+      const refuse = () => new Response(JSON.stringify({ error: words, reason }), { status: 410, headers: { "content-type": "application/json" } });
+      const page = await open(link.pathname + link.search, false, { answer: (path) => (path === API_PENDING ? refuse() : null) });
+      expect(page.el.title.textContent).toBe(title);
+      expect(page.el.said.textContent, `the ${reason} card shows what Nexus said`).toBe(words);
+    }
+  });
+
+  it("falls back to the card's own words when a 410 comes with none", async () => {
+    const started = bodyOf(await device().start("agents", "lab-no-words"));
+    const link = new URL(started.link);
+    const refuse = () => new Response(JSON.stringify({ reason: "used" }), { status: 410, headers: { "content-type": "application/json" } });
+    const page = await open(link.pathname + link.search, false, { answer: (path) => (path === API_PENDING ? refuse() : null) });
+    expect(page.el.title.textContent).toBe("code used");
+    expect(page.el.said.textContent).toBe("That code was already used.");
   });
 
   it("says so for a code Nexus has no sign-in for, which is a code long past answering", async () => {
