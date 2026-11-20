@@ -26,7 +26,7 @@ const TEXT = "written by the built file\n";
 const PINNED: Record<string, string> = {
   "nexus-agent.js": "ac5c8b91ff39b53774e2403fe785112d36ce9febc51208fd775379b0f8f11112",
   "nexus-agent.wasm": "29dd7daf12daec2afdf7b73101e50679bfe9c38861aa1f0de50ae505ccba99bd",
-  "cli.js": "b18f6a4777a77ef3cfecfdf6d9bf61d22e8e15c15a088093564ca28c8ce858b0",
+  "cli.js": "234d59d98a4e8637597eb73b2dcbc7d4f78b31b61bd04dca3ed899ce7b3ec7ae",
 };
 
 let directory = "";
