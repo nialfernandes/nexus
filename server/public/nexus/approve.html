@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="robots" content="noindex" />
 
     <title>Allow a device: Nexus</title>
@@ -13,18 +13,38 @@
   <body>
     <!-- THE DEVICE APPROVAL PAGE. A device asked Nexus for a sign-in and was handed a link to this page with a code on
          it. approve.js reads the code from the address, asks Nexus what is being asked, and fills this page in: the
-         question with Allow and Deny, or one answer card (allowed, denied, code ran out, code used). Each part is hidden
-         until the script has something true to put in it, and everything a device sent (its label, its code) goes in as
-         text, never as markup. -->
+         question with Allow and Deny, or one answer card (allowed, denied, code ran out, code used). When no owner is
+         signed in to this browser, the first thing shown is one field for the owner secret. Each part is hidden until
+         the script has something true to put in it, and everything a device sent (its label, its code) goes in as
+         text, never as markup. The drawn look is docs/design/nexus boards 1 to 5; the owner-secret card is not drawn. -->
     <div class="page">
       <header class="slab">
         <div class="slab__row">
+          <span class="slab__mark">nexus</span>
+          <span class="slab__divider" aria-hidden="true"></span>
           <h1 class="slab__title" id="title">new device</h1>
         </div>
-        <p class="slab__line" id="line" role="status">Checking the code…</p>
       </header>
 
       <main class="content">
+        <p class="lead" id="line" role="status">Checking the code…</p>
+
+        <!-- The owner secret, for a browser that is not signed in as the owner. Nothing is kept: the script holds it
+             until the code is answered. -->
+        <section class="card" id="owner" hidden>
+          <form class="owner" id="owner-form" autocomplete="off" novalidate>
+            <p class="card__words" id="owner-words">Type the owner secret to see who is asking.</p>
+            <div class="field">
+              <label class="field__label" for="secret">OWNER SECRET</label>
+              <input class="field__input" id="secret" name="secret" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            </div>
+            <p class="card__quiet card__quiet--fault" id="owner-alert" role="alert" hidden></p>
+            <div class="actions">
+              <button type="submit" class="pill pill--main" id="owner-go">Continue</button>
+            </div>
+          </form>
+        </section>
+
         <!-- The question. -->
         <section class="card" id="ask" hidden>
           <p class="card__words" id="question"></p>

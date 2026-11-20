@@ -1,5 +1,5 @@
 // The device approval page. It reads the code from its own address, asks Nexus what is being asked, and lets the owner
-// allow or deny it. Everything a device sent (its label, its identity, its code) goes on the page as text, never as
+// allow or deny it. A browser that is not signed in as the owner is first asked for the owner secret, on the page. Everything a device sent (its label, its identity, its code) goes on the page as text, never as
 // markup: this file only sets text and shows or hides parts of the page, and builds nothing from what it was sent but
 // plain boxes holding one character each.
 //
@@ -7,7 +7,14 @@
 //   POST /nexus/api/device/approve { code }  Allow
 //   POST /nexus/api/device/deny    { code }  Deny
 //
+// THE OWNER SECRET. Nexus answers 401 to all three until the owner is known. A browser that holds the owner's cookie is known
+// already. For one that does not (a first device is set up with no Terminal), the page shows one field, and what the owner types
+// goes to Nexus in the header x-nexus-owner-secret with each of those calls, as the Terminal's `allow` sends it in a cookie. It is
+// sent over a secure connection only (window.isSecureContext), it is held in one variable of this script and nowhere else (no
+// storage, no cookie, nothing on the page: the field is emptied as it is sent), and it is dropped as soon as the code has an answer.
+//
 // What the page shows:
+//   the owner secret, when nobody is signed in
 //   the question, the device's code and Allow and Deny
 //   allowed                      denied
 //   code ran out                 code used
@@ -21,19 +28,25 @@
   var DEVICE = '/nexus/api/device/';
   var MINUTE = 60 * 1000;
   var GROUP = 4;
+  // The header the owner secret is sent in. The server's sign-in reads the same name (plugs/cloudflare/signin.ts).
+  var OWNER_SECRET_HEADER = 'x-nexus-owner-secret';
 
   // The words, in one place. Nexus is not told which app a device is, so the page says "the device" and the label the
   // device sent names it in the card.
   var WORDS = {
     checking: { title: 'new device', line: 'Checking the code…' },
     asking: { title: 'new device', line: 'A device wants to sign in.' },
-    allowed: { title: 'allowed', line: 'The device is in.', quiet: 'You can close this page. The device does the rest.' },
-    denied: { title: 'denied', line: 'Nothing was shared.', quiet: 'Changed your mind? Start again on the device.' },
+    owner: { title: 'new device', line: 'Only the owner can answer a device.' },
+    allowed: { title: 'allowed', line: 'The device is in.', quiet: 'You can close this page. The device picks it up by itself.' },
+    denied: { title: 'denied', line: 'Nothing was shared.', quiet: 'Changed your mind? Start again from the device.' },
     expired: { title: 'code ran out', line: 'Ten minutes is up.', said: 'That code has run out.', quiet: 'Ask for a new one on the device.' },
     used: { title: 'code used', line: 'One answer per code.', said: 'That code was already used.', quiet: 'A code works once. Ask for a new one on the device.' },
     fault: { title: 'new device', line: 'That did not work.' },
   };
   var CANT_REACH = 'Nexus could not be reached. Check the connection and try again.';
+  var WRONG_SECRET = 'That is not the owner secret.';
+  var NO_SECRET = 'Type the owner secret first.';
+  var NOT_SECURE = 'Open this page over a secure connection (https) to type the owner secret.';
   var NO_CODE = 'This link has no code in it. Open the link the device gave you.';
 
   function byId(id) { return document.getElementById(id); }
@@ -46,6 +59,11 @@
   var allowButton = byId('allow');
   var denyButton = byId('deny');
   var alertBox = byId('alert');
+  var owner = byId('owner');
+  var ownerForm = byId('owner-form');
+  var secretField = byId('secret');
+  var ownerAlert = byId('owner-alert');
+  var ownerGo = byId('owner-go');
   var result = byId('result');
   var said = byId('said');
   var quiet = byId('quiet');
@@ -59,6 +77,8 @@
   var code = new URLSearchParams(window.location.search).get('code');
   // What the device asked for, kept once Nexus has said so, to name it in the answer.
   var asked = null;
+  // The owner secret the owner typed, until the code is answered. The one place it is held.
+  var ownerSecret = null;
 
   function slab(words) {
     title.textContent = words.title;
@@ -70,9 +90,27 @@
     denyButton.disabled = busy;
   }
 
+  // The field for the owner secret, with no answer on the page yet. `words` says what was wrong with the last try, if anything.
+  function showOwner(words) {
+    slab(WORDS.owner);
+    ask.hidden = true;
+    result.hidden = true;
+    owner.hidden = false;
+    var secure = window.isSecureContext === true;
+    secretField.disabled = !secure;
+    ownerGo.disabled = !secure;
+    var problem = secure ? words : NOT_SECURE;
+    ownerAlert.textContent = problem || '';
+    ownerAlert.hidden = !problem;
+    if (problem) secretField.setAttribute('aria-invalid', 'true');
+    else secretField.removeAttribute('aria-invalid');
+    if (secure) secretField.focus();
+  }
+
   // Asks Nexus and hands back { ok, status, body }, or null when Nexus could not be reached.
   function call(method, route, body) {
     var options = { method: method, credentials: 'same-origin', headers: { accept: 'application/json' } };
+    if (ownerSecret !== null) options.headers[OWNER_SECRET_HEADER] = ownerSecret;
     if (body) {
       options.headers['content-type'] = 'application/json';
       options.body = JSON.stringify(body);
@@ -91,8 +129,10 @@
 
   // The answer card, with the one mark that says how it went (none for a fault Nexus put in its own words).
   function showResult(words, mark) {
+    ownerSecret = null;
     slab(words);
     ask.hidden = true;
+    owner.hidden = true;
     Object.keys(MARKS).forEach(function (name) { MARKS[name].hidden = name !== mark; });
     said.textContent = words.said;
     quiet.textContent = words.quiet || '';
@@ -155,6 +195,7 @@
       (minutes === null ? '' : ' The code stops working in ' + minutes + (minutes === 1 ? ' minute.' : ' minutes.'));
     showCode(typeof found.code === 'string' ? found.code : code);
     ask.hidden = false;
+    owner.hidden = true;
     result.hidden = true;
     alertBox.hidden = true;
   }
@@ -174,7 +215,12 @@
         return;
       }
       var kind = finishedKind(reply);
-      if (kind) {
+      if (reply && reply.status === 401) {
+        // The sign-in no longer works (the owner secret was changed, or this browser's cookie is gone): ask again.
+        var heldOne = ownerSecret !== null;
+        ownerSecret = null;
+        showOwner(heldOne ? WRONG_SECRET : null);
+      } else if (kind) {
         showFinished(kind, reply);
       } else {
         alertBox.textContent = wordsOf(reply);
@@ -187,18 +233,48 @@
   allowButton.addEventListener('click', function () { answer('approve'); });
   denyButton.addEventListener('click', function () { answer('deny'); });
 
+  // Asks what is being asked, and shows the question, a card for a code that is finished, the field for the owner secret when Nexus
+  // does not know who is asking, or Nexus's own words.
+  function load() {
+    slab(WORDS.checking);
+    call('GET', 'pending?code=' + encodeURIComponent(code)).then(function (reply) {
+      if (reply && reply.ok && reply.body && typeof reply.body.label === 'string' && typeof reply.body.identity === 'string') {
+        showQuestion(reply.body);
+        return;
+      }
+      if (reply && reply.status === 401) {
+        var wrong = ownerSecret !== null;
+        ownerSecret = null;
+        showOwner(wrong ? WRONG_SECRET : null);
+        return;
+      }
+      var kind = finishedKind(reply);
+      if (kind) showFinished(kind, reply);
+      else showFault(wordsOf(reply));
+    });
+  }
+
+  ownerForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    if (window.isSecureContext !== true) return;
+    var typed = secretField.value.trim();
+    if (typed === '') {
+      showOwner(NO_SECRET);
+      return;
+    }
+    // The field is emptied as the secret goes: it is held in `ownerSecret` and nowhere else.
+    ownerSecret = typed;
+    secretField.value = '';
+    ownerGo.disabled = true;
+    // The last try's fault is not shown beside this one.
+    ownerAlert.hidden = true;
+    secretField.removeAttribute('aria-invalid');
+    load();
+  });
+
   if (!code) {
     showFault(NO_CODE);
     return;
   }
-  slab(WORDS.checking);
-  call('GET', 'pending?code=' + encodeURIComponent(code)).then(function (reply) {
-    if (reply && reply.ok && reply.body && typeof reply.body.label === 'string' && typeof reply.body.identity === 'string') {
-      showQuestion(reply.body);
-      return;
-    }
-    var kind = finishedKind(reply);
-    if (kind) showFinished(kind, reply);
-    else showFault(wordsOf(reply));
-  });
+  load();
 })();
