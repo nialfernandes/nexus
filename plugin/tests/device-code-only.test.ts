@@ -7,6 +7,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SetupScreens } from "../src/screens/setup-screens";
+import type { SetupState } from "../src/vault-setup";
 import { at, firstRun, setupDevice, type SetupDevice } from "./setup-world";
 import { boxes, buttons, installDom, tap, typeInto, words } from "./screens-world";
 import { forbidFetch, openWorld, type World } from "./world";
@@ -111,7 +112,7 @@ describe("adding a device with one code", () => {
     expect(a.log.to("GET device/pending")).toHaveLength(1);
     expect(a.log.to("POST device/approve")).toHaveLength(1);
     expect(a.log.to("POST device/approve")[0]!.body.code, "to the sign-in the device code belongs to").toBe(
-      b.states.find((state) => state.step === "waiting-for-device" && state.code !== "")!.code,
+      (b.states.find((state) => state.step === "waiting-for-device") as Extract<SetupState, { step: "waiting-for-device" }>).code,
     );
 
     typeInto(onB.root, "matching", matching);
