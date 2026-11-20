@@ -1,0 +1,11 @@
+{
+  // The browser spec is checked on its own: it runs in Node (Playwright) but its functions run in the page, so it needs the
+  // browser's types, which the server's own tsconfig (the Workers' types) does not have.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["./*.ts", "../playwright.config.ts", "../src/__fixtures__/approve-answers.ts"]
+}

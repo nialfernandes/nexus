@@ -4,14 +4,14 @@
 // owner secret (for a browser that is not signed in), the question, allowed, denied, the code ran out and the code was used.
 //
 // THIS IS NOT A BROWSER TEST. It ports the old site's browser test of this page (the question and its two buttons,
-// what each tap sends, a refusal in plain words, a label that is markup) without Playwright, because this package
-// has no Playwright and `npm test` is vitest only. The page's script is run in a node:vm context against a small
+// what each tap sends, a refusal in plain words, a label that is markup) without a browser, so `npm test` is vitest only
+// and runs anywhere. The page in a real browser, at 375 and 1280 px, is e2e/approve.spec.ts. The page's script is run in a node:vm context against a small
 // stand-in for the page (document.getElementById, createElement, textContent, hidden, disabled, click, a form's submit and a
 // field's value), and the page's calls go to the real Worker, with the owner's cookie or, for a browser that has none, with
 // what the page itself sends, so no answer in this file is written by hand. What the stand-in does not do,
-// and so what is NOT checked anywhere in this package: how the page is laid out and whether it fits a phone or a desktop,
-// the size of its buttons, the typefaces, and its colours (approval-page.test.ts reads the stylesheets, but nothing
-// draws them, so how it looks is looked at by eye when it changes).
+// and so what is NOT checked here: how the page is laid out and whether it fits a phone or a desktop, the size of its
+// buttons, the typefaces, and its colours. Those are checked in a real browser by e2e/approve.spec.ts (run with
+// `npm run test:browser`, which is not part of `npm run check`: see server/README.md, "The browser spec").
 //
 // The stand-in is kept honest in two ways. An element exists only if the served HTML has an element with that id, and it
 // starts hidden only if the HTML says `hidden`, so a page whose HTML lost an id or its `hidden` fails here. And

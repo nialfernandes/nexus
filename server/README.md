@@ -299,7 +299,28 @@ D1 made from an in-memory SQLite database (`memoryD1` in `packages/test-sqlite`,
 relies on: a batch is one transaction, and foreign keys are enforced. They do not run on Cloudflare itself, so the
 plug's use of the real D1 and of the real asset server is the part they do not prove.
 
+### The browser spec
+
+The approval page is also looked at in a real browser, at 375 px (a phone) and 1280 px (a desktop): `e2e/approve.spec.ts`, run by
+Playwright. It covers the owner-secret step (a wrong secret, then the right one), Allow, Deny, the two cards for a code that ran
+out and a code that was used, the three typefaces loading, the light colours (and that a browser asking for dark gets the same
+light page), and that nothing is wider than the window. The page's files are served from `public/nexus` as they are, and Nexus's
+answers are the shapes in `src/__fixtures__/approve-answers.ts` (which `src/approval-page.test.ts` holds to what the real routes
+answer), so it needs no server.
+
+```sh
+npx playwright install chromium          # once: a browser, which npm ci does not download
+npm run test:browser --workspace nexus-server
 ```
+
+It is not part of `npm run check`. That command has to run on a machine that has Node and nothing else, and in
+`.github/workflows/check.yml`, which installs with `npm ci` only; the spec needs Playwright's browser (about 150 MB) downloaded
+first, so putting it in `check` would fail it for anyone without that browser. To run it in the workflow, add a step after
+"Install every package" that runs `npx playwright install --with-deps chromium`, and one after "Check every package" that runs
+`npm run test:browser --workspace nexus-server`.
+
+```
+e2e/                 the browser spec of the approval page (Playwright)
 migrations/          the schema, in the SQL common ground of SQLite and Postgres
 public/nexus/        the device approval page: its page, stylesheet and script, and its three typefaces
 src/ports.ts         what the logic needs from a host
