@@ -1,19 +1,36 @@
-// The pieces every screen is made of: the teal slab with its lowercase title, the white card, the pill buttons, the sand-grey panels, the
-// round marks, and the code boxes (read to be copied, or typed into). A screen is these pieces in order; none of them holds a state of
-// its own: the code boxes show what their `CodeEntry` holds, and every button calls what it is given.
+// The pieces every screen is made of: the teal slab with its nexus mark and lowercase title, the white card, the pill buttons, the
+// sand-grey panels, the round marks, and the code boxes (read to be copied, or typed into). A screen is these pieces in order; none of
+// them holds a state of its own: the code boxes show what their `CodeEntry` holds, and every button calls what it is given.
 
+import { COPY_WORDS } from "../copied";
 import { CodeEntry, type Edit } from "./code-entry";
 import { el, icon } from "./dom";
 
 type Child = Node | string | null | false | undefined;
 
-/** The whole screen: the slab, then the body holding the cards. */
+/** The word the slab starts with: the mark. */
+export const MARK = "nexus";
+
+/**
+ * The whole screen: the slab (one slim line: the mark, a thin divider, the title), then the body holding the line under the title and
+ * the cards. The line used to sit in the slab; the boards now draw it as the first line of the body, and still call it the slab line.
+ */
 export function screen(title: string, line: string, ...cards: Child[]): HTMLElement {
   return el(
     "div",
     { class: "nx-screen" },
-    el("div", { class: "nx-slab" }, el("h2", { class: "nx-slab__title" }, title), el("p", { class: "nx-slab__line" }, line)),
-    el("div", { class: "nx-body" }, ...cards),
+    el(
+      "div",
+      { class: "nx-slab" },
+      el(
+        "div",
+        { class: "nx-slab__bar" },
+        el("div", { class: "nx-slab__name" }, el("span", { class: "nx-slab__mark" }, MARK), el("span", { class: "nx-slab__divider", "aria-hidden": "true" }), el("h2", { class: "nx-slab__title" }, title)),
+        // Where the estate's top bar keeps its controls: none on these screens, but the line is drawn with room for them.
+        el("div", { class: "nx-slab__tools" }),
+      ),
+    ),
+    el("div", { class: "nx-body" }, el("p", { class: "nx-slab__line" }, line), ...cards),
   );
 }
 
@@ -37,6 +54,8 @@ export interface PillOptions {
   start?: boolean;
   /** Names the button for the screen to find it again after it draws itself anew (and for a test). */
   key?: string;
+  /** What a screen reader calls the button when its words alone do not say what it is for (Copy, for which code). */
+  label?: string;
 }
 
 /** A pill button: the main one is ink with white words, the quiet one has a soft outline. A dim one ignores taps. */
@@ -47,6 +66,7 @@ export function pill(words: string, kind: "main" | "quiet", onClick: () => void,
       type: "button",
       class: `nx-pill nx-pill--${kind}${options.start ? " nx-pill--start" : ""}`,
       "aria-disabled": options.dim ? "true" : undefined,
+      "aria-label": options.label,
       "data-key": options.key,
       on: { click: () => (options.dim ? undefined : onClick()) },
     },
@@ -96,16 +116,50 @@ export function groupsOf(length: number): number[] {
 
 const groupClass = (size: number): string => `nx-code__group nx-code__group--${size}`;
 
-/** A code to be read and copied, not typed: sand-grey boxes, one per character. The whole code is one label to a screen reader. */
-export function readCode(name: string, code: string): HTMLElement {
+/** The Copy button beside a code that is read: what it says now, and what it does. */
+export interface CopyButton {
+  /** Names the button for the screen to find it again after it draws itself anew (and for a test). */
+  key: string;
+  /** True while it says Copied. */
+  copied: boolean;
+  /** Called with the code exactly as the boxes show it. */
+  onCopy: (code: string) => void;
+}
+
+/**
+ * A code to be read and copied, not typed: sand-grey boxes, one per character. The whole code is one label to a screen reader. The boxes
+ * are text a person can select (one tap selects the whole code, and copying it gives the characters with nothing between them, where
+ * a plain copy of boxes would put a line break after each), and `copy` puts a Copy button on the label's row that puts the same
+ * characters on the clipboard. The boards draw no Copy beside a code, so it is the quiet pill of board 7's Copy key, made the same way.
+ */
+export function readCode(name: string, code: string, copy?: CopyButton): HTMLElement {
   const characters = [...code];
+  const whole = characters.join("");
   let at = 0;
   const groups = groupsOf(characters.length).map((size) => {
     const boxes = characters.slice(at, at + size).map((character) => el("div", { class: "nx-box nx-box--read", "aria-hidden": "true" }, character));
     at += size;
     return el("div", { class: groupClass(size) }, ...boxes);
   });
-  return el("div", { class: "nx-field", role: "group", "aria-label": `${name} ${characters.join(" ")}` }, label(name), el("div", { class: "nx-code" }, ...groups));
+  const head = el(
+    "div",
+    { class: "nx-field__head" },
+    label(name),
+    copy
+      ? pill(copy.copied ? COPY_WORDS.copied : COPY_WORDS.copy, "quiet", () => copy.onCopy(whole), { key: copy.key, label: `${copy.copied ? COPY_WORDS.copied : COPY_WORDS.copy} ${name}` })
+      : null,
+  );
+  const boxes = el("div", { class: "nx-code nx-code--read", on: { copy: (event) => copySelected(event, whole) } }, ...groups);
+  return el("div", { class: "nx-field", role: "group", "aria-label": `${name} ${characters.join(" ")}` }, head, boxes);
+}
+
+/** A copy of what is selected in a code: its characters with no line breaks between boxes, or the whole code when nothing readable is selected. */
+function copySelected(event: Event, whole: string): void {
+  const data = (event as ClipboardEvent).clipboardData;
+  if (!data) return;
+  const picked = (event.currentTarget as Node | null)?.ownerDocument?.getSelection?.()?.toString().replace(/\s+/g, "") ?? "";
+  data.setData("text/plain", picked === "" ? whole : picked);
+  event.preventDefault();
 }
 
 /** What a typed code needs from the screen that holds it. */

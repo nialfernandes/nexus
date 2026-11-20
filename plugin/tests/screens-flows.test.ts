@@ -41,7 +41,7 @@ describe("the start and the key", () => {
     const { root, setup } = await atTheKey();
     expect(words(root)).toContain("A1B2");
     tap(root, "back");
-    expect(words(root)[0]).toBe("set up nexus");
+    expect(words(root)[1]).toBe("set up nexus");
     tap(root, "continue");
     expect(words(root)).toContain("A1B2");
     expect(setup.sent("startFirstRun"), "still one: the key was not made again").toHaveLength(1);
@@ -51,14 +51,14 @@ describe("the start and the key", () => {
     const { root } = await atTheKey();
     expect(isDim(root, "continue")).toBe(true);
     tap(root, "continue");
-    expect(words(root)[0], "a dim Continue goes nowhere").toBe("recovery key");
+    expect(words(root)[1], "a dim Continue goes nowhere").toBe("recovery key");
     tap(root, "saved");
     expect(isDim(root, "continue")).toBe(false);
     tap(root, "saved");
     expect(isDim(root, "continue")).toBe(true);
     tap(root, "saved");
     tap(root, "continue");
-    expect(words(root)[0]).toBe("check key");
+    expect(words(root)[1]).toBe("check key");
   });
 
   it("copies the whole key as one string with a space between groups, says Copied for two seconds, and then says Copy key again", async () => {
@@ -124,7 +124,7 @@ describe("typing three groups back", () => {
   it("goes back to the key with Back", async () => {
     const { root } = await atTheCheck();
     tap(root, "back");
-    expect(words(root)[0]).toBe("recovery key");
+    expect(words(root)[1]).toBe("recovery key");
   });
 
   it("starts empty when a new key is shown after the last was thrown away", async () => {
@@ -195,7 +195,7 @@ describe("the password step", () => {
     typeText(root, "password", "forgotten words");
     tap(root, "back");
     setup.show(SHOW_KEY);
-    expect(words(root)[0]).toBe("recovery key");
+    expect(words(root)[1]).toBe("recovery key");
     expect(control(root, "saved").getAttribute("aria-checked")).toBe("true");
     tap(root, "continue");
     setup.show({ step: "choose-password", message: null });
@@ -282,7 +282,7 @@ describe("adding a device", () => {
 
   it("is told it may not approve: the grey screen with Close, which is done", async () => {
     const { root, setup } = await openScreens({ ...found(), problem: "not-allowed", message: "Only the owner can approve a device." } as SetupState);
-    expect(words(root)[0]).toBe("not allowed");
+    expect(words(root)[1]).toBe("not allowed");
     tap(root, "close");
     expect(setup.sent("done")).toHaveLength(1);
   });
@@ -307,7 +307,7 @@ describe("the new device", () => {
     fake.begin = async () => setup.show({ step: "has-vault", message: null, problem: null, hasPassword: false });
     tap(root, "cancel");
     expect(open.closed(), "the device is signed in but locked: the Recovery Key screen follows, the screen stays").toBe(0);
-    expect(words(root)[0]).toBe("locked");
+    expect(words(root)[1]).toBe("locked");
   });
 
   it("sends the matching code when the tenth character is typed, and marks it red with the plain note when it is wrong", async () => {
@@ -423,14 +423,14 @@ describe("the steps that have no drawing of their own, in the same look", () => 
 
   it("tells a signed-out device to sign in first, or to ask another device", async () => {
     const { root, setup } = await openScreens({ step: "signed-out" });
-    expect(words(root)[0]).toBe("sign in");
+    expect(words(root)[1]).toBe("sign in");
     tap(root, "ask");
     expect(setup.sent("askAnotherDevice")).toHaveLength(1);
   });
 
   it("says one moment while the controller works", async () => {
     const { root } = await openScreens({ step: "working", doing: "saving" });
-    expect(words(root)).toEqual(["working", "One moment.", "Keeping your wraps on Nexus."]);
+    expect(words(root)).toEqual(["nexus", "working", "One moment.", "Keeping your wraps on Nexus."]);
   });
 });
 

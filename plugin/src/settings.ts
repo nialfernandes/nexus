@@ -1,11 +1,13 @@
 // The plugin's settings tab: the Nexus address, the user name, this device's name, the status line, and signing in and
-// out. It is Obsidian's own settings tab, with Obsidian's own look and theme, so it has no styles of its own. The token
-// is never shown here or anywhere else: the tab only says whether the plugin is signed in.
+// out. It is Obsidian's own settings tab, with Obsidian's own look and theme: its one rule of its own (styles.css) lets the
+// sign-in code be selected. The token is never shown here or anywhere else: the tab only says whether the plugin is signed in.
 //
 // A new install has no address and no user name, and the tab asks for both before it offers to sign in.
 
-import { Notice, PluginSettingTab, Setting, type App } from "obsidian";
+import { Notice, PluginSettingTab, Setting, type App, type ButtonComponent } from "obsidian";
+import { COPIED_FOR_MS, COPY_WORDS } from "./copied";
 import type NexusPlugin from "./main";
+import { el } from "./screens/dom";
 import { signIn } from "./sign-in";
 import { isSetUp } from "./state";
 import type { PluginData } from "./types";
@@ -20,6 +22,9 @@ interface Waiting {
   cancelled: boolean;
 }
 
+/** The class styles.css gives text a person may select: a code to carry to another device or page. */
+const SELECTABLE = "nexus-selectable";
+
 /** The address as it is kept: trimmed, with no trailing slash. Empty when it does not look like a web address. */
 const cleanAddress = (typed: string): string => {
   const address = typed.trim().replace(/\/+$/, "");
@@ -29,6 +34,9 @@ const cleanAddress = (typed: string): string => {
 export class NexusSettingTab extends PluginSettingTab {
   private statusLine: Setting | null = null;
   private waiting: Waiting | null = null;
+  /** The Copy button beside the sign-in code while it shows, and what puts its words back after it said Copied. */
+  private copyButton: ButtonComponent | null = null;
+  private stopCopied: (() => void) | null = null;
 
   constructor(app: App, private readonly plugin: NexusPlugin) {
     super(app, plugin);
@@ -43,6 +51,7 @@ export class NexusSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const { state } = this.plugin;
     containerEl.empty();
+    this.forgetCopyButton();
 
     this.statusLine = new Setting(containerEl).setName("Status").setDesc(this.plugin.engine.status());
     if (isSetUp(state) && state.token !== null) {
@@ -105,13 +114,23 @@ export class NexusSettingTab extends PluginSettingTab {
 
     if (this.waiting) {
       const waiting = this.waiting;
-      account.setDesc(createFragment((fragment) => {
-        fragment.appendText("Allow this device on the page that just opened, if it did not open use ");
-        fragment.createEl("a", { text: "this link", href: waiting.link });
-        fragment.appendText(". The code is ");
-        fragment.createEl("strong", { text: waiting.code });
-        fragment.appendText(".");
-      }));
+      // The code is text a person can select (styles.css), and Copy puts exactly that text on the clipboard.
+      const words = document.createDocumentFragment();
+      words.append(
+        "Allow this device on the page that just opened, if it did not open use ",
+        el("a", { href: waiting.link }, "this link"),
+        ". The code is ",
+        el("strong", { class: SELECTABLE }, waiting.code),
+        ".",
+      );
+      account.setDesc(words);
+      // Nothing to copy until Nexus has handed the code over.
+      if (waiting.code !== "") {
+        account.addButton((button) => {
+          this.copyButton = button;
+          button.setButtonText(COPY_WORDS.copy).onClick(() => void this.copyCode(waiting.code));
+        });
+      }
       account.addButton((button) =>
         button.setButtonText("Cancel").onClick(() => {
           waiting.cancelled = true;
@@ -143,6 +162,32 @@ export class NexusSettingTab extends PluginSettingTab {
 
     account.setDesc(`Not signed in. Signing in opens a page on your Nexus server where ${state.user} allows this device.`);
     account.addButton((button) => button.setButtonText("Sign in").setCta().onClick(() => void this.signIn()));
+  }
+
+  /** Puts the sign-in code on the clipboard, and has its button say Copied for a moment. */
+  private async copyCode(code: string): Promise<void> {
+    const button = this.copyButton;
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      new Notice("The code could not be copied. Select it and copy it by hand.");
+      return;
+    }
+    // The tab drew itself anew while the clipboard was answering: this button is gone and the new one says Copy.
+    if (!button || button !== this.copyButton) return;
+    this.stopCopied?.();
+    button.setButtonText(COPY_WORDS.copied);
+    const timer = window.setTimeout(() => {
+      this.stopCopied = null;
+      button.setButtonText(COPY_WORDS.copy);
+    }, COPIED_FOR_MS);
+    this.stopCopied = () => window.clearTimeout(timer);
+  }
+
+  private forgetCopyButton(): void {
+    this.stopCopied?.();
+    this.stopCopied = null;
+    this.copyButton = null;
   }
 
   private async signIn(): Promise<void> {
