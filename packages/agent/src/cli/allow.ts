@@ -3,7 +3,7 @@
 
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
-import { asOwner, checkOwnerSecret, ownerRefusal, printable, readOwnerSecret } from "./owner";
+import { asOwner, requireSecureAddress, checkOwnerSecret, ownerRefusal, printable, readOwnerSecret } from "./owner";
 import { Prompter } from "./prompt";
 import { need } from "./settings";
 
@@ -18,6 +18,7 @@ async function answer(io: Io, command: keyof typeof WORDS, code: string | undefi
   const address = need(io, [ENV.address])[ENV.address];
   const prompter = new Prompter(io.stdin, io.stderr);
   try {
+    requireSecureAddress(address);
     const owner = asOwner(io, address, await readOwnerSecret(io, prompter));
     await checkOwnerSecret(owner);
 

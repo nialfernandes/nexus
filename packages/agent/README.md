@@ -71,7 +71,10 @@ typed at a hidden prompt (or piped in on standard input, which is how a secrets 
 at a hidden prompt or read from the environment, and the others come from the environment.
 
 The owner's commands refuse a wrong owner secret with a plain message and change nothing. They send nothing but the owner's
-cookie: not a token with it.
+cookie: not a token with it. The server takes the owner secret over https only (or from `localhost`, `127.0.0.1` or `[::1]`), so an
+owner command whose `NEXUS_ADDRESS` is plain http to any other host stops before it asks for the secret, says to use the https
+address, and sends nothing: the secret is never put on the network in the clear, and a refusal for the address is not
+reported as a wrong secret.
 
 ## The environment
 

@@ -4,7 +4,7 @@
 // The owner's secret is read from the environment or at a hidden prompt, never from an argument. It goes to Nexus only as the owner's
 // cookie (the `Nexus` client sets it), and it is never printed: every message here is a fixed sentence or Nexus's own words.
 
-import { Nexus, refusal, type Reply } from "../nexus";
+import { Nexus, ownerSecretMayGoTo, refusal, type Reply } from "../nexus";
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
 import { Prompter } from "./prompt";
@@ -32,8 +32,21 @@ export async function readOwnerSecret(io: Io, prompter?: Prompter): Promise<stri
   }
 }
 
+/**
+ * Stops an owner command whose address is plain http to a host that is not this machine's own, before it asks for the owner secret or
+ * sends anything. The server takes the owner's secret over https (or from localhost) only and answers 401 to it anywhere else, which would
+ * read as "wrong secret"; over plain http the secret would also cross the network in the clear. The message says what to change.
+ */
+export function requireSecureAddress(address: string): void {
+  if (ownerSecretMayGoTo(address)) return;
+  throw new Stop(`${ENV.address} is a plain http address, and Nexus takes the owner secret over https only (or from this computer's own address, localhost), so nothing was sent. Use the https address of the server instead.`);
+}
+
 /** A Nexus client that calls as the owner. */
-export const asOwner = (io: Io, address: string, secret: string): Nexus => new Nexus(address, null, io.fetch, secret);
+export function asOwner(io: Io, address: string, secret: string): Nexus {
+  requireSecureAddress(address);
+  return new Nexus(address, null, io.fetch, secret);
+}
 
 /** Turns an answer that is not the one wanted into a Stop, with a sentence for a secret Nexus did not accept. */
 export function ownerRefusal(reply: Reply, what: string): Stop {
