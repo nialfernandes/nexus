@@ -1,0 +1,13 @@
+# npm audit report
+
+semver  2.0.0-alpha - 5.7.1
+Severity: high
+semver vulnerable to Regular Expression Denial of Service - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
+fix available via `npm audit fix --force`
+Will install semver@5.7.3, which is outside the stated dependency range
+node_modules/semver
+
+1 high severity vulnerability
+
+To address all issues, run:
+  npm audit fix --force

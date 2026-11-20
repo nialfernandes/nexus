@@ -27,8 +27,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "check:actions": "bash .github/check-pinned-actions.test.sh && bash .github/check-pinned-actions.sh",
+    "check:audit": "bash .github/check-audit.sh",
+    "check:audit-test": "bash .github/check-audit.test.sh",
     "check:release": "node --test .github/release/release.test.mjs",
     "release:bump": "node .github/release/bump-version.mjs",
-    "check": "npm run check:actions && npm run check:release && npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run typecheck && npm run build --workspace @nexus/linker && npm run build --workspace nexus-obsidian && npm run test"
+    "check": "npm run check:actions && npm run check:audit-test && npm run check:release && npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run typecheck && npm run build --workspace @nexus/linker && npm run build --workspace nexus-obsidian && npm run test"
   }
 }
