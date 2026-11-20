@@ -16,6 +16,12 @@
     "server",
     "plugin"
   ],
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5",
+      "undici": "7.30.2"
+    }
+  },
   "scripts": {
     "build": "npm run build --workspace @nexus/crypto && npm run build --workspace @nexus/agent && npm run build --workspace @nexus/linker && npm run build --workspace nexus-obsidian",
     "typecheck": "npm run typecheck --workspaces --if-present",
