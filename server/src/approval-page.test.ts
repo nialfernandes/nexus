@@ -50,7 +50,7 @@ async function openPage(): Promise<string> {
   const started = bodyOf(await device().start("agents", "lab-m"));
   const link = new URL(started.link);
   const answer = await sendAs("GET", link.pathname + link.search, owner);
-  expect(answer.status, `the link a device is handed opens a page for the owner (${answer.text.slice(0, 80)})`).toBe(200);
+  expect(answer.status, `the link a device is handed opens the page for the owner (${answer.text.slice(0, 80)})`).toBe(200);
   return answer.text;
 }
 

@@ -1,13 +1,13 @@
 # Fonts the approval page uses
 
-The page loads nothing from outside Nexus, so its three typefaces are served from here (to the owner only, like the
-rest of the page: see `src/plugs/cloudflare/page.ts`). Each is a variable font, Latin characters only.
+The page loads nothing from outside Nexus, so its three typefaces are served from here (to whoever opens the
+page, like the rest of its files: see `src/plugs/cloudflare/page.ts`). Each is a variable font, Latin characters only.
 
 | File | Typeface | Used for | Licence | Copyright | Licence text |
 | --- | --- | --- | --- | --- | --- |
-| `unbounded-var.woff2` | Unbounded | the title in the header | SIL Open Font License 1.1 | Copyright 2022 The Unbounded Project Authors (https://github.com/googlefonts/unbounded) | `unbounded-OFL.txt` |
+| `unbounded-var.woff2` | Unbounded | the nexus mark and the title in the slab | SIL Open Font License 1.1 | Copyright 2022 The Unbounded Project Authors (https://github.com/googlefonts/unbounded) | `unbounded-OFL.txt` |
 | `instrument-sans-var.woff2` | Instrument Sans | every sentence and the buttons | SIL Open Font License 1.1 | Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans) | `instrument-sans-OFL.txt` |
-| `jetbrains-mono-var.woff2` | JetBrains Mono | the device code | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) | `jetbrains-mono-OFL.txt` |
+| `jetbrains-mono-var.woff2` | JetBrains Mono | the device code and the owner secret field | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) | `jetbrains-mono-OFL.txt` |
 
 Each licence text is the `OFL.txt` of that typeface's own project, copied unchanged (compared with `cmp` against the
 file as downloaded from the project's repository: no difference), and its first line is the copyright line in the table.
