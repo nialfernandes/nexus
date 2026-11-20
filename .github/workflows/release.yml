@@ -1,0 +1,50 @@
+# Makes a GitHub release of the Obsidian plugin when a tag is pushed, so the plugin installs from inside Obsidian with BRAT
+# (add this repository once in BRAT; it installs the latest release and updates itself). The release carries the three files
+# Obsidian loads, main.js, manifest.json and styles.css, built here from the tagged commit, and nothing else.
+#
+# To release: run `npm run release:bump -- 0.3.1` at the repository root (it changes the version in plugin/manifest.json and
+# plugin/versions.json together), commit that, and push a tag with the same name, 0.3.1, on the commit. A tag has three
+# numbers and no `v`, as Obsidian asks. A tag that is not the manifest's version stops the run at its first step, before
+# anything is built or released. The two checks and the list of the three files are in .github/release/check-release.mjs.
+#
+# This repository also holds the test plugin in probe/, which is not released from here: a tag that is not the Nexus plugin's
+# version makes no release. It needs no secret of its own: the release is made with the token every run is given, and only
+# this job may write to the repository.
+name: release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check that the tag is the plugin's version
+        run: node .github/release/check-release.mjs tag "$TAG"
+      - name: Install every package
+        run: npm ci
+      - name: Build the plugin
+        run: npm run build
+      - name: Check the three files of the release
+        run: node .github/release/check-release.mjs assets plugin/dist "$TAG"
+      - name: Make the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t files < <(node .github/release/check-release.mjs assets plugin/dist "$TAG")
+          gh release create "$TAG" "${files[@]}" --verify-tag --title "$TAG" --generate-notes --latest

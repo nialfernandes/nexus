@@ -1,7 +1,8 @@
 # Runs every package's checks on every pull request and every push to main. It needs no secret and deploys nothing.
 #
 # `npm run check` at the root first checks that every `uses:` line in .github/workflows names its action by a full commit
-# hash (a tag can be moved to other code, which would then run here; the tag goes in a trailing comment), then builds the
+# hash (a tag can be moved to other code, which would then run here; the tag goes in a trailing comment), runs the tests of
+# the scripts the release workflow (release.yml) stands on, then builds the
 # encryption package and the agent library, type-checks every package, builds the linking job and the plugin and runs every package's tests. A package added to the
 # workspaces in the root package.json is checked here without a change to this file.
 name: check
