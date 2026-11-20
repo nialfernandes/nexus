@@ -150,9 +150,8 @@ the file names every state and every event in plain words. It covers:
   When Nexus holds a password wrap, the password opens it the same way.
 - **A new device, approved from another.** The two-code exchange below, as states:
   waiting, type the matching code, unlocked or refused.
-- **This device approves another device,** with the sign-in code and the key code
-  typed here. The sign-in code is looked up first, so the person is shown which device
-  they are approving.
+- **This device approves another device,** with the device code typed here, and nothing
+  else: the one code the new device shows. This device finds the new device from it.
 - **This device approves an agent.** The person pastes the agent's public key, and
   the controller seals the vault key to it and shows the approval, for the person to save beside the agent's
   private key. It is the same text `nexus-agent approve-agent` prints, so either can be used, and it is never sent through Nexus.
@@ -190,10 +189,11 @@ above draw. A device that holds the vault key can approve a new one, so that the
 unlocks the vault with no Recovery Key typed.
 
 - The new device makes a key pair of its own for the attempt, keeps the private half in memory only,
-  and asks to be signed in with its public key. It shows a **key code** for that key.
-- The approving device is unlocked and signed in as the owner. The person types the new device's sign-in
-  code, which finds the device, and then its key code on it. It refuses to go on unless that is the code of the key Nexus gave it, so a server that
-  swapped the new device's key for its own is not sent the vault key. Otherwise it seals the vault key to the
+  and asks to be signed in with its public key. It shows one code, its **device code**, which is the code of that key.
+- The approving device is unlocked and signed in as the owner. The person types the device code, and only that. This device asks
+  Nexus which sign-ins are waiting and for the public key of each, works out each key's code itself, and takes the sign-in whose
+  key has the code typed. It goes on only if there is one, so a server that swapped the new device's key for its own is not sent the
+  vault key: the swapped key has another code. Otherwise it seals the vault key to the
   new device's key and leaves that with Nexus, which cannot open it, hands it over once and deletes it.
   The approving device shows a **matching code**.
 - The new device works out the matching code from both devices' keys and what it was handed. It uses nothing

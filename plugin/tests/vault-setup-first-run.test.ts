@@ -266,7 +266,6 @@ describe("first run, with no vault on the server", () => {
     await device.setup.finishSetup(null);
     await device.setup.tryAgain();
     await device.setup.typePassword("anything");
-    await device.setup.lookUpDevice("ABCD-EFGH");
     await device.setup.typeRecoveryKey("anything");
     await device.setup.startFirstRun();
     await device.setup.typeMatchingCode("12345-12345");

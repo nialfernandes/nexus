@@ -5,7 +5,7 @@
 // key; the screen closes when the controller has nothing going on; and what a device sent is only ever text.
 
 import { afterEach, describe, expect, it } from "vitest";
-import { COPIED_FOR_MS } from "../src/screens/setup-screens";
+import { COPIED_FOR_MS, WORDS } from "../src/screens/setup-screens";
 import type { SetupState } from "../src/vault-setup";
 import {
   FakeSetup, box, boxes, buttons, control, isDim, openScreens, pasteInto, press, setBox, tap, typeInto, typeText, typed, words, type OpenScreens,
@@ -211,16 +211,16 @@ describe("the password step", () => {
 });
 
 describe("adding a device", () => {
-  const found = (label = "Work laptop"): SetupState => ({ step: "approve-device", message: null, problem: null, device: { signInCode: "ABCD-EFGH", label } });
-  const asking: SetupState = { step: "approve-device", message: null, problem: null, device: null };
+  const asking: SetupState = { step: "approve-device", message: null, problem: null };
 
-  it("asks for the sign-in code first, and looks the device up when the eighth character is in", async () => {
+  it("asks for the device code alone, in ten boxes, and sends it the moment the tenth character is typed", async () => {
     const { root, setup } = await openScreens(asking, "approve");
-    expect(boxes(root, "sign-in")).toHaveLength(8);
-    typeInto(root, "sign-in", "abcdefg");
-    expect(setup.sent("lookUpDevice")).toEqual([]);
-    typeInto(root, "sign-in", "h", 7);
-    expect(setup.sent("lookUpDevice")).toEqual([["ABCDEFGH"]]);
+    expect(boxes(root, "device")).toHaveLength(10);
+    expect(boxes(root, "sign-in"), "there is no sign-in code to type").toHaveLength(0);
+    typeInto(root, "device", "AB12CD34E");
+    expect(setup.sent("approveDevice")).toEqual([]);
+    typeInto(root, "device", "F", 9);
+    expect(setup.sent("approveDevice")).toEqual([["AB12CD34EF"]]);
   });
 
   it("starts the approval screen itself when it is opened for it", async () => {
@@ -228,60 +228,44 @@ describe("adding a device", () => {
     expect(opening).toEqual([["startApprovingDevice"]]);
   });
 
-  it("marks a sign-in code Nexus does not know red, with Nexus's words, until the first edit", async () => {
+  it("marks a device code no waiting device has red, with the screen's own words, until the first edit", async () => {
     const { root, setup } = await openScreens(asking);
-    typeInto(root, "sign-in", "ABCDEFGH");
-    setup.show({ step: "approve-device", message: "Nexus has no sign-in with that code.", problem: "no-such-code", device: null });
-    expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(8);
-    expect(root.querySelector(".nx-fault-line")?.textContent).toBe("Nexus has no sign-in with that code.");
-    typeInto(root, "sign-in", "Z", 0);
-    expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(0);
-  });
-
-  it("sends the device code with the sign-in code the controller found, the moment the tenth character is typed", async () => {
-    const { root, setup } = await openScreens(found());
-    typeInto(root, "device", "AB12CD34E");
-    expect(setup.sent("approveDevice")).toEqual([]);
-    typeInto(root, "device", "F", 9);
-    expect(setup.sent("approveDevice")).toEqual([["ABCD-EFGH", "AB12CD34EF"]]);
-  });
-
-  it("turns all ten boxes red when the code is wrong, and the first edit clears the red and the next full ten are checked at once", async () => {
-    const { root, setup } = await openScreens(found());
     typeInto(root, "device", "AB12CD34EX");
-    setup.show({ ...found(), problem: "wrong-key-code", message: "no" } as SetupState);
+    setup.show({ ...asking, problem: "wrong-key-code", message: "no" } as SetupState);
     expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(10);
+    expect(root.querySelector(".nx-fault-line")?.textContent).toBe(WORDS.approve.wrongCode);
     typeInto(root, "device", "F", 9);
     expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(0);
-    expect(setup.sent("approveDevice").at(-1)).toEqual(["ABCD-EFGH", "AB12CD34EF"]);
+    expect(setup.sent("approveDevice").at(-1)).toEqual(["AB12CD34EF"]);
+  });
+
+  it("shows Nexus's own words, in red, for a refusal that is not a wrong code", async () => {
+    const { root, setup } = await openScreens(asking);
+    typeInto(root, "device", "AB12CD34EF");
+    setup.show({ ...asking, problem: "gone", message: "That sign-in has run out or was answered already. Start it again on the new device." } as SetupState);
+    expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(10);
+    expect(root.querySelector(".nx-fault-line")?.textContent).toBe("That sign-in has run out or was answered already. Start it again on the new device.");
   });
 
   it("has no lock-out: any number of wrong codes in a row leaves the same screen, typed again each time", async () => {
-    const { root, setup } = await openScreens(found());
+    const { root, setup } = await openScreens(asking);
     for (let attempt = 0; attempt < 5; attempt++) {
       pasteInto(root, "device", 0, `AB12CD34E${attempt}`);
-      setup.show({ ...found(), problem: "wrong-key-code", message: "no" } as SetupState);
+      setup.show({ ...asking, problem: "wrong-key-code", message: "no" } as SetupState);
       expect(root.querySelectorAll(".nx-box--wrong")).toHaveLength(10);
     }
     expect(setup.sent("approveDevice")).toHaveLength(5);
   });
 
-  it("shows the label a device sent as text and never as markup, in the slab and nowhere else it could be read as a tag", async () => {
-    const { root } = await openScreens(found(HOSTILE));
-    expect(root.querySelector(".nx-slab__line")?.textContent).toBe(HOSTILE);
-    expect(root.querySelectorAll("img, script")).toHaveLength(0);
-    expect(root.querySelector(".nx-slab__line")?.children).toHaveLength(0);
-  });
-
   it("closes with Cancel and sends nothing to the new device", async () => {
-    const { root, setup } = await openScreens(found());
+    const { root, setup } = await openScreens(asking);
     tap(root, "cancel");
     expect(setup.sent("cancel")).toHaveLength(1);
     expect(setup.sent("approveDevice")).toEqual([]);
   });
 
   it("is told it may not approve: the grey screen with Close, which is done", async () => {
-    const { root, setup } = await openScreens({ ...found(), problem: "not-allowed", message: "Only the owner can approve a device." } as SetupState);
+    const { root, setup } = await openScreens({ ...asking, problem: "not-allowed", message: "Only the owner can approve a device." } as SetupState);
     expect(words(root)[1]).toBe("not allowed");
     tap(root, "close");
     expect(setup.sent("done")).toHaveLength(1);
@@ -469,8 +453,7 @@ describe("no button of the drawings' rule", () => {
     const states: SetupState[] = [
       { step: "no-vault" }, SHOW_KEY, { step: "choose-password", message: null }, { step: "set-up", password: false, message: null },
       { step: "waiting-for-device", link: "l", code: "ABCD-EFGH", keyCode: "AB12C-D34EF" }, { step: "type-matching-code", triesLeft: 3, message: null },
-      { step: "device-unlocked" }, { step: "approve-device", message: null, problem: null, device: null },
-      { step: "approve-device", message: null, problem: null, device: { signInCode: "ABCD-EFGH", label: "Work laptop" } },
+      { step: "device-unlocked" }, { step: "approve-device", message: null, problem: null },
       { step: "device-approved", code: "4TKP8-MXD2Q", label: "x" }, { step: "has-vault", message: null, problem: null, hasPassword: true },
       { step: "stopped", reason: "expired", message: "x" }, { step: "stopped", reason: "denied", message: "x" }, { step: "signed-out" },
     ];
