@@ -22,6 +22,10 @@ const FILES: Record<string, { file: string; type: string }> = {
   "/nexus/fonts/unbounded-var.woff2": { file: "fonts/unbounded-var.woff2", type: "font/woff2" },
   "/nexus/fonts/instrument-sans-var.woff2": { file: "fonts/instrument-sans-var.woff2", type: "font/woff2" },
   "/nexus/fonts/jetbrains-mono-var.woff2": { file: "fonts/jetbrains-mono-var.woff2", type: "font/woff2" },
+  "/nexus/icon.svg": { file: "icon.svg", type: "image/svg+xml" },
+  "/nexus/icon-192.png": { file: "icon-192.png", type: "image/png" },
+  "/nexus/icon-512.png": { file: "icon-512.png", type: "image/png" },
+  "/nexus/apple-touch-icon.png": { file: "apple-touch-icon.png", type: "image/png" },
 };
 
 /** Stands in for the Worker: the page's files come from disk, and Nexus's routes are answered by the fake. */

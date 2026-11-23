@@ -151,7 +151,7 @@ async function addAgent(page: Awaited<ReturnType<typeof openNexusPage>>, name: s
 }
 
 /** A waiting sign-in of the agent just added, as its `nexus-agent join` makes it. */
-const agentSignIn = (name: string) => ({ ...WORKED.waiting, label: `${name}-box`, identity: name, code: "AGNT-7XQ2", deviceKey: null, deviceCode: null });
+const agentSignIn = (name: string) => ({ ...WORKED.waiting, label: `${name}-box`, identity: name, code: "AGNT-7XQ2", deviceKey: null, deviceCode: null, expiresAt: PENDING.expiresAt });
 
 describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
   it("lists the owner first, as you, then each agent, each with its devices: label, added, last used", async () => {
