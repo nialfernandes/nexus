@@ -173,23 +173,32 @@ describe("an allowed sign-in that nobody collects has its token revoked when it 
     expect(await liveTokens("lab-revoke-hour-later")).toEqual([]);
   });
 
-  it("revokes it at the next allow, and when its own device polls after it ran out (told it ran out)", async () => {
+  it("revokes it at the next allow, which sweeps as a start does", async () => {
     const now = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     await allowedAndLeft("lab-revoke-by-allow");
-    const polled = await allowedAndLeft("lab-revoke-by-poll");
-    const next = bodyOf(await device().start("agents", "lab-revoke-allow-later"));
-
+    // Another sign-in is started a second before the first runs out (that start sweeps nothing yet), and allowed a second after.
+    vi.setSystemTime(now + TEN_MINUTES - 1000);
+    const later = bodyOf(await device().start("agents", "lab-revoke-by-allow-later"));
     vi.setSystemTime(now + TEN_MINUTES + 1000);
-    // A sign-in started just now is the one the owner allows, which sweeps the two that ran out. (Its own ten minutes are fresh.)
-    const fresh = bodyOf(await device().start("agents", "lab-revoke-allow-fresh"));
-    expect(next.code).not.toBe(fresh.code);
-    // The poll comes first here, so the allow below finds the token of "by-allow" and "by-poll" both already handled by one of them.
-    expect((await device().poll(polled.secret)).status).toBe(410);
-    expect(await liveTokens("lab-revoke-by-poll"), "the poll of its own sign-in revoked its token").toEqual([]);
-    expect(await liveTokens("lab-revoke-by-allow"), "the other has not been swept yet by anything but the poll's sweep").toEqual([]);
-    bodyOf(await device(owner).approve(fresh.code));
+    expect(await liveTokens("lab-revoke-by-allow"), "nothing has swept yet").toEqual(["lab-revoke-by-allow"]);
+    bodyOf(await device(owner).approve(later.code));
+    expect(await liveTokens("lab-revoke-by-allow"), "the allow swept it").toEqual([]);
+    expect(await liveTokens("lab-revoke-by-allow-later"), "and left the sign-in it allowed").toEqual(["lab-revoke-by-allow-later"]);
+  });
+
+  it("revokes it when its own device polls after it ran out, and the device is told it ran out", async () => {
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const left = await allowedAndLeft("lab-revoke-by-poll");
+    vi.setSystemTime(now + TEN_MINUTES + 1000);
+    expect(await liveTokens("lab-revoke-by-poll"), "nothing has swept yet").toEqual(["lab-revoke-by-poll"]);
+    const polled = await device().poll(left.secret);
+    expect(polled.status).toBe(410);
+    expect(polled.body.reason).toBe("expired");
+    expect(await liveTokens("lab-revoke-by-poll")).toEqual([]);
   });
 
   it("leaves a token alone that its device worked out from its secret and used without ever polling", async () => {
