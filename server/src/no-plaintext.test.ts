@@ -105,6 +105,8 @@ beforeAll(async () => {
   await call("POST", "identity", owner, { name: "another", kind: "agent" });
   await call("GET", "tokens", owner);
   await call("POST", "token/revoke", owner, { id: "no-such-token" });
+  await call("GET", "identities", owner);
+  await call("POST", "identity/remove", owner, { name: "another" });
   const started = bodyOf(await call("POST", "device/start", null, { identity: "agents", label: "no-plaintext device" }));
   await call("GET", `device/pending?code=${started.code}`, owner);
   await call("GET", "device/waiting", owner);

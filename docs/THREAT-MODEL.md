@@ -228,7 +228,11 @@ Someone who can watch or interfere with traffic between a device and the server.
   approved), so it can read and write everything you can. A compromised agent
   therefore means a compromised vault, for as long as it holds the key. Each agent
   is a device with its own keypair and its own sign-in token, so you can revoke it
-  alone. A token issued to one machine and shown once is the same pattern
+  alone. As the owner you can also see every identity and the devices it holds
+  (`GET /identities`: names, kinds, when each device was made and last used, never a token),
+  and remove an agent (`POST /identity/remove`), which revokes all of its tokens in one step so
+  every device it has is turned away at once. Only the owner can do either. A
+  token issued to one machine and shown once is the same pattern
   Bitwarden Secrets Manager uses [S12]. After a compromise, revoke it and rotate
   the key (3.4). In version 1 you cannot limit an agent to one folder (section 2).
 - **Another Obsidian plugin** runs with the same access as the Nexus plugin, in
