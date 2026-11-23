@@ -164,8 +164,8 @@ export async function start(host: NexusHost, origin: string, input: Record<strin
         stmt("DELETE FROM nexus_signins WHERE expires_at < ?", now - KEEP_EXPIRED_MS),
         ...ownerRow(host, identity),
         stmt(
-          `INSERT INTO nexus_signins (code, secret_hash, token_hash, identity, label, created_at, expires_at, status, device_key, caller)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+          `INSERT INTO nexus_signins (code, secret_hash, token_hash, identity, label, created_at, expires_at, status, device_key, caller, seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM nexus_signins))`,
           code, secretHash, tokenHash, identity, label, now, expiresAt, deviceKey, caller,
         ),
       ]);
@@ -238,7 +238,8 @@ export async function pending(host: NexusHost, codeInput: unknown) {
 }
 
 /**
- * The owner's list of sign-ins still waiting (not answered, not run out), oldest first: the label the device sent, the sign-in's code
+ * The owner's list of sign-ins still waiting (not answered, not run out), oldest first (two started in the same millisecond keep the order
+ * they were started in: the number each was given when it started breaks the tie, never the code, which is drawn at random): the label the device sent, the sign-in's code
  * (the one `pending`, `approve` and `deny` take) and the public key it sent (`deviceKey`, base64, or null when it sent none). Nothing
  * in it is secret. The approving device shows the labels, so the person can say which device is meant, lists only the entries that have
  * a key (a sign-in with none cannot be sent the vault key), and checks the code a person types against the key of the one chosen; it
@@ -247,7 +248,7 @@ export async function pending(host: NexusHost, codeInput: unknown) {
  */
 export async function waiting(host: NexusHost) {
   const rows = await host.sql.all<{ code: string; label: string; device_key: string | null }>(
-    "SELECT code, label, device_key FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, code", [host.clock.now()]);
+    "SELECT code, label, device_key FROM nexus_signins WHERE status = 'pending' AND expires_at > ? ORDER BY created_at, seq, code", [host.clock.now()]);
   return { signins: rows.map((row) => ({ label: row.label, code: row.code, deviceKey: row.device_key })) };
 }
 

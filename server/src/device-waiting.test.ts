@@ -53,6 +53,17 @@ describe("the list of sign-ins that are waiting", () => {
     ]);
   });
 
+  it("keeps the order they were started in for sign-ins started in the same millisecond, not the order of their random codes", async () => {
+    // The clock is held still, so every one of these has the same created_at. Which is older is then only a fact of the order they were started in; the
+    // code is drawn at random, so a list that breaks the tie by the code puts twelve in the right order about once in 479,001,600 times.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now());
+    const labels = Array.from({ length: 12 }, (_, i) => `lab-same-ms-${String(i).padStart(2, "0")}`);
+    const codes: string[] = [];
+    for (const label of labels) codes.push((await started(label)).code);
+    expect(await listed(...labels)).toEqual(labels.map((label, i) => ({ label, code: codes[i], deviceKey: null })));
+  });
+
   it("holds nothing secret: every entry has only a label, a sign-in code and a public key, and the device's secret and its token are nowhere in the answer", async () => {
     const sign = await started("lab-leaks-nothing");
     const answer = await device(owner).waiting();
