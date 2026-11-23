@@ -44,7 +44,7 @@ export interface FakeAnswer { status: number; json: unknown }
 
 /**
  * Times in the worked example. Sat 12 Sep 2026 12:00 in Sydney (UTC+10 until the clocks go forward in October) is 02:00 UTC; the
- * browser spec opens the page in that time zone, so it reads "Sat 12 Sep · 12:00".
+ * browser spec opens the page in that time zone, so it reads "added Sat 12 Sep".
  */
 export const SAT_NOON = Date.UTC(2026, 8, 12, 2, 0, 0);
 export const HOUR = 60 * 60 * 1000;

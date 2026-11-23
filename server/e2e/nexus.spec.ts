@@ -1,5 +1,5 @@
 // The Nexus page (public/nexus/index.html, /nexus/), looked at in a real browser at the two widths that matter: 375 px (a phone) and
-// 1280 px (a desktop), in Sydney's time zone so the times read "Sat 12 Sep · 12:00". The page's own files are served as they are in
+// 1280 px (a desktop), in Sydney's time zone so the times read "last used Sun 13 Sep · 09:30". The page's own files are served as they are in
 // public/nexus, and Nexus is the fake in src/__fixtures__/nexus-page-answers.ts (the same fake src/nexus-page.test.ts runs the page's script
 // against, held there to the real routes' answers wherever a real route exists), so what is checked here is the page: the worked example
 // from the owner secret to Undo, the page signed out, Nexus's words for a refused call, its layout and its light colours. Each state the boards
