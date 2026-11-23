@@ -33,7 +33,8 @@
 //   device-unlocked    A new device's matching code agreed: the vault is unlocked here.
 //   approve-device     This device is unlocked and ready to approve another: `devices` are the ones waiting, by name, `device` the one chosen (the
 //                      only one, or the pick); the device code the new device shows is typed, and that is
-//                      all. `problem` is the ApprovalError's reason for the last refusal.
+//                      all. `problem` is the ApprovalError's reason for the last refusal. A waiting sign-in that is an agent that joined
+//                      (`agent` is true, and `name` is the agent's name) is given the key the same way and is drawn as boards 31 and 31a.
 //   device-approved    The other device was approved. `code` is the matching code to show here and type on the new device.
 //   approve-agent      This device is unlocked and ready to approve an agent: the agent's public key is pasted.
 //   agent-approved     The vault key is sealed to the agent's key. `approval` is for the person to save beside the agent's private key
@@ -63,8 +64,9 @@
 //   chooseDevice(signInCode)      From approve-device with several waiting: the one the person picked, by name. Then its device code is typed.
 //   backToDevices()               From approve-device with a device chosen out of several: the list again.
 //   approveDevice(deviceCode)     From approve-device with a device chosen: the device code read off the new device. It is checked against the
-//                                 key of that device. Right: device-approved. A code that is not its key's is refused with nothing sent,
-//                                 and the person tries again.
+//                                 key of that device. Right: device-approved, or, for an agent that joined, unlocked at once (an agent shows
+//                                 no matching code to type, so there is no step for it: the screen closes). A code that is not its key's is
+//                                 refused with nothing sent, and the person tries again.
 //   startApprovingAgent()         From unlocked: ready to approve an agent (approve-agent).
 //   approveAgent(publicKey)       From approve-agent: the agent's public key as pasted. Right: agent-approved. Not a public key: refused.
 //   done()                        From set-up, device-unlocked, approve-device, device-approved, approve-agent or agent-approved: back to unlocked.
@@ -101,10 +103,17 @@ export type StoppedBecause =
 /** What was wrong with a Recovery Key or a password the person typed: see `has-vault` above. */
 export type OpenProblem = "empty" | "incomplete" | "wrong" | "other";
 
-/** A device that is waiting to be approved, as a screen shows it: the name it signed in with, and the code of its sign-in (which names it to `chooseDevice`). Its key stays in the controller. */
+/**
+ * A device that is waiting to be approved, as a screen shows it: the name it signed in with, and the code of its sign-in (which names it to
+ * `chooseDevice`). Its key stays in the controller. An agent that joined also has its name, and is drawn as the key being given to it.
+ */
 export interface WaitingName {
   label: string;
   signInCode: string;
+  /** The name of the identity it asked to be: the agent's name when `agent`, otherwise the label. Left out, the label is the name. */
+  name?: string;
+  /** True for an agent that joined (`nexus-agent join`): it is given the key and shown nothing to type back. Left out, it is a device. */
+  agent?: boolean;
 }
 
 export type SetupState =
@@ -490,7 +499,11 @@ export class VaultSetup {
   /** The approve-device step, with the devices that wait (by name) and the one chosen. */
   #showDevices(device: WaitingDevice | null, message: string | null, problem: ApprovalError["reason"] | null): void {
     this.#chosen = device;
-    const name = (waiting: WaitingDevice): WaitingName => ({ label: waiting.label, signInCode: waiting.signInCode });
+    // Only an agent that joined carries its name and says so: a device is drawn as it always was.
+    const name = (waiting: WaitingDevice): WaitingName =>
+      waiting.agent
+        ? { label: waiting.label, signInCode: waiting.signInCode, name: waiting.identity ?? waiting.label, agent: true }
+        : { label: waiting.label, signInCode: waiting.signInCode };
     this.#set({ step: "approve-device", message, problem, devices: this.#waiting.map(name), device: device === null ? null : name(device) });
   }
 
@@ -508,6 +521,8 @@ export class VaultSetup {
     try {
       const approved = await approveWithDeviceCode(this.#approving(), chosen, typedDeviceCode);
       if (flow.cancelled) return;
+      // An agent shows nothing to be typed back, so there is no matching code to show here: the key is given and the screen closes.
+      if (chosen.agent) return this.#idle();
       this.#set({ step: "device-approved", code: approved.code, label: approved.label });
     } catch (error) {
       if (flow.cancelled) return;
