@@ -1,25 +1,119 @@
-/* THE NEXUS PAGE'S OWN STYLESHEET: only what the approval page's stylesheet (approve.css, loaded first) has no part for: the rows of who is
-   connected, a device waiting, a small button, the command to copy, and the line a removal waits on. Every colour, space, radius and
-   font here is read from the token variables approve.css declares, so the two pages change together, and the page has no dark set
-   (the boards are drawn light only). The drawn look is docs/design/nexus boards 25 to 31 of the nialfernandes repository (nialfernandes #822);
-   when they land, this file and the tokens are what change. */
+/* THE NEXUS PAGE'S OWN STYLESHEET, as drawn on boards 26 to 30 (docs/design/nexus-page; the values are those boards' own). It holds only what the approval
+   page's stylesheet (approve.css, loaded first) has no part for: the top bar's buttons, the cards of who is connected, a device
+   waiting, the add-an-agent form and its command, the tabs and the Undo bar. Every colour, space, radius and font is read from the
+   token variables (approve.css declares most; the few the boards need and the approval page does not are declared just below), so
+   the two pages change together, and the page has no dark set (the boards are drawn light only). */
+
+:root {
+  /* The red of a refused name (board 27a: #DC2626; the approval page's own fault red is a different one), the grey of a field's example
+     word, the thin rule between a card's rows, and the shadow under the Add button on the slab. */
+  --fault-line: #dc2626;
+  --placeholder: #85858b;
+  --rule: #0f101324;
+  --chip-shadow: #0f10131f;
+  /* The corner of a tab inside the tab bar. */
+  --r-tab: 12px;
+}
 
 .signed-in {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--page-gap);
 }
 
-.card__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 20px;
+/* ── the top bar ───────────────────────────────────────────────────────────── */
+
+/* The name on the left, the actions on the right. */
+.slab__row {
+  justify-content: space-between;
+  width: 100%;
 }
 
-/* The card holds a list, so a long name or label breaks rather than widening the page. */
+/* On the add and agent views a back chevron sits before the title, the pair centred on the line; otherwise the title shares the mark's baseline. */
+.slab__where { display: contents; }
+
+.slab__where--back {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+}
+
+.slab__back,
+.slab__ask {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--on-slab);
+}
+
+/* The chevron is small: its tap area reaches past it. */
+.slab__back::before {
+  content: "";
+  position: absolute;
+  inset: -9px -6px;
+}
+
+.slab__ask { width: 22px; height: 22px; }
+
+.slab__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* The page action: a white pill with a plus. */
+.chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--s-3);
+  background: var(--card);
+  border: 0;
+  border-radius: var(--r-pill);
+  box-shadow: 0 2px 8px var(--chip-shadow);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.chip:focus-visible,
+.slab__back:focus-visible,
+.slab__ask:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+#apps { text-decoration: none; }
+
+/* The line under the bar sits close to the first card. */
+.lead { padding-bottom: 6px; }
+
+/* ── the views ─────────────────────────────────────────────────────────────── */
+
+.view {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+/* Under what a view shows there is room that takes up what the screen has left, and is never less than 8 px, so the tabs are never against
+   the last card. Where the view puts something in that room itself (the one line of board 26a, the Remove agent of board 29), there is none. */
+.view::after {
+  content: "";
+  flex: 1 1 auto;
+  min-height: var(--s-2);
+}
+
+.view--only-you::after,
+.view--agent::after { display: none; }
+
 .people,
 .strips,
 .undo,
@@ -31,70 +125,11 @@
   list-style: none;
 }
 
-.people { gap: var(--s-4); }
-.devices { gap: var(--s-2); }
+.people { gap: var(--page-gap); }
+
+/* ── who is connected: a card for the owner and one for each agent ─────────── */
 
 .person {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-}
-
-/* The name, what it is, and the button that removes an agent. */
-.person__head {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-}
-
-.person__name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: 600;
-}
-
-.tag {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border: 1.5px solid var(--ink-outline);
-  border-radius: var(--r-pill);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 14px;
-  color: var(--ink-soft);
-}
-
-/* A device sits under its person, set in a little, in the look of a code box. */
-.device {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  background: var(--code-box);
-  border-radius: var(--r-box);
-}
-
-.device__text {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.device__label { margin: 0; font-weight: 600; }
-
-.device__when {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--ink-soft);
-}
-
-/* A device waiting: a strip at the top of the page, teal at its edge as the slab is, with Allow and Deny. */
-.strips { gap: var(--page-gap); }
-
-.strip {
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
@@ -104,64 +139,336 @@
   background: var(--card);
   border-radius: var(--r-card);
   box-shadow: 0 1px 3px var(--card-shadow);
-  outline: 2px solid var(--slab);
+}
+
+/* The card's title: the owner as "you", or the agent's name. An agent's is a button that opens it (board 29). */
+.person__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+  color: var(--ink);
+}
+
+.person__open {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+/* Tapping anywhere along the title row, and the card's padding above it, opens the agent. */
+.person__open::before {
+  content: "";
+  position: absolute;
+  inset: -14px -14px -4px;
+}
+
+.person__open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Its devices: each a name, when it was added and when it was last used, and Remove in a slot of its own on the right so the buttons line up. */
+.devices {
+  gap: var(--s-3);
+}
+
+.device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.device + .device {
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+
+.device__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.device__label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.device__when {
+  margin: 0;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--ink-soft);
+}
+
+.device .pill { flex-shrink: 0; }
+
+/* Board 26a: nobody but the owner. One line and one button, in the room the cards would have. */
+.only-you {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  min-height: 120px;
+  padding-block: var(--s-4);
+}
+
+.only-you__words {
+  margin: 0;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+/* ── a device waiting: a strip above the list, teal at its edge as the slab is, with Allow and Deny ── */
+
+.strips { gap: var(--page-gap); }
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  width: 100%;
+  max-width: var(--card-max);
+  padding: var(--card-pad);
+  background: var(--card);
+  border: 1.5px solid var(--slab);
+  border-radius: var(--r-card);
+  box-shadow: 0 1px 3px var(--card-shadow);
+}
+
+.strip__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
 }
 
 .strip__words,
 .strip__code { margin: 0; }
 
+.strip__words {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
 .strip__code {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+  line-height: 16px;
+  color: var(--ink);
 }
 
-/* The smaller button, for Remove and Undo beside a row. */
-.pill--small {
-  height: 26px;
-  padding: 0 var(--s-3);
-  font-size: 12px;
-}
+/* ── add an agent ──────────────────────────────────────────────────────────── */
 
-/* The command to run on the agent, in a code box, with Copy under it. */
-.command {
+.add-form {
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  gap: var(--s-3);
 }
 
+/* The name: a pill, with its example word in grey until something is typed. A refused name turns its outline red. */
+.field__pill {
+  flex-shrink: 0;
+  width: 100%;
+  height: 30px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1.5px solid var(--ink-outline);
+  border-radius: var(--r-pill);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--ink);
+}
+
+.field__pill::placeholder { color: var(--placeholder); opacity: 1; }
+.field__pill:focus { outline-color: var(--slab); }
+.field__pill[aria-invalid="true"] { border-color: var(--fault-line); }
+
+/* The line under the name turns red when the name is taken. */
+.card__quiet--taken { color: var(--fault-line); }
+
+/* Add stays dim until the name is good, a little dimmer than a button that has been tapped. */
+#add-go:disabled { opacity: 0.35; }
+
+/* The command to run on the agent, in a code box, with Copy under it. */
 .command__text {
   margin: 0;
-  padding: var(--s-3);
+  padding: 10px var(--s-3);
   background: var(--code-box);
   border-radius: var(--r-box);
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-  line-height: 17px;
+  line-height: 18px;
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: all;
 }
 
-/* What was just removed, until its time is up. */
-.undo { gap: var(--s-2); }
+/* Under a thin line: that the agent has not joined yet, with a bar that keeps moving while Nexus waits. */
+.waiting-for {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+
+.waiting-for__words {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.progress {
+  flex-shrink: 0;
+  height: 6px;
+  overflow: clip;
+  background: var(--code-box);
+  border-radius: var(--r-pill);
+}
+
+.progress__fill {
+  width: 96px;
+  height: 6px;
+  background: var(--slab);
+  border-radius: var(--r-pill);
+  animation: progress-moves 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes progress-moves {
+  from { margin-left: 0; }
+  to { margin-left: calc(100% - 96px); }
+}
+
+/* A person who asks for less motion gets the bar standing still, where it is drawn. */
+@media (prefers-reduced-motion: reduce) {
+  .progress__fill { animation: none; }
+}
+
+/* The agent has joined: a teal tick, a title, and where the key is given. */
+.joined__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.joined__tick {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--slab);
+  border-radius: var(--r-pill);
+  color: var(--on-slab);
+}
+
+.joined__title,
+.joined__words { margin: 0; }
+
+.joined__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+/* ── one agent, and Settings ───────────────────────────────────────────────── */
+
+/* Remove agent: a quiet pill at the bottom, in the middle. */
+.agent-remove {
+  display: flex;
+  justify-content: center;
+  margin-top: auto;
+  padding-bottom: var(--s-3);
+}
+
+/* ── the tabs and the Undo bar, together at the bottom ─────────────────────── */
+
+/* They stay in view when a long list is scrolled. */
+.dock {
+  position: sticky;
+  bottom: var(--s-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--s-1);
+  width: 100%;
+  max-width: var(--card-max);
+  padding: var(--s-1);
+  background: var(--card);
+  border-radius: var(--r-card);
+  box-shadow: 0 1px 3px var(--card-shadow);
+}
+
+.tab {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-tab);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+/* The open tab is filled teal. */
+.tab--open {
+  background: var(--slab);
+  color: var(--ink);
+}
+
+.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* What was just removed, until its time is up: an ink bar above the tabs, with Undo in teal. */
+.undo {
+  gap: var(--s-2);
+  margin-bottom: 18px;
+}
 
 .undo__item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--s-3);
   width: 100%;
   max-width: var(--card-max);
-  padding: var(--s-2) var(--s-3);
+  height: 40px;
+  padding: 0 var(--s-2) 0 var(--s-4);
   background: var(--ink);
   border-radius: var(--r-pill);
   color: var(--on-ink);
   font-size: 13px;
-  line-height: 17px;
+  line-height: 16px;
 }
 
 .undo__words {
@@ -170,9 +477,20 @@
   margin: 0;
 }
 
-.undo__item .pill--quiet {
-  border-color: var(--on-ink);
-  color: var(--on-ink);
+.undo__button {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 var(--s-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--slab);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
-.undo__item .pill:focus-visible { outline-color: var(--on-ink); }
+.undo__button:focus-visible { outline: 2px solid var(--on-ink); }

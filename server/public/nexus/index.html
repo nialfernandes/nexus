@@ -12,18 +12,39 @@
     <link rel="stylesheet" href="/nexus/nexus.css" />
   </head>
   <body>
-    <!-- THE NEXUS PAGE, the owner's own: who is connected (the owner, then each agent, each with its devices), a device waiting
-         to be let in, adding an agent, and removing a device or an agent. nexus.js asks Nexus and fills this page in. The owner
-         signs in on it with the owner secret exactly as on the approval page, and until then the first card is the only thing
-         shown: every other part is hidden until the owner is known. Everything Nexus sent (a name, a label, a code) goes in as
-         text, never as markup. The look is the approval page's own (approve.css) until the drawn boards replace it. -->
+    <!-- THE NEXUS PAGE, the owner's own, as drawn on boards 26 to 30 (docs/design/nexus-page): who is connected (the owner, then each agent,
+         each with its devices), a device waiting to be let in, adding an agent, one agent with its Remove, and Settings. It is one page
+         that shows one view at a time (connected, add an agent, an agent, settings); nexus.js asks Nexus and fills it in. The owner signs
+         in on it with the owner secret exactly as on the approval page, and until then the owner card is the only thing shown: the top
+         bar's buttons, every view and the tabs are hidden until the owner is known. Everything Nexus sent (a name, a label, a code) goes
+         in as text, never as markup. The look is the approval page's own (approve.css) with the slab, cards, tabs and Undo bar of the boards (nexus.css). -->
     <div class="page">
       <header class="slab">
         <div class="slab__row">
           <div class="slab__name">
             <span class="slab__mark">nexus</span>
             <span class="slab__divider" aria-hidden="true"></span>
-            <h1 class="slab__title" id="title">connected</h1>
+            <!-- On the add and agent views a back chevron sits before the title; on the others the title stands alone. -->
+            <div class="slab__where" id="where">
+              <button type="button" class="slab__back" id="back" aria-label="Back" hidden>
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
+              <h1 class="slab__title" id="title">connected</h1>
+            </div>
+          </div>
+          <!-- The page action, then the Ask sparkle. Settings has Aus Apps in place of the sparkle, and no page action. -->
+          <div class="slab__actions" id="slab-actions" hidden>
+            <button type="button" class="chip" id="add-open">
+              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" /></svg>
+              <span>Add</span>
+            </button>
+            <a class="pill pill--main" id="apps" href="/apps" hidden>Aus Apps</a>
+            <button type="button" class="slab__ask" id="ask" aria-label="Ask">
+              <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 3.5c.7 4.6 3 6.9 7.5 7.5-4.5.6-6.8 2.9-7.5 7.5-.7-4.6-3-6.9-7.5-7.5 4.5-.6 6.8-2.9 7.5-7.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
+                <path d="M19 15.5c.25 1.6 1 2.35 2.5 2.5-1.5.15-2.25.9-2.5 2.5-.25-1.6-1-2.35-2.5-2.5 1.5-.15 2.25-.9 2.5-2.5z" fill="currentColor" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
@@ -48,45 +69,102 @@
 
         <!-- Everything the owner sees once Nexus knows them. -->
         <div class="signed-in" id="signed-in" hidden>
-          <!-- Nexus's own words for a call it refused (a code that ran out, a name taken, a remove that failed). -->
+          <!-- Nexus's own words for a call it refused (a code that ran out, a remove that failed). -->
           <p class="card__quiet card__quiet--fault" id="alert" role="alert" hidden></p>
 
-          <!-- Devices waiting to be let in, one strip each. -->
+          <!-- Devices waiting to be let in, one strip each, above the list (board 26b) and above the agent that was just added (board 28). -->
           <ul class="strips" id="waiting" aria-label="Devices waiting" hidden></ul>
 
-          <section class="card" id="connected-card" aria-labelledby="connected-title">
-            <h2 class="card__title" id="connected-title">connected</h2>
+          <!-- Board 26, 26a, 26c, 29a: who is connected, one card for the owner and one for each agent. -->
+          <div class="view view--list" id="view-connected">
             <ul class="people" id="people"></ul>
             <p class="card__quiet" id="nobody" hidden>Nobody is connected.</p>
-          </section>
+            <!-- Board 26a: nobody but the owner is connected yet. -->
+            <div class="only-you" id="only-you" hidden>
+              <p class="only-you__words">No agent is connected yet. Add one to let it read your notes.</p>
+              <button type="button" class="pill pill--main" id="add-first">Add an agent</button>
+            </div>
+          </div>
 
-          <section class="card" id="add-card" aria-labelledby="add-title">
-            <h2 class="card__title" id="add-title">add an agent</h2>
-            <form class="owner" id="add-form" autocomplete="off" novalidate>
-              <div class="field">
-                <label class="field__label" for="agent-name">NAME</label>
-                <input class="field__input" id="agent-name" name="name" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" aria-describedby="agent-hint" />
+          <!-- Boards 27 to 28a: the name of a new agent, then the one command to run on it, then that it has joined. -->
+          <div class="view" id="view-add" hidden>
+            <section class="card" id="add-card" aria-label="Add an agent">
+              <form class="add-form" id="add-form" autocomplete="off" novalidate>
+                <label class="field__label" for="agent-name">AGENT NAME</label>
+                <input class="field__pill" id="agent-name" name="name" type="text" placeholder="scribe" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" aria-describedby="agent-hint" />
                 <p class="card__quiet" id="agent-hint">Lower case letters, digits and hyphens.</p>
-              </div>
-              <div class="actions">
-                <button type="submit" class="pill pill--main" id="add-go">Add</button>
-              </div>
-            </form>
-            <p class="card__quiet card__quiet--fault" id="add-alert" role="alert" hidden></p>
+                <div class="actions">
+                  <button type="submit" class="pill pill--main" id="add-go" disabled>Add</button>
+                </div>
+              </form>
+              <p class="card__quiet card__quiet--fault" id="add-alert" role="alert" hidden></p>
+            </section>
 
-            <!-- The one command to run on the agent, once the agent has been added. -->
-            <div class="command" id="command" hidden>
-              <p class="code__label" id="command-label">RUN THIS ON THE AGENT</p>
+            <!-- Board 28: the command, with Copy, and the wait for the agent to join. -->
+            <section class="card" id="command" aria-label="The command to run on the agent" hidden>
+              <p class="field__label" id="command-label">COMMAND</p>
               <pre class="command__text" id="command-text" aria-labelledby="command-label"></pre>
               <div class="actions">
-                <button type="button" class="pill pill--quiet" id="copy">Copy</button>
+                <button type="button" class="pill pill--main" id="copy">Copy</button>
               </div>
-              <p class="card__quiet" id="command-note">Then allow it above. The key is handed over in Obsidian, on a device that holds it, never on this page.</p>
-            </div>
-          </section>
+              <div class="waiting-for">
+                <p class="waiting-for__words" id="waiting-for">waiting for the agent</p>
+                <div class="progress" aria-hidden="true"><div class="progress__fill"></div></div>
+              </div>
+            </section>
 
-          <!-- A removal waits here for a few seconds. Undo puts it back and nothing is sent; when the time is up the call goes. -->
-          <ul class="undo" id="undo" aria-label="Removed" hidden></ul>
+            <!-- Board 28a: the agent has a working device. The key is given in Obsidian: this card has no key, no field and no button. -->
+            <section class="card" id="joined" aria-label="The agent has joined" hidden>
+              <div class="joined__head">
+                <span class="joined__tick" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </span>
+                <p class="joined__title" id="joined-title"></p>
+              </div>
+              <p class="joined__words" id="joined-words"></p>
+              <p class="card__quiet">The key never comes to this website.</p>
+            </section>
+          </div>
+
+          <!-- Board 29: one agent, with its devices and Remove agent. -->
+          <div class="view view--agent" id="view-agent" hidden>
+            <ul class="people" id="agent-card"></ul>
+            <div class="agent-remove">
+              <button type="button" class="pill pill--quiet" id="remove-agent">Remove agent</button>
+            </div>
+          </div>
+
+          <!-- Board 30: Settings. -->
+          <div class="view" id="view-settings" hidden>
+            <div class="actions">
+              <button type="button" class="pill pill--quiet" id="sign-out">Sign out</button>
+            </div>
+          </div>
+
+          <!-- The Undo bar sits above the tabs (boards 26c and 29a). A removal waits here for a few seconds: Undo puts it back and nothing is
+               sent; when the time is up the call goes. -->
+          <div class="dock">
+            <ul class="undo" id="undo" aria-label="Removed" hidden></ul>
+            <nav class="tabs" aria-label="Pages">
+              <button type="button" class="tab tab--open" id="tab-connected" aria-current="page">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="7" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                  <circle cx="17" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                  <circle cx="17" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                  <path d="M9.7 10.6l4.6-3M9.7 13.4l4.6 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+                <span>connected</span>
+              </button>
+              <button type="button" class="tab" id="tab-settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <circle cx="16" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="2" />
+                  <circle cx="8" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="2" />
+                </svg>
+                <span>settings</span>
+              </button>
+            </nav>
+          </div>
         </div>
       </main>
     </div>

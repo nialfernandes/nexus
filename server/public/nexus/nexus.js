@@ -1,8 +1,9 @@
-// The Nexus page, the owner's own. It shows who is connected (the owner first, then each agent, each with its devices), the devices
-// waiting to be let in (with Allow and Deny), a way to add an agent, and Remove for a device or an agent. A browser that is not
-// signed in as the owner is first asked for the owner secret, on the page, and shown nothing else. Everything Nexus sent (a name, a
-// label, a code, its own words for a refusal) goes on the page as text, never as markup: this file only sets text, shows or hides
-// parts of the page, and builds plain rows, buttons and boxes from what it was sent.
+// The Nexus page, the owner's own, as drawn on boards 26 to 30 (docs/design/nexus-page). It shows one view at a time: who is connected
+// (the owner as "you", then each agent, each with its devices, and a strip for each device waiting to be let in, with Allow and Deny),
+// adding an agent (its name, then the one command to run on it, then that it has joined), one agent (its devices and Remove agent), and
+// Settings (Sign out). A browser that is not signed in as the owner is first asked for the owner secret, on the page, and shown nothing
+// else. Everything Nexus sent (a name, a label, a code, its own words for a refusal) goes on the page as text, never as markup: this
+// file only sets text, shows or hides parts of the page, and builds plain rows, buttons and boxes from what it was sent.
 //
 //   GET  /nexus/api/identities                     who is connected: { identities: [ { name, kind, owner, createdAt, devices: [ { id, label, createdAt, lastUsedAt } ] } ] }
 //   GET  /nexus/api/device/waiting                 the sign-ins waiting: { signins: [ { label, code, deviceKey } ] }
@@ -17,38 +18,54 @@
 // owner's cookie is known already. For one that does not, the page shows one field, and what the owner types goes to Nexus in the header
 // x-nexus-owner-secret with each call. It is sent over a secure connection only (window.isSecureContext), it is held in one variable of
 // this script and nowhere else (no storage, no cookie, nothing on the page: the field is emptied as it is sent). This page makes many
-// calls over some minutes, so unlike the approval page's one answer the secret is held until Nexus refuses it or the page is closed.
+// calls over some minutes, so unlike the approval page's one answer the secret is held until Nexus refuses it, Sign out lets it go, or
+// the page is closed. Sign out does not reach a cookie: Nexus has no route that takes the owner's cookie away.
 //
 // REMOVING takes the row off the page at once and starts a short wait (UNDO_MS) with Undo beside it. Undo puts the row back and
 // nothing is sent. The call goes to Nexus only when the wait has passed. A page closed inside the wait sends nothing, so nothing is removed.
 //
-// A DEVICE WAITING is shown as the approval page shows it: its name, who it asks to be, and the code the device shows on its own screen
-// to compare (its key's code, or its sign-in code for a device that sent no key). The list is asked for again every few seconds.
+// A DEVICE WAITING is shown as a strip: its name and that it wants in (and as whom, when it is not the owner), and the code the device
+// shows on its own screen to compare (its key's code, or its sign-in code for a device that sent no key). The list is asked for again
+// every few seconds. After an agent is added, who is connected is asked for again too, until the agent has a working device.
 //
-// Every refusal is shown in Nexus's own words, as it sent them.
+// THE KEY is never on this page: it is given in Obsidian. The page has no key, no place to type one and no button for it.
+//
+// Every refusal is shown in Nexus's own words, as it sent them, except a name that is taken, which is shown in the words drawn on board 27a.
 (function () {
   'use strict';
 
   var API = '/nexus/api/';
   // The header the owner secret is sent in. The server's sign-in reads the same name (plugs/cloudflare/signin.ts).
   var OWNER_SECRET_HEADER = 'x-nexus-owner-secret';
-  // How long a removal waits for Undo, how often the waiting list is asked for again, and how long Copy says it copied.
+  // How long a removal waits for Undo, how often the page asks again (the devices waiting, and an agent that has not joined), and how
+  // long Copy says it copied.
   var UNDO_MS = 8000;
-  var WAITING_EVERY_MS = 5000;
+  var ASK_AGAIN_MS = 5000;
   var COPIED_MS = 2000;
   // The kind of identity this page makes, and the only kind it removes (the owner is never removed here).
   var AGENT = 'agent';
-  // What the agent runs: the name of the environment variable the command reads (packages/agent/src/cli/labels.ts, ENV.address) and the
-  // command that signs it in (packages/agent/src/cli/main.ts, sign-in --identity <name> --label <label>).
-  var ADDRESS_VARIABLE = 'NEXUS_ADDRESS';
-  var SIGN_IN_COMMAND = 'nexus-agent sign-in';
+  // What the agent runs, followed by its name (packages/agent: the command that joins it to Nexus).
+  var JOIN_COMMAND = 'nexus-agent join';
+  // A name is what Nexus accepts (identities.ts): lower case letters, digits and hyphens, first a letter or digit, at most 40 long.
+  // Anything else is blocked as it is typed.
+  var NAME_OK = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  var NAME_BLOCKED = /[^a-z0-9-]/g;
+
+  // The views, and the title each one has on the bar (an agent's view is titled by the agent's name).
+  var CONNECTED = 'connected';
+  var ADD = 'add';
+  var AGENT_VIEW = 'agent';
+  var SETTINGS = 'settings';
+  var TITLES = { connected: 'connected', add: 'add an agent', settings: 'settings' };
 
   var WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   // The words, in one place. Anything Nexus says in its own words is shown as it said it.
   var CHECKING = 'Checking who is connected…';
-  var SIGNED_IN = 'Who can use Nexus.';
+  var LEAD_LIST = 'Everything that can read your notes.';
+  var LEAD_ADD = 'Give the agent a name. It reads every note once it has the key.';
+  var OWNER_TITLE = 'you';
   var OWNER_ONLY = 'Only the owner can see this.';
   var CANT_REACH = 'Nexus could not be reached. Check the connection and try again.';
   var WRONG_SECRET = 'That is not the owner secret.';
@@ -56,6 +73,8 @@
   var NOT_SECURE = 'Open this page over a secure connection (https) to type the owner secret.';
   var NEVER = 'never';
   var NOT_COPIED = 'That did not copy. Select the command and copy it.';
+  var NAME_HINT = 'Lower case letters, digits and hyphens.';
+  var NO_DEVICES = 'No devices.';
 
   function byId(id) { return document.getElementById(id); }
   var line = byId('line');
@@ -66,20 +85,46 @@
   var ownerAlert = byId('owner-alert');
   var ownerGo = byId('owner-go');
   var signedIn = byId('signed-in');
+  var title = byId('title');
+  var where = byId('where');
+  var backButton = byId('back');
+  var barActions = byId('slab-actions');
+  var addOpen = byId('add-open');
+  var appsLink = byId('apps');
+  var askButton = byId('ask');
   var waitingList = byId('waiting');
+  var viewConnected = byId('view-connected');
   var people = byId('people');
   var nobody = byId('nobody');
+  var onlyYou = byId('only-you');
+  var addFirst = byId('add-first');
+  var viewAdd = byId('view-add');
+  var addCard = byId('add-card');
   var addForm = byId('add-form');
   var nameField = byId('agent-name');
+  var nameHint = byId('agent-hint');
   var addGo = byId('add-go');
   var addAlert = byId('add-alert');
   var command = byId('command');
   var commandText = byId('command-text');
   var copyButton = byId('copy');
+  var waitingFor = byId('waiting-for');
+  var joinedCard = byId('joined');
+  var joinedTitle = byId('joined-title');
+  var joinedWords = byId('joined-words');
+  var viewAgent = byId('view-agent');
+  var agentCard = byId('agent-card');
+  var removeAgentButton = byId('remove-agent');
+  var viewSettings = byId('view-settings');
+  var signOutButton = byId('sign-out');
   var undoList = byId('undo');
+  var tabConnected = byId('tab-connected');
+  var tabSettings = byId('tab-settings');
 
   // The owner secret the owner typed. The one place it is held.
   var ownerSecret = null;
+  // Whether Nexus knows who is asking: until it does, the page shows the owner card and nothing else.
+  var known = false;
   // What Nexus last said about who is connected.
   var identities = [];
   // The sign-ins waiting, as the page shows them, and the codes they were last drawn for.
@@ -93,6 +138,16 @@
   var copiedTimer = null;
   // Counts the times the page went back to asking for the owner secret, so an answer that arrives after that is not drawn.
   var session = 0;
+  // Which view is open, which agent the agent view is of, the agent just added (null before one is), whether it has a working device yet,
+  // a line that stands in for the view's own line (what was just done, or what the page is waiting for), whether an add is out, and the
+  // words that say the name typed is taken (null when it is not).
+  var view = CONNECTED;
+  var openAgent = null;
+  var added = null;
+  var joined = false;
+  var notice = null;
+  var adding = false;
+  var takenWords = null;
 
   // ── asking Nexus ───────────────────────────────────────────────────────────
 
@@ -138,10 +193,87 @@
 
   function pad(number) { return (number < 10 ? '0' : '') + number; }
 
-  // A time as "Sat 12 Sep · 12:00", in the browser's own time zone.
+  // A day as "Sat 21 Nov", and a time as "Mon 23 Nov · 11:40", in the browser's own time zone.
+  function day(ms) {
+    var date = new Date(ms);
+    return WEEKDAYS[date.getDay()] + ' ' + date.getDate() + ' ' + MONTHS[date.getMonth()];
+  }
+
   function when(ms) {
     var date = new Date(ms);
-    return WEEKDAYS[date.getDay()] + ' ' + date.getDate() + ' ' + MONTHS[date.getMonth()] + ' · ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    return day(ms) + ' · ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  }
+
+  // The owner, then the rest as Nexus listed them.
+  function inOrder(list) {
+    return list.filter(function (person) { return person.owner; }).concat(list.filter(function (person) { return !person.owner; }));
+  }
+
+  // Whether a removal not yet finished hides this agent or this device.
+  function hidden(kind, key) {
+    return removals.some(function (removal) { return removal.kind === kind && removal.key === key; });
+  }
+
+  function visiblePeople() {
+    return inOrder(identities).filter(function (person) { return !hidden('agent', person.name); });
+  }
+
+  function personNamed(name) {
+    return visiblePeople().filter(function (person) { return person.name === name; })[0] || null;
+  }
+
+  function devicesOf(person) {
+    return (person.devices || []).filter(function (device) { return !hidden('device', device.id); });
+  }
+
+  // The line under the bar, for the view that is open. Empty when the view has none.
+  function viewLine() {
+    if (view === CONNECTED) return stripsShown() ? '' : LEAD_LIST;
+    if (view === ADD) {
+      if (added === null) return LEAD_ADD;
+      return joined ? added.name + ' has joined.' : added.name + ' is added. Run this on the agent.';
+    }
+    if (view === AGENT_VIEW) {
+      var person = personNamed(openAgent);
+      return person && typeof person.createdAt === 'number' ? 'Joined ' + day(person.createdAt) + '. It reads every note.' : 'It reads every note.';
+    }
+    return '';
+  }
+
+  function renderLine() {
+    var words = notice !== null ? notice : viewLine();
+    line.textContent = words;
+    line.hidden = words === '';
+  }
+
+  // The bar: the title, the back chevron on the views that have one, the page action then the Ask sparkle (Settings has Aus Apps in place of
+  // both), and which tab is open.
+  function renderBar() {
+    var back = known && (view === ADD || view === AGENT_VIEW);
+    title.textContent = view === AGENT_VIEW && openAgent !== null ? openAgent : TITLES[view];
+    where.className = back ? 'slab__where slab__where--back' : 'slab__where';
+    backButton.hidden = !back;
+    barActions.hidden = !known;
+    addOpen.hidden = view !== CONNECTED;
+    appsLink.hidden = view !== SETTINGS;
+    askButton.hidden = view === SETTINGS;
+    var onSettings = view === SETTINGS;
+    tabConnected.className = onSettings ? 'tab' : 'tab tab--open';
+    tabSettings.className = onSettings ? 'tab tab--open' : 'tab';
+    if (onSettings) {
+      tabConnected.removeAttribute('aria-current');
+      tabSettings.setAttribute('aria-current', 'page');
+    } else {
+      tabSettings.removeAttribute('aria-current');
+      tabConnected.setAttribute('aria-current', 'page');
+    }
+  }
+
+  function renderViews() {
+    viewConnected.hidden = view !== CONNECTED;
+    viewAdd.hidden = view !== ADD;
+    viewAgent.hidden = view !== AGENT_VIEW;
+    viewSettings.hidden = view !== SETTINGS;
   }
 
   // The field for the owner secret, and nothing else on the page. `words` says what was wrong with the last try, if anything. Whatever
@@ -149,21 +281,31 @@
   function showOwner(words) {
     session += 1;
     stopPolling();
+    known = false;
     identities = [];
     waiting = [];
     waitingDrawn = '';
     asked = {};
     removals.forEach(function (removal) { clearTimeout(removal.timer); });
     removals = [];
+    view = CONNECTED;
+    openAgent = null;
+    added = null;
+    joined = false;
+    adding = false;
+    takenWords = null;
     people.textContent = '';
+    agentCard.textContent = '';
     waitingList.textContent = '';
     undoList.textContent = '';
-    command.hidden = true;
+    nameField.value = '';
     commandText.textContent = '';
     say(alertBox, '');
     say(addAlert, '');
     signedIn.hidden = true;
-    line.textContent = OWNER_ONLY;
+    notice = OWNER_ONLY;
+    renderBar();
+    renderLine();
     owner.hidden = false;
     var secure = window.isSecureContext === true;
     secretField.disabled = !secure;
@@ -183,66 +325,120 @@
   }
 
   function showSignedIn() {
+    known = true;
     owner.hidden = true;
     signedIn.hidden = false;
-    line.textContent = SIGNED_IN;
+    notice = null;
+    renderAll();
+  }
+
+  // Opens a view. What the last view said about what was just done is let go. Leaving the add view forgets the agent that was added.
+  function openView(next, agentName) {
+    view = next;
+    openAgent = next === AGENT_VIEW ? agentName : null;
+    if (next !== ADD) {
+      added = null;
+      joined = false;
+    }
+    notice = null;
+    renderAll();
   }
 
   // ── who is connected ───────────────────────────────────────────────────────
 
   function removeButton(name, onTap) {
-    var button = el('button', 'pill pill--quiet pill--small', 'Remove');
+    var button = el('button', 'pill pill--quiet', 'Remove');
     button.type = 'button';
     button.setAttribute('aria-label', 'Remove ' + name);
     button.addEventListener('click', onTap);
     return button;
   }
 
-  // Whether a removal not yet finished hides this agent or this device.
-  function hidden(kind, key) {
-    return removals.some(function (removal) { return removal.kind === kind && removal.key === key; });
-  }
-
-  function deviceRow(person, device) {
+  function deviceRow(device) {
     var row = el('li', 'device');
     var text = el('div', 'device__text');
     text.appendChild(el('p', 'device__label', device.label));
     // A time Nexus has not got yet (null) is left out rather than drawn as a broken date.
-    if (typeof device.createdAt === 'number') text.appendChild(el('p', 'device__when', 'Added ' + when(device.createdAt)));
-    text.appendChild(el('p', 'device__when', 'Last used ' + (typeof device.lastUsedAt === 'number' ? when(device.lastUsedAt) : NEVER)));
+    if (typeof device.createdAt === 'number') text.appendChild(el('p', 'device__when', 'added ' + day(device.createdAt)));
+    text.appendChild(el('p', 'device__when', 'last used ' + (typeof device.lastUsedAt === 'number' ? when(device.lastUsedAt) : NEVER)));
     row.appendChild(text);
     row.appendChild(removeButton(device.label, function () { removeDevice(device); }));
     return row;
   }
 
-  function personRow(person) {
-    var row = el('li', 'person');
-    var head = el('div', 'person__head');
-    head.appendChild(el('span', 'person__name', person.name));
-    head.appendChild(el('span', 'tag', person.owner ? 'owner' : person.kind));
-    if (!person.owner && person.kind === AGENT) head.appendChild(removeButton(person.name, function () { removeAgent(person); }));
-    row.appendChild(head);
-    var devices = (person.devices || []).filter(function (device) { return !hidden('device', device.id); });
+  // One card: the owner as "you" or the agent's name (on the list, an agent's name opens it), and its devices.
+  function personCard(person, opens) {
+    var card = el('li', 'person');
+    if (!person.owner && person.kind === AGENT && opens) {
+      var open = el('button', 'person__name person__open', person.name);
+      open.type = 'button';
+      open.addEventListener('click', function () { openView(AGENT_VIEW, person.name); });
+      card.appendChild(open);
+    } else {
+      card.appendChild(el('h2', 'person__name', person.owner ? OWNER_TITLE : person.name));
+    }
+    var devices = devicesOf(person);
     if (devices.length === 0) {
-      row.appendChild(el('p', 'card__quiet', 'No devices.'));
+      card.appendChild(el('p', 'card__quiet', NO_DEVICES));
     } else {
       var list = el('ul', 'devices');
-      devices.forEach(function (device) { list.appendChild(deviceRow(person, device)); });
-      row.appendChild(list);
+      devices.forEach(function (device) { list.appendChild(deviceRow(device)); });
+      card.appendChild(list);
     }
-    return row;
-  }
-
-  // The owner first, then the rest as Nexus listed them.
-  function inOrder(list) {
-    return list.filter(function (person) { return person.owner; }).concat(list.filter(function (person) { return !person.owner; }));
+    return card;
   }
 
   function renderPeople() {
-    var shown = inOrder(identities).filter(function (person) { return !hidden('agent', person.name); });
+    var shown = visiblePeople();
     people.textContent = '';
-    shown.forEach(function (person) { people.appendChild(personRow(person)); });
+    shown.forEach(function (person) { people.appendChild(personCard(person, true)); });
     nobody.hidden = shown.length > 0;
+    // Board 26a: only the owner is here.
+    onlyYou.hidden = shown.length === 0 || shown.some(function (person) { return !person.owner; });
+    viewConnected.className = onlyYou.hidden ? 'view view--list' : 'view view--list view--only-you';
+  }
+
+  // Board 29: one agent. If it is gone (removed, or Nexus no longer lists it) the page is back on the list.
+  function renderAgent() {
+    agentCard.textContent = '';
+    var person = view === AGENT_VIEW ? personNamed(openAgent) : null;
+    if (view === AGENT_VIEW && person === null) {
+      openView(CONNECTED);
+      return;
+    }
+    if (person !== null) agentCard.appendChild(personCard(person, false));
+  }
+
+  // Whether the agent just added has a device that works: the page then says it has joined, in place of what was said about allowing it.
+  function renderJoined() {
+    if (added === null || joined) return;
+    var person = personNamed(added.name);
+    if (person && devicesOf(person).length > 0) {
+      joined = true;
+      notice = null;
+    }
+  }
+
+  function renderAdd() {
+    var form = added === null;
+    addCard.hidden = !form;
+    command.hidden = form || joined;
+    joinedCard.hidden = form || !joined;
+    if (!form) {
+      joinedTitle.textContent = added.name + ' joined';
+      joinedWords.textContent = 'Open Obsidian on your Mac to give ' + added.name + ' the key.';
+      waitingFor.textContent = 'waiting for ' + added.name;
+    }
+    renderName();
+  }
+
+  // The name field: Add is dim until the name is good and nothing is out, and a refused name turns the field and the line under it red.
+  function renderName() {
+    addGo.disabled = adding || takenWords !== null || !NAME_OK.test(nameField.value);
+    nameHint.textContent = takenWords !== null ? takenWords : NAME_HINT;
+    nameHint.className = takenWords !== null ? 'card__quiet card__quiet--taken' : 'card__quiet';
+    if (takenWords !== null) nameField.setAttribute('aria-invalid', 'true');
+    else nameField.removeAttribute('aria-invalid');
   }
 
   function renderUndo() {
@@ -251,7 +447,7 @@
     waitingOnUndo.forEach(function (removal) {
       var item = el('li', 'undo__item');
       item.appendChild(el('p', 'undo__words', removal.words));
-      var undo = el('button', 'pill pill--quiet pill--small', 'Undo');
+      var undo = el('button', 'undo__button', 'Undo');
       undo.type = 'button';
       undo.setAttribute('aria-label', 'Undo ' + removal.words);
       undo.addEventListener('click', function () { undoRemoval(removal); });
@@ -261,9 +457,17 @@
     undoList.hidden = waitingOnUndo.length === 0;
   }
 
-  function render() {
+  // Everything that depends on what Nexus last said or on the view that is open.
+  function renderAll() {
     renderPeople();
+    renderAgent();
+    renderJoined();
+    renderViews();
+    renderAdd();
     renderUndo();
+    renderWaiting();
+    renderBar();
+    renderLine();
   }
 
   // Asks who is connected. Hands back the answer, so the first ask can decide what the page shows.
@@ -272,7 +476,7 @@
     return call('GET', 'identities').then(function (reply) {
       if (mine === session && reply && reply.ok && reply.body && Array.isArray(reply.body.identities)) {
         identities = reply.body.identities;
-        render();
+        renderAll();
       }
       return reply;
     });
@@ -284,22 +488,23 @@
     say(alertBox, '');
     removals.push(removal);
     removal.timer = setTimeout(function () { sendRemoval(removal); }, UNDO_MS);
-    render();
+    renderAll();
   }
 
+  // Removing an agent from its own view puts the page back on the list, with the Undo bar above the tabs (board 29a).
   function removeAgent(person) {
-    startRemoval({ kind: 'agent', key: person.name, words: person.name + ' removed.', route: 'identity/remove', body: { name: person.name }, sent: false, timer: null });
+    startRemoval({ kind: 'agent', key: person.name, words: person.name + ' removed, its devices stopped', route: 'identity/remove', body: { name: person.name }, sent: false, timer: null });
   }
 
   function removeDevice(device) {
-    startRemoval({ kind: 'device', key: device.id, words: device.label + ' removed.', route: 'token/revoke', body: { id: device.id }, sent: false, timer: null });
+    startRemoval({ kind: 'device', key: device.id, words: device.label + ' removed', route: 'token/revoke', body: { id: device.id }, sent: false, timer: null });
   }
 
   // Undo: the row comes back, and nothing was ever sent.
   function undoRemoval(removal) {
     clearTimeout(removal.timer);
     removals = removals.filter(function (other) { return other !== removal; });
-    render();
+    renderAll();
   }
 
   // The wait is over: now, and only now, Nexus is told. The row stays off the page until Nexus has answered.
@@ -316,11 +521,11 @@
             person.devices = (person.devices || []).filter(function (device) { return device.id !== removal.key; });
           });
         }
-        render();
+        renderAll();
         loadIdentities();
         return;
       }
-      render();
+      renderAll();
       if (reply && notSignedIn(reply)) {
         askAgain(reply);
         return;
@@ -333,10 +538,24 @@
 
   // ── devices waiting ────────────────────────────────────────────────────────
 
+  // The strips show above the list, and above the agent just added while it waits to join (its own sign-in arrives here).
+  function stripsShown() {
+    return waiting.length > 0 && (view === CONNECTED || (view === ADD && added !== null && !joined));
+  }
+
+  // The name of the owner, as Nexus lists it ("" until it has).
+  function ownerName() {
+    var found = identities.filter(function (person) { return person.owner; })[0];
+    return found ? found.name : '';
+  }
+
   function stripFor(entry) {
     var item = el('li', 'strip');
-    item.appendChild(el('p', 'strip__words', entry.label + ' wants to sign in as ' + entry.identity + '.'));
-    item.appendChild(el('p', 'strip__code', entry.shown));
+    var text = el('div', 'strip__text');
+    // "iPhone wants in" for the owner's own device; a device asking to be anyone else says who.
+    text.appendChild(el('p', 'strip__words', entry.label + ' wants in' + (entry.identity === ownerName() ? '' : ' as ' + entry.identity)));
+    text.appendChild(el('p', 'strip__code', entry.shown));
+    item.appendChild(text);
     var actions = el('div', 'actions');
     var allow = el('button', 'pill pill--main', 'Allow');
     var deny = el('button', 'pill pill--quiet', 'Deny');
@@ -355,11 +574,12 @@
   function renderWaiting() {
     var drawn = waiting.map(function (entry) { return entry.code; }).join('|');
     // Drawn again only when the list changed, so a button is not rebuilt under a finger.
-    if (drawn === waitingDrawn) return;
-    waitingDrawn = drawn;
-    waitingList.textContent = '';
-    waiting.forEach(function (entry) { waitingList.appendChild(stripFor(entry)); });
-    waitingList.hidden = waiting.length === 0;
+    if (drawn !== waitingDrawn) {
+      waitingDrawn = drawn;
+      waitingList.textContent = '';
+      waiting.forEach(function (entry) { waitingList.appendChild(stripFor(entry)); });
+    }
+    waitingList.hidden = !stripsShown();
   }
 
   // What Nexus says about one waiting code, or null when it is gone by now. Asked once per code.
@@ -393,6 +613,7 @@
         if (mine !== session) return;
         waiting = entries.filter(function (entry) { return entry !== null; });
         renderWaiting();
+        renderLine();
       });
     });
   }
@@ -405,8 +626,9 @@
     call('POST', 'device/' + route, { code: entry.code }).then(function (reply) {
       if (reply && reply.ok) {
         waiting = waiting.filter(function (other) { return other !== entry; });
+        notice = route === 'approve' ? entry.label + ' can use Nexus now.' : entry.label + ' was not given a token.';
         renderWaiting();
-        line.textContent = route === 'approve' ? entry.label + ' can use Nexus now.' : entry.label + ' was not given a token.';
+        renderLine();
         if (route === 'approve') loadIdentities();
         return;
       }
@@ -417,6 +639,7 @@
       if (reply && (reply.status === 404 || reply.status === 410)) {
         waiting = waiting.filter(function (other) { return other !== entry; });
         renderWaiting();
+        renderLine();
       } else {
         allow.disabled = false;
         deny.disabled = false;
@@ -425,41 +648,75 @@
     });
   }
 
+  // Every few seconds: the devices waiting, and, while an agent that was just added has not joined, who is connected.
+  function askAgainNow() {
+    loadWaiting();
+    if (view === ADD && added !== null && !joined) loadIdentities();
+  }
+
   function stopPolling() {
     if (polling !== null) clearInterval(polling);
     polling = null;
   }
 
   function startPolling() {
-    if (polling === null) polling = setInterval(loadWaiting, WAITING_EVERY_MS);
+    if (polling === null) polling = setInterval(askAgainNow, ASK_AGAIN_MS);
   }
 
   // ── adding an agent ────────────────────────────────────────────────────────
 
-  // The one command to run on the agent: it signs the agent in as its identity, and the sign-in then waits above for Allow. The address is
-  // the one this page was opened at.
-  function commandFor(name) {
-    return ADDRESS_VARIABLE + '=' + window.location.origin + '/nexus/api ' + SIGN_IN_COMMAND + ' --identity ' + name + ' --label ' + name;
+  // The form as it first opens: empty, with Add dim and no fault.
+  function openAddForm() {
+    nameField.value = '';
+    takenWords = null;
+    say(addAlert, '');
+    added = null;
+    joined = false;
+    openView(ADD);
   }
+
+  // The drawn words (board 27a) for a name that is already an agent; for any other name Nexus refuses, Nexus's own.
+  function takenIn(typed, reply) {
+    var isAgent = identities.some(function (person) { return person.name === typed && person.kind === AGENT; });
+    return isAgent ? "There's already an agent called " + typed + '.' : wordsOf(reply);
+  }
+
+  // Letters that are not allowed are not let in, and typing anything clears a refused name at once.
+  nameField.addEventListener('input', function () {
+    var cleaned = nameField.value.replace(NAME_BLOCKED, '');
+    if (cleaned !== nameField.value) nameField.value = cleaned;
+    takenWords = null;
+    say(addAlert, '');
+    renderName();
+  });
 
   addForm.addEventListener('submit', function (event) {
     event.preventDefault();
     var typed = nameField.value.trim();
-    addGo.disabled = true;
+    if (adding || takenWords !== null || !NAME_OK.test(typed)) return;
+    adding = true;
     say(addAlert, '');
+    renderName();
     call('POST', 'identity', { name: typed, kind: AGENT }).then(function (reply) {
-      addGo.disabled = false;
+      adding = false;
       if (reply && reply.ok && reply.body && typeof reply.body.name === 'string') {
         nameField.value = '';
-        commandText.textContent = commandFor(reply.body.name);
+        added = { name: reply.body.name };
+        joined = false;
+        commandText.textContent = JOIN_COMMAND + ' ' + reply.body.name;
         copyButton.textContent = 'Copy';
-        command.hidden = false;
-        line.textContent = reply.body.name + ' added.';
+        notice = null;
+        renderAll();
         loadIdentities();
         return;
       }
-      if (reply && notSignedIn(reply)) askAgain(reply);
+      if (reply && notSignedIn(reply)) {
+        askAgain(reply);
+        return;
+      }
+      if (reply && reply.status === 409) takenWords = takenIn(typed, reply);
       else say(addAlert, wordsOf(reply));
+      renderName();
     });
   });
 
@@ -476,12 +733,33 @@
     }, function () { say(addAlert, NOT_COPIED); });
   });
 
+  // ── the bar, the tabs and Settings ─────────────────────────────────────────
+
+  backButton.addEventListener('click', function () { openView(CONNECTED); });
+  addOpen.addEventListener('click', openAddForm);
+  addFirst.addEventListener('click', openAddForm);
+  tabConnected.addEventListener('click', function () { openView(CONNECTED); });
+  tabSettings.addEventListener('click', function () { openView(SETTINGS); });
+  // The agent is taken off the page at once, so the agent view finds it gone and the page is back on the list with the Undo bar.
+  removeAgentButton.addEventListener('click', function () {
+    var person = personNamed(openAgent);
+    if (person !== null) removeAgent(person);
+  });
+
+  // Sign out lets go of the owner secret this page holds and asks for it again. A browser that holds the owner's cookie is known again
+  // the next time the page is opened: Nexus has no route that takes the cookie away.
+  signOutButton.addEventListener('click', function () {
+    ownerSecret = null;
+    showOwner(null);
+  });
+
   // ── start ──────────────────────────────────────────────────────────────────
 
   // Asks who is connected, and shows the page for the owner, the field for the owner secret when Nexus does not know who is asking, or
   // Nexus's own words.
   function load() {
-    line.textContent = CHECKING;
+    notice = CHECKING;
+    renderLine();
     loadIdentities().then(function (reply) {
       if (reply && reply.ok && reply.body && Array.isArray(reply.body.identities)) {
         showSignedIn();
@@ -493,7 +771,8 @@
         askAgain(reply);
         return;
       }
-      line.textContent = wordsOf(reply);
+      notice = wordsOf(reply);
+      renderLine();
     });
   }
 
