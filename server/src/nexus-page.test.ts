@@ -11,7 +11,7 @@ import { parseRules } from "./__fixtures__/css-rules";
 import { ORIGIN, bodyOf, setUpNexus, signInOwner, signInStranger } from "./__fixtures__/nexus-world";
 import { device, manage, sendAs, type Who } from "./__fixtures__/identity-world";
 import { PENDING } from "./__fixtures__/approve-answers";
-import { FakeNexus, NEXUS_PAGE, WORKED } from "./__fixtures__/nexus-page-answers";
+import { FAKE_OWNER_SECRET, FakeNexus, NEXUS_PAGE, WORKED } from "./__fixtures__/nexus-page-answers";
 import { openNexusPage } from "./__fixtures__/nexus-page-world";
 
 let owner: Who;
@@ -116,8 +116,9 @@ describe("the Nexus page is served at /nexus/", () => {
     expect(sheet.match(/var\(\s*--[a-z0-9-]+/gi)?.length ?? 0, "it reads the variables").toBeGreaterThan(0);
     expect(sheet, "a dark set").not.toMatch(/prefers-color-scheme/i);
     expect(html, "the page asks for the light scheme alone").toMatch(/<meta name="color-scheme" content="light"/);
-    // Every variable it reads is one the approval page's stylesheet declares (it is loaded first), so none is missing.
-    const declared = new Set((await fetchLinked("/nexus/approve.css")).match(/--[a-z0-9-]+(?=\s*:)/gi));
+    // Every variable it reads is one the approval page's stylesheet declares (it is loaded first) or its own token block does (the few values the
+    // boards need and the approval page has no token for), so none is missing.
+    const declared = new Set([...(await fetchLinked("/nexus/approve.css")).match(/--[a-z0-9-]+(?=\s*:)/gi)!, ...sheet.match(/--[a-z0-9-]+(?=\s*:)/gi)!]);
     const read = new Set([...sheet.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map((m) => m[1]));
     expect([...read].filter((name) => !declared.has(name!)), "variables read but declared nowhere").toEqual([]);
   });
@@ -136,23 +137,42 @@ describe("the Nexus page is served at /nexus/", () => {
 
 // ── what the page does ───────────────────────────────────────────────────────
 
-/** The days and times the worked example writes, in the form the page shows ("Sat 12 Sep · 12:00"), whatever the machine's time zone. */
-const WHEN = /^(?:Added|Last used) (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) · \d\d:\d\d$/;
+/** The days and times the worked example writes, in the form the page shows ("added Sat 12 Sep", "last used Sat 12 Sep · 12:00"), whatever the machine's time zone. */
+const DAY = "(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)";
+const ADDED = new RegExp(`^added ${DAY}$`);
+const LAST_USED = new RegExp(`^last used ${DAY} · \\d\\d:\\d\\d$`);
+
+/** Opens the add form, types a name as a person does, and sends it. */
+async function addAgent(page: Awaited<ReturnType<typeof openNexusPage>>, name: string) {
+  page.el["add-open"].click();
+  page.el["agent-name"].enter(name);
+  page.el["add-form"].submit();
+  await page.settled();
+}
+
+/** A waiting sign-in of the agent just added, as its `nexus-agent join` makes it. */
+const agentSignIn = (name: string) => ({ ...WORKED.waiting, label: `${name}-box`, identity: name, code: "AGNT-7XQ2", deviceKey: null, deviceCode: null });
 
 describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
-  it("lists the owner first, then each agent, each with its devices: label, added, last used", async () => {
-    const page = await openNexusPage(new FakeNexus({ knownOwner: true }));
+  it("lists the owner first, as you, then each agent, each with its devices: label, added, last used", async () => {
+    const page = await openNexusPage(new FakeNexus({ knownOwner: true, waiting: [] }));
 
     expect(page.el.owner.hidden, "no secret is asked for").toBe(true);
     expect(page.el["signed-in"].hidden).toBe(false);
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent]);
-    expect(page.el.people.textsOf("tag"), "what each one is").toEqual(["owner", "agent"]);
+    expect(page.el["slab-actions"].hidden, "the bar has its buttons").toBe(false);
+    expect(page.el.title.textContent).toBe("connected");
+    expect(page.el.line.textContent).toBe("Everything that can read your notes.");
+    expect(page.el.people.textsOf("person__name")).toEqual(["you", WORKED.agent]);
+    expect(page.el.people.textsOf("person__open"), "an agent's name opens it; the owner's does not").toEqual([WORKED.agent]);
     expect(page.el.people.textsOf("device__label")).toEqual([WORKED.ownerDevice.label, WORKED.agentDevice.label]);
     const whens = page.el.people.textsOf("device__when");
     expect(whens).toHaveLength(4);
-    for (const text of whens.filter((w) => !w.endsWith("never"))) expect(text, "the time in the Sat 12 Sep · 12:00 form").toMatch(WHEN);
-    expect(whens[3], "the agent's device has not been used").toBe("Last used never");
+    expect(whens[0], "when the owner's device was added").toMatch(ADDED);
+    expect(whens[1], "and last used").toMatch(LAST_USED);
+    expect(whens[2]).toMatch(ADDED);
+    expect(whens[3], "the agent's device has not been used").toBe("last used never");
     expect(page.el.nobody.hidden).toBe(true);
+    expect(page.el["only-you"].hidden, "an agent is connected").toBe(true);
   });
 
   it("puts the owner first even when Nexus lists it later, and shows an owner with no devices as having none", async () => {
@@ -160,7 +180,7 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     fake.identities.reverse();
     fake.identities[0]!.devices = [];
     const page = await openNexusPage(fake);
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent]);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you", WORKED.agent]);
     expect(page.el.people.textsOf("card__quiet"), "the agent with no devices says so").toEqual(["No devices."]);
   });
 
@@ -171,22 +191,41 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     fake.identities[1]!.devices[0]!.createdAt = null;
     const page = await openNexusPage(fake);
 
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent]);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you", WORKED.agent]);
     expect(page.el.people.textsOf("card__quiet"), "the owner has no devices yet").toEqual(["No devices."]);
-    expect(page.el.people.textsOf("device__when"), "a device with no added time shows only when it was last used").toEqual(["Last used never"]);
+    expect(page.el.people.textsOf("device__when"), "a device with no added time shows only when it was last used").toEqual(["last used never"]);
     expect(page.el.people.all().map((e) => e.textContent).join(" "), "no 1970, no NaN, no Invalid Date").not.toMatch(/1970|NaN|Invalid/);
   });
 
-  it("shows a device waiting as a strip with its name, who it asks to be and the code it shows, and Allow and Deny are one tap each", async () => {
+  it("shows only the owner's card, one line and Add an agent when no agent is connected (board 26a), and Add an agent opens the add form", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [] });
+    fake.identities = fake.identities.slice(0, 1);
+    const page = await openNexusPage(fake);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you"]);
+    expect(page.el["only-you"].hidden).toBe(false);
+    expect(page.el["view-connected"].className, "the room under the cards is the line's").toContain("view--only-you");
+    page.el["add-first"].click();
+    expect(page.el["view-add"].hidden).toBe(false);
+    expect(page.el.title.textContent).toBe("add an agent");
+  });
+
+  it("shows a device waiting as a strip with its name and that it wants in, and the code it shows; Allow and Deny are one tap each; the list's line gives way to it", async () => {
     const fake = new FakeNexus({ knownOwner: true });
     const page = await openNexusPage(fake);
 
     expect(page.el.waiting.hidden).toBe(false);
-    expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants to sign in as nial."]);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants in"]);
     expect(page.el.waiting.textsOf("strip__code"), "the code on the device's own screen, to compare").toEqual([PENDING.deviceCode]);
     expect(page.el.waiting.button("Allow iPhone").disabled).toBe(false);
     expect(page.el.waiting.button("Deny iPhone").disabled).toBe(false);
+    expect(page.el.line.hidden, "the line under the bar is not drawn while a device waits").toBe(true);
     expect(fake.calls.filter((c) => c.method === "POST"), "nothing is answered until the owner taps").toEqual([]);
+  });
+
+  it("says whose a waiting device would be when it is not the owner's: the drawn words are for the owner's own device", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [{ ...WORKED.waiting }, agentSignIn(WORKED.agent)] });
+    const page = await openNexusPage(fake);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants in", "scribe-box wants in as scribe"]);
   });
 
   it("shows the sign-in code for a device that sent no key, which is the one code on its screen", async () => {
@@ -208,7 +247,8 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(page.el.waiting.children).toEqual([]);
     expect(page.el.waiting.hidden).toBe(true);
     expect(page.el.line.textContent).toBe("iPhone can use Nexus now.");
-    expect(page.el.people.textsOf("device__label"), "iPhone is under nial now").toEqual([WORKED.ownerDevice.label, "iPhone", WORKED.agentDevice.label]);
+    expect(page.el.line.hidden).toBe(false);
+    expect(page.el.people.textsOf("device__label"), "iPhone is under the owner now").toEqual([WORKED.ownerDevice.label, "iPhone", WORKED.agentDevice.label]);
   });
 
   it("Deny sends the code to device/deny and the device is not listed", async () => {
@@ -227,88 +267,184 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     const fake = new FakeNexus({ knownOwner: true, waiting: [] });
     const page = await openNexusPage(fake);
     expect(page.el.waiting.hidden, "none waiting").toBe(true);
+    expect(page.el.line.textContent, "the list's line is back").toBe("Everything that can read your notes.");
 
     fake.waiting.push({ ...WORKED.waiting, label: "Pixel", code: "PXL7-7LXP", expiresAt: PENDING.expiresAt });
     await page.advance(10_000);
-    expect(page.el.waiting.textsOf("strip__words")).toEqual(["Pixel wants to sign in as nial."]);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["Pixel wants in"]);
   });
 
-  it("adds an agent: sends the name as an agent, lists it with no devices, and shows the one command to run on it, with Copy", async () => {
+  it("opens the views from the bar and the tabs, with the title, the back chevron and the buttons each one has", async () => {
+    const page = await openNexusPage(new FakeNexus({ knownOwner: true, waiting: [] }));
+    const shown = () => ({
+      title: page.el.title.textContent, back: !page.el.back.hidden, add: !page.el["add-open"].hidden, ask: !page.el.ask.hidden, apps: !page.el.apps.hidden,
+      views: (["view-connected", "view-add", "view-agent", "view-settings"] as const).filter((id) => !page.el[id].hidden),
+      open: [page.el["tab-connected"], page.el["tab-settings"]].map((tab) => tab.className.includes("tab--open")),
+    });
+
+    expect(shown()).toEqual({ title: "connected", back: false, add: true, ask: true, apps: false, views: ["view-connected"], open: [true, false] });
+    page.el["add-open"].click();
+    expect(shown(), "add an agent: a chevron, no Add on the bar, the sparkle").toEqual({ title: "add an agent", back: true, add: false, ask: true, apps: false, views: ["view-add"], open: [true, false] });
+    page.el.back.click();
+    expect(shown().title).toBe("connected");
+    page.el.people.button(WORKED.agent).click();
+    expect(shown(), "an agent: titled by its name").toEqual({ title: WORKED.agent, back: true, add: false, ask: true, apps: false, views: ["view-agent"], open: [true, false] });
+    expect(page.el.line.textContent, "when it joined, and that it reads every note").toMatch(new RegExp(`^Joined ${DAY}\\. It reads every note\\.$`));
+    expect(page.el["agent-card"].textsOf("person__name")).toEqual([WORKED.agent]);
+    expect(page.el["agent-card"].textsOf("device__label")).toEqual([WORKED.agentDevice.label]);
+    page.el.back.click();
+    page.el["tab-settings"].click();
+    expect(shown(), "settings: Aus Apps in place of the sparkle, the settings tab open").toEqual({ title: "settings", back: false, add: false, ask: false, apps: true, views: ["view-settings"], open: [false, true] });
+    expect(page.el["tab-settings"].attributes["aria-current"]).toBe("page");
+    expect(page.el["tab-connected"].attributes["aria-current"]).toBeUndefined();
+    page.el["tab-connected"].click();
+    expect(shown().views).toEqual(["view-connected"]);
+  });
+
+  it("keeps Add dim until the name is good, and lets in only lower case letters, digits and hyphens", async () => {
+    const page = await openNexusPage(new FakeNexus({ knownOwner: true }));
+    page.el["add-open"].click();
+    expect(page.el["add-go"].disabled, "no name yet").toBe(true);
+    page.el["agent-name"].enter("Sc ri_b.E!");
+    expect(page.el["agent-name"].value, "the others are not let in").toBe("crib");
+    expect(page.el["add-go"].disabled).toBe(false);
+    page.el["agent-name"].enter("-x");
+    expect(page.el["add-go"].disabled, "a hyphen cannot begin a name").toBe(true);
+    page.el["agent-name"].enter("x".repeat(41));
+    expect(page.el["add-go"].disabled, "and a name is at most 40 long").toBe(true);
+    page.el["agent-name"].enter("x".repeat(40));
+    expect(page.el["add-go"].disabled).toBe(false);
+    expect(page.el["agent-hint"].textContent, "nothing explains it beyond the one line").toBe("Lower case letters, digits and hyphens.");
+  });
+
+  it("adds an agent: sends the name as an agent, lists it with no devices, and shows the one command to run on it, with Copy, and that it is waiting", async () => {
     const fake = new FakeNexus({ knownOwner: true });
     const page = await openNexusPage(fake);
     expect(page.el.command.hidden, "no command before an agent is added").toBe(true);
-    page.el["agent-name"].value = `  ${WORKED.newAgent} `;
-    page.el["add-form"].submit();
-    await page.settled();
+    await addAgent(page, WORKED.newAgent);
 
     expect(fake.callsTo("identity", "POST").map((c) => c.body)).toEqual([{ name: WORKED.newAgent, kind: "agent" }]);
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent, WORKED.newAgent]);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you", WORKED.agent, WORKED.newAgent]);
     const added = page.el.people.children[2]!;
     expect(added.textsOf("card__quiet"), "lab-m has no devices").toEqual(["No devices."]);
     expect(added.textsOf("device__label")).toEqual([]);
     expect(page.el["agent-name"].value, "the box is empty for the next one").toBe("");
     expect(page.el["add-alert"].hidden).toBe(true);
+    expect(page.el["add-card"].hidden, "the form gives way to the command").toBe(true);
     expect(page.el.command.hidden).toBe(false);
-    // The command the agent runs is the one nexus-agent takes (packages/agent/src/cli/main.ts: sign-in --identity <name> --label <label>,
-    // reading NEXUS_ADDRESS from labels.ts), with the address this page was opened at.
-    expect(page.el["command-text"].textContent).toBe(`NEXUS_ADDRESS=${ORIGIN}/nexus/api nexus-agent sign-in --identity lab-m --label lab-m`);
+    expect(page.el.joined.hidden).toBe(true);
+    expect(page.el.line.textContent).toBe("lab-m is added. Run this on the agent.");
+    // The command the agent runs: `nexus-agent join <name>`. It carries no address and no code (the agent finds Nexus itself).
+    expect(page.el["command-text"].textContent).toBe("nexus-agent join lab-m");
+    expect(page.el["waiting-for"].textContent).toBe("waiting for lab-m");
+    expect(page.el.copy.textContent).toBe("Copy");
+  });
+
+  it("shows that the agent has joined once it has a working device, with where the key is given and nothing to type or tap there; going back forgets it", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [] });
+    const page = await openNexusPage(fake);
+    await addAgent(page, WORKED.newAgent);
+
+    // The agent runs the command, and its sign-in waits. It is shown above the command, with whose it would be.
+    fake.waiting.push(agentSignIn(WORKED.newAgent));
+    await page.advance(5000);
+    expect(page.el.waiting.hidden, "a strip on the add view while it waits").toBe(false);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["lab-m-box wants in as lab-m"]);
+    expect(page.el.command.hidden, "still waiting").toBe(false);
+    expect(page.el.joined.hidden).toBe(true);
+
+    page.el.waiting.button("Allow lab-m-box").click();
+    await page.settled();
+    expect(page.el.joined.hidden).toBe(false);
+    expect(page.el.command.hidden).toBe(true);
+    expect(page.el.waiting.hidden, "the strip is gone").toBe(true);
+    expect(page.el.line.textContent, "board 28a, not the line about allowing").toBe("lab-m has joined.");
+    expect(page.el["joined-title"].textContent).toBe("lab-m joined");
+    expect(page.el["joined-words"].textContent).toBe("Open Obsidian on your Mac to give lab-m the key.");
+
+    page.el.back.click();
+    expect(page.el.people.textsOf("device__label"), "lab-m now has its device").toEqual([WORKED.ownerDevice.label, WORKED.agentDevice.label, "lab-m-box"]);
+    page.el["add-open"].click();
+    expect(page.el["add-card"].hidden, "a new add starts from the form").toBe(false);
+    expect(page.el.joined.hidden).toBe(true);
+    expect(page.el.command.hidden).toBe(true);
+  });
+
+  it("does not ask who is connected again until an agent has been added, and asks again only while it has not joined", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [] });
+    const page = await openNexusPage(fake);
+    await page.advance(15_000);
+    expect(fake.callsTo("identities"), "on the list: once, at the start").toHaveLength(1);
+
+    await addAgent(page, WORKED.newAgent);
+    const afterAdd = fake.callsTo("identities").length;
+    await page.advance(10_000);
+    expect(fake.callsTo("identities").length, "while waiting for the agent: every few seconds").toBe(afterAdd + 2);
   });
 
   it("Copy hands the command to the clipboard and says so for a moment; and where the browser will not copy, says to select it", async () => {
     const page = await openNexusPage(new FakeNexus({ knownOwner: true }));
-    page.el["agent-name"].value = WORKED.newAgent;
-    page.el["add-form"].submit();
-    await page.settled();
+    await addAgent(page, WORKED.newAgent);
     page.el.copy.click();
     await page.settled();
-    expect(page.copied).toEqual([page.el["command-text"].textContent]);
+    expect(page.copied).toEqual(["nexus-agent join lab-m"]);
     expect(page.el.copy.textContent).toBe("Copied");
-    await page.advance(5000);
+    await page.advance(1900);
+    expect(page.el.copy.textContent, "Copied for two seconds").toBe("Copied");
+    await page.advance(200);
     expect(page.el.copy.textContent).toBe("Copy");
 
     const refused = await openNexusPage(new FakeNexus({ knownOwner: true }), { clipboard: "refuses" });
-    refused.el["agent-name"].value = WORKED.newAgent;
-    refused.el["add-form"].submit();
-    await refused.settled();
+    await addAgent(refused, WORKED.newAgent);
     refused.el.copy.click();
     await refused.settled();
     expect(refused.el["add-alert"].textContent).toBe("That did not copy. Select the command and copy it.");
     expect(refused.el.copy.textContent, "it did not say it copied").toBe("Copy");
   });
 
-  it("says the key is handed over in Obsidian on a device that holds it, never on this page, and the page has no place to type or show a key", async () => {
+  it("says the key is given in Obsidian and never comes to this page, and the page has no place to type or show a key", async () => {
     const page = await openNexusPage(new FakeNexus({ knownOwner: true }));
-    expect(page.html).toMatch(/The key is handed over in Obsidian, on a device that holds it, never on this page\./);
+    expect(page.html).toMatch(/The key never comes to this website\./);
+    expect(page.html, "no key, field or button on the card that says where it is given").not.toMatch(/id="joined"[^]*?<(?:input|textarea|button|select)\b[^]*?<\/section>/);
     const fields = page.html.match(/<(?:input|textarea|select)\b[^>]*>/gi) ?? [];
     expect(fields.map((f) => /\bid="([^"]+)"/.exec(f)?.[1]), "the owner secret and the agent's name are the only things typed here").toEqual(["secret", "agent-name"]);
+    expect(page.html.replace('type="password"', ""), "no row for a password or the Recovery Key: they need the key on the website").not.toMatch(/recovery key|password/i);
   });
 
-  it("removes an agent: the row goes at once with Undo and nothing is sent; Undo puts it back and still nothing is sent; removing it again sends identity/remove once the window has passed", async () => {
+  it("removes an agent from its own view: the page goes back to the list at once with Undo and nothing is sent; Undo puts it back and still nothing is sent; removing it again sends identity/remove once the window has passed", async () => {
     const fake = new FakeNexus({ knownOwner: true });
     const page = await openNexusPage(fake);
+    expect(page.el["view-agent"].hidden, "Remove agent is in an agent's own view").toBe(true);
 
-    page.el.people.button(`Remove ${WORKED.agent}`).click();
-    expect(page.el.people.textsOf("person__name"), "the row is gone at once").toEqual([WORKED.owner]);
+    page.el.people.button(WORKED.agent).click();
+    expect(page.el["view-agent"].hidden).toBe(false);
+    page.el["remove-agent"].click();
+    expect(page.el.title.textContent, "back on the list").toBe("connected");
+    expect(page.el["view-connected"].hidden).toBe(false);
+    expect(page.el.people.textsOf("person__name"), "the row is gone at once").toEqual(["you"]);
     expect(page.el.people.textsOf("device__label"), "and so are its devices").toEqual([WORKED.ownerDevice.label]);
     expect(page.el.undo.hidden).toBe(false);
-    expect(page.el.undo.textsOf("undo__words")).toEqual(["scribe removed."]);
+    expect(page.el.undo.textsOf("undo__words")).toEqual(["scribe removed, its devices stopped"]);
     await page.advance(A_MOMENT);
     expect(fake.callsTo("identity/remove"), "inside the window, nothing is sent").toEqual([]);
 
-    page.el.undo.button(`Undo ${WORKED.agent} removed.`).click();
-    expect(page.el.people.textsOf("person__name"), "Undo puts it back").toEqual([WORKED.owner, WORKED.agent]);
+    page.el.undo.button("Undo scribe removed, its devices stopped").click();
+    expect(page.el.people.textsOf("person__name"), "Undo puts it back").toEqual(["you", WORKED.agent]);
     expect(page.el.people.textsOf("device__label")).toEqual([WORKED.ownerDevice.label, WORKED.agentDevice.label]);
     expect(page.el.undo.hidden).toBe(true);
     await page.advance(LONG_WAIT);
     expect(fake.callsTo("identity/remove"), "Undo really cancelled it: no call, however long it waits").toEqual([]);
     expect(fake.identities.map((i) => i.name), "Nexus still has it").toEqual([WORKED.owner, WORKED.agent]);
 
-    page.el.people.button(`Remove ${WORKED.agent}`).click();
+    page.el.people.button(WORKED.agent).click();
+    page.el["remove-agent"].click();
     await page.advance(A_MOMENT);
     expect(fake.callsTo("identity/remove")).toEqual([]);
+    await page.advance(7_500);
+    expect(page.el.undo.hidden, "the bar leaves after eight seconds").toBe(true);
     await page.advance(LONG_WAIT);
     expect(fake.callsTo("identity/remove", "POST").map((c) => c.body), "sent once, when the window had passed").toEqual([{ name: WORKED.agent }]);
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner]);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you"]);
     expect(page.el.undo.hidden, "nothing left to undo").toBe(true);
     expect(fake.identities.map((i) => i.name)).toEqual([WORKED.owner]);
   });
@@ -318,9 +454,10 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     const page = await openNexusPage(fake);
 
     page.el.people.button(`Remove ${WORKED.agentDevice.label}`).click();
-    expect(page.el.people.textsOf("person__name"), "the agent stays").toEqual([WORKED.owner, WORKED.agent]);
+    expect(page.el.people.textsOf("person__name"), "the agent stays").toEqual(["you", WORKED.agent]);
     expect(page.el.people.textsOf("device__label")).toEqual([WORKED.ownerDevice.label]);
-    page.el.undo.button(`Undo ${WORKED.agentDevice.label} removed.`).click();
+    expect(page.el.undo.textsOf("undo__words")).toEqual(["scribe-box removed"]);
+    page.el.undo.button(`Undo ${WORKED.agentDevice.label} removed`).click();
     await page.advance(LONG_WAIT);
     expect(fake.callsTo("token/revoke"), "undone, so never sent").toEqual([]);
 
@@ -331,10 +468,38 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(page.el.people.textsOf("card__quiet"), "the agent now has no devices").toEqual(["No devices."]);
   });
 
-  it("offers Remove on an agent and on a device, and not on the owner", async () => {
+  it("offers Remove on a device, and nowhere on the list for a person: an agent is removed in its own view, and the owner never is", async () => {
     const page = await openNexusPage(new FakeNexus({ knownOwner: true }));
-    const labels = page.el.people.all().filter((e) => e.tag === "button").map((e) => e.attributes["aria-label"]);
-    expect(labels).toEqual([`Remove ${WORKED.ownerDevice.label}`, `Remove ${WORKED.agent}`, `Remove ${WORKED.agentDevice.label}`]);
+    const labels = page.el.people.all().filter((e) => e.tag === "button" && e.attributes["aria-label"] !== undefined).map((e) => e.attributes["aria-label"]);
+    expect(labels).toEqual([`Remove ${WORKED.ownerDevice.label}`, `Remove ${WORKED.agentDevice.label}`]);
+    page.el.people.button(WORKED.agent).click();
+    expect(page.el["agent-card"].all().filter((e) => e.tag === "button").map((e) => e.attributes["aria-label"]), "in its view: its device").toEqual([`Remove ${WORKED.agentDevice.label}`]);
+  });
+
+  it("Sign out lets go of the owner secret and asks for it again, taking everything of Nexus's off the page and stopping the asking", async () => {
+    const fake = new FakeNexus();
+    const page = await openNexusPage(fake);
+    await page.signInWith(FAKE_OWNER_SECRET);
+    page.el["tab-settings"].click();
+    expect(page.el["view-settings"].hidden).toBe(false);
+    page.el["sign-out"].click();
+    await page.settled();
+
+    expect(page.el.owner.hidden, "asked for the secret again").toBe(false);
+    expect(page.el["signed-in"].hidden).toBe(true);
+    expect(page.el["slab-actions"].hidden).toBe(true);
+    expect(page.el.line.textContent).toBe("Only the owner can see this.");
+    expect(page.el.title.textContent).toBe("connected");
+    expect(page.el.people.children).toEqual([]);
+    expect(page.el.waiting.children).toEqual([]);
+    const calls = fake.calls.length;
+    await page.advance(30_000);
+    expect(fake.calls.length, "nothing more is asked of Nexus").toBe(calls);
+
+    await page.signInWith(FAKE_OWNER_SECRET);
+    expect(page.el["signed-in"].hidden, "the owner can sign in again").toBe(false);
+    expect(page.el["view-connected"].hidden, "on the list, not on Settings").toBe(false);
+    expect(page.el.people.textsOf("person__name")).toEqual(["you", WORKED.agent]);
   });
 
   it("puts what Nexus sent on the page as text: a label that is markup stays text", async () => {
@@ -342,7 +507,7 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     const fake = new FakeNexus({ knownOwner: true, waiting: [{ ...WORKED.waiting, label: markup }] });
     fake.identities[0]!.devices[0]!.label = markup;
     const page = await openNexusPage(fake);
-    expect(page.el.waiting.textsOf("strip__words")).toEqual([`${markup} wants to sign in as nial.`]);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual([`${markup} wants in`]);
     expect(page.el.people.textsOf("device__label")[0]).toBe(markup);
   });
 });

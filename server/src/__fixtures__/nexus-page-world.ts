@@ -47,6 +47,11 @@ export class Element {
   click(): void {
     if (!this.disabled) for (const listener of this.listeners.click ?? []) listener({ preventDefault: () => {} });
   }
+  /** Typing into a field: it holds what was typed, and the page hears it as a browser's `input` event (and may take letters back out). */
+  enter(text: string): void {
+    this.value = text;
+    for (const listener of this.listeners.input ?? []) listener({ preventDefault: () => {} });
+  }
   /** A form sent, by its button or by Enter in its field. */
   submit(): void {
     for (const listener of this.listeners.submit ?? []) listener({ preventDefault: () => {} });
@@ -79,8 +84,10 @@ export class Element {
 
 /** Every part of the page the script reads. */
 export const IDS = [
-  "title", "line", "alert", "owner", "owner-form", "secret", "owner-alert", "owner-go", "signed-in", "waiting", "people", "nobody",
-  "add-form", "agent-name", "add-go", "add-alert", "command", "command-text", "copy", "undo",
+  "title", "where", "back", "slab-actions", "add-open", "apps", "ask", "line", "alert", "owner", "owner-form", "secret", "owner-alert", "owner-go",
+  "signed-in", "waiting", "view-connected", "people", "nobody", "only-you", "add-first",
+  "view-add", "add-card", "add-form", "agent-name", "agent-hint", "add-go", "add-alert", "command", "command-text", "copy", "waiting-for", "joined", "joined-title", "joined-words",
+  "view-agent", "agent-card", "remove-agent", "view-settings", "sign-out", "undo", "tab-connected", "tab-settings",
 ] as const;
 export type Id = (typeof IDS)[number];
 
