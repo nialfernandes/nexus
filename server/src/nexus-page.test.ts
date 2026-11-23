@@ -408,6 +408,28 @@ describe("the fake of Nexus answers as the real routes do, wherever a real route
     expect(real404.body).toEqual(fake404.json);
   });
 
+  it("for who is connected and removing an agent: the real list, the real removal, and the real words for a name that is not there", async () => {
+    const fake = new FakeNexus({ knownOwner: true });
+    bodyOf(await manage(owner).createIdentity("lab-listed", "agent"));
+    const started = bodyOf(await device().start("lab-listed", "lab-listed-box"));
+    bodyOf(await device(owner).approve(started.code));
+
+    const real = bodyOf(await manage(owner).identities()).identities as Array<{ name: string; owner: boolean; devices: unknown[] }>;
+    const fakeList = (fake.answer("GET", "identities", null, null).json as { identities: Array<Record<string, unknown>> }).identities;
+    expect(real[0]!.owner, "the real list has the owner first").toBe(true);
+    const listed = real.find((who) => who.name === "lab-listed")!;
+    expectSameShape(listed, fakeList[1], "an identity");
+    expectSameShape(listed.devices[0], (fakeList[1]!.devices as unknown[])[0], "a device");
+
+    const removed = bodyOf(await manage(owner).removeIdentity("lab-listed"));
+    expectSameShape(removed, fake.answer("POST", "identity/remove", { name: WORKED.agent }, null).json, "removed");
+    expect(removed.result).toBe("removed");
+    const real404 = await manage(owner).removeIdentity("lab-listed");
+    const fake404 = fake.answer("POST", "identity/remove", { name: "nobody-here" }, null);
+    expect(real404.status).toBe(fake404.status);
+    expect(real404.body, "no such identity, in the real words").toEqual(fake404.json);
+  });
+
   it("for a sign-in nobody is signed in for: the real words of a 401", async () => {
     const real = await device(null).waiting();
     const fake = new FakeNexus().answer("GET", "device/waiting", null, null);

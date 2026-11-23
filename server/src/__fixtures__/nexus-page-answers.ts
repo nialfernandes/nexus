@@ -2,12 +2,11 @@
 // built against. The page's two tests (nexus-page.test.ts, run against a stand-in for the page; e2e/nexus.spec.ts, in a real browser)
 // both ask this one fake, so what they check the page against is written once.
 //
-// WHAT IS REAL AND WHAT IS NOT. The routes of the device approval and `identity` and `token/revoke` exist in routes.ts, and
-// nexus-page.test.ts holds this fake's answers to those routes' own (same keys, same kinds of value, same words). `GET identities` and
-// `POST identity/remove` are being added to routes.ts by another slice: their answers here are the brief's own,
+// WHAT IS REAL. Every route the fake answers exists in routes.ts, and nexus-page.test.ts holds this fake's answers to the real routes' own
+// (same keys, same kinds of value, same words for a refusal):
 //   GET  identities        200 { identities: [ { name, kind, owner, createdAt, devices: [ { id, label, createdAt, lastUsedAt } ] } ] }
 //   POST identity/remove   200 { result: "removed", name, revoked }
-// and nothing holds them to the real route until it lands.
+// The real owner's `createdAt` is null until it has a row (identities.ts `listIdentities`); a test lists one so.
 //
 // The fake keeps its world in memory and changes it as the real routes would: approving a waiting sign-in gives its identity a device,
 // adding an identity lists it, removing one takes its devices with it. Every call it is asked is recorded in `calls`.
