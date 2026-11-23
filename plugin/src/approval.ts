@@ -10,8 +10,10 @@
 //
 //   THE APPROVING DEVICE (`listWaitingDevices`, then `approveDevice`). It is unlocked. Nexus is asked which sign-ins are waiting
 //   (GET /device/waiting: each one's name, its sign-in code and the public key it sent) and this device shows them BY NAME: one waiting
-//   is named in the screen's slab, several are a short list to pick from. The person then reads the DEVICE CODE (the key code) off the new
-//   device and types only that here. Nexus cannot be trusted with those keys: a key of its own put in a new device's place would be sent
+//   is named in the screen's slab, several are a short list to pick from. A sign-in that asked to be an AGENT (`nexus-agent join`) is known by
+//   its identity's kind (GET /identities, and GET /device/pending for the identity a sign-in asked for), and is drawn as the key being given
+//   to it: the owner's calls, believed only to choose the screen. The person then reads the DEVICE CODE (the key code) off the new
+//   device (an agent calls it its AGENT CODE) and types only that here. Nexus cannot be trusted with those keys: a key of its own put in a new device's place would be sent
 //   the vault key. So this device works out the key code of the chosen device's key itself and seals nothing unless it is the code the
 //   person typed. Then it seals the vault key to that key, with the vault id and the kid, and sends the approval with the allow, and a
 //   public key of its own for this approval. It shows the person the matching code.
