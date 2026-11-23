@@ -11,7 +11,11 @@
 // pasted, is checked. Board 31a: every box red (fill #FDECEE, 2 px outline #D1293D), "That code does not match.", and a red box headed
 // "<name> does not get the key" that says what it could mean and what to do. Nothing is handed over; typing again is allowed with no
 // counter and no lock-out, so after a second wrong try the same screen stays.
+//
+// Set PICTURES_DIR to a folder and the test also writes each board out there as a page (the screen and styles.css), for looking at.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SetupState } from "../src/vault-setup";
 import { STYLES, boxes, buttons, control, openScreens, pasteInto, tap, typeInto, words } from "./screens-world";
@@ -21,12 +25,20 @@ const asking = (problem: Extract<SetupState, { step: "approve-device" }>["proble
   step: "approve-device", message, problem, devices: [LEDGER], device: LEDGER,
 });
 const CODE = "AB12CD34EF";
+/** Writes the screen out as a page for looking at, when PICTURES_DIR is set. */
+function picture(name: string, root: HTMLElement): void {
+  const folder = process.env.PICTURES_DIR;
+  if (!folder) return;
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(path.join(folder, `${name}.html`), `<!doctype html><meta charset="utf-8"><style>body{margin:0}${STYLES}</style><div class="nexus-screen" style="width:375px">${root.innerHTML}</div>`);
+}
 const wrongBoxes = (root: HTMLElement): number => root.querySelectorAll(".nx-box--wrong").length;
 const shape = (root: HTMLElement): number[] => [...root.querySelectorAll(".nx-code__group")].map((group) => group.querySelectorAll(".nx-box").length);
 
 describe("board 31: give the key", () => {
   it("names the agent that joined, asks for its agent code in ten empty boxes grouped 4, 4, 2, says why, and has Cancel only", async () => {
     const { root } = await openScreens(asking(null), "approve");
+    picture("board-31", root);
     expect(words(root)).toEqual([
       "nexus",
       "give the key",
@@ -101,6 +113,7 @@ describe("board 31a: wrong agent code", () => {
 
   it("turns all ten boxes red, keeps what was typed, says That code does not match, and the red box says what it could mean and what to do", async () => {
     const { root } = await wrongOnce();
+    picture("board-31a", root);
     expect(wrongBoxes(root)).toBe(10);
     expect(words(root)).toEqual([
       "nexus",
