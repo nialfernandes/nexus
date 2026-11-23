@@ -222,10 +222,29 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(fake.calls.filter((c) => c.method === "POST"), "nothing is answered until the owner taps").toEqual([]);
   });
 
-  it("says whose a waiting device would be when it is not the owner's: the drawn words are for the owner's own device", async () => {
+  it("says whose a waiting sign-in would be when it is not the owner's; an agent's has Deny and no Allow, and says where the key is given; a device keeps Allow and Deny", async () => {
     const fake = new FakeNexus({ knownOwner: true, waiting: [{ ...WORKED.waiting }, agentSignIn(WORKED.agent)] });
     const page = await openNexusPage(fake);
     expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants in", "scribe-box wants in as scribe"]);
+    const buttons = page.el.waiting.all().filter((e) => e.tag === "button").map((e) => e.attributes["aria-label"]);
+    expect(buttons, "the device: Allow and Deny; the agent: Deny only").toEqual(["Allow iPhone", "Deny iPhone", "Deny scribe-box"]);
+    expect(page.el.waiting.textsOf("strip__key"), "board 28a's words, for the agent's strip alone").toEqual(["Open Obsidian on your Mac to give scribe the key."]);
+
+    // Deny on the agent's strip is sent as any other is, and nothing on the page can allow it.
+    page.el.waiting.button("Deny scribe-box").click();
+    await page.settled();
+    expect(fake.callsTo("device/deny").map((c) => c.body)).toEqual([{ code: "AGNT-7XQ2" }]);
+    expect(fake.callsTo("device/approve")).toEqual([]);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants in"]);
+  });
+
+  it("treats a sign-in as an agent's by what Nexus lists the identity as, not by its name: one for a person who is not the owner keeps Allow", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [agentSignIn("guest")] });
+    fake.identities.push({ name: "guest", kind: "person", owner: false, createdAt: null, devices: [] });
+    const page = await openNexusPage(fake);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["guest-box wants in as guest"]);
+    expect(page.el.waiting.button("Allow guest-box").disabled).toBe(false);
+    expect(page.el.waiting.textsOf("strip__key")).toEqual([]);
   });
 
   it("shows the sign-in code for a device that sent no key, which is the one code on its screen", async () => {
@@ -334,8 +353,8 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(page.el.command.hidden).toBe(false);
     expect(page.el.joined.hidden).toBe(true);
     expect(page.el.line.textContent).toBe("lab-m is added. Run this on the agent.");
-    // The command the agent runs: `nexus-agent join <name>`. It carries no address and no code (the agent finds Nexus itself).
-    expect(page.el["command-text"].textContent).toBe("nexus-agent join lab-m");
+    // The command the agent runs: `nexus-agent join <name> > <name>.env`. It carries no address and no code (the agent finds Nexus itself).
+    expect(page.el["command-text"].textContent).toBe("nexus-agent join lab-m > lab-m.env");
     expect(page.el["waiting-for"].textContent).toBe("waiting for lab-m");
     expect(page.el.copy.textContent).toBe("Copy");
   });
@@ -350,11 +369,14 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     await page.advance(5000);
     expect(page.el.waiting.hidden, "a strip on the add view while it waits").toBe(false);
     expect(page.el.waiting.textsOf("strip__words")).toEqual(["lab-m-box wants in as lab-m"]);
+    expect(page.el.waiting.textsOf("strip__key"), "the key is given in Obsidian").toEqual(["Open Obsidian on your Mac to give lab-m the key."]);
+    expect(page.el.waiting.all().filter((e) => e.tag === "button").map((e) => e.attributes["aria-label"]), "an agent has no Allow here").toEqual(["Deny lab-m-box"]);
     expect(page.el.command.hidden, "still waiting").toBe(false);
     expect(page.el.joined.hidden).toBe(true);
 
-    page.el.waiting.button("Allow lab-m-box").click();
-    await page.settled();
+    // In Obsidian the owner lets it in, with the key: Nexus now has a device for it, and the page, asking again, says so.
+    expect(fake.answer("POST", "device/approve", { code: "AGNT-7XQ2" }, null).status).toBe(200);
+    await page.advance(5000);
     expect(page.el.joined.hidden).toBe(false);
     expect(page.el.command.hidden).toBe(true);
     expect(page.el.waiting.hidden, "the strip is gone").toBe(true);
@@ -387,7 +409,7 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     await addAgent(page, WORKED.newAgent);
     page.el.copy.click();
     await page.settled();
-    expect(page.copied).toEqual(["nexus-agent join lab-m"]);
+    expect(page.copied).toEqual(["nexus-agent join lab-m > lab-m.env"]);
     expect(page.el.copy.textContent).toBe("Copied");
     await page.advance(1900);
     expect(page.el.copy.textContent, "Copied for two seconds").toBe("Copied");

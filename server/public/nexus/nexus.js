@@ -25,8 +25,10 @@
 // nothing is sent. The call goes to Nexus only when the wait has passed. A page closed inside the wait sends nothing, so nothing is removed.
 //
 // A DEVICE WAITING is shown as a strip: its name and that it wants in (and as whom, when it is not the owner), and the code the device
-// shows on its own screen to compare (its key's code, or its sign-in code for a device that sent no key). The list is asked for again
-// every few seconds. After an agent is added, who is connected is asked for again too, until the agent has a working device.
+// shows on its own screen to compare (its key's code, or its sign-in code for a device that sent no key). A device has Allow and Deny. A
+// sign-in as an AGENT has Deny only and says where the key is given (board 28a): an agent is let in in Obsidian, where the key goes with it,
+// never here. The list is asked for again every few seconds. After an agent is added, who is connected is asked for again too, until the
+// agent has a working device.
 //
 // THE KEY is never on this page: it is given in Obsidian. The page has no key, no place to type one and no button for it.
 //
@@ -44,8 +46,10 @@
   var COPIED_MS = 2000;
   // The kind of identity this page makes, and the only kind it removes (the owner is never removed here).
   var AGENT = 'agent';
-  // What the agent runs, followed by its name (packages/agent: the command that joins it to Nexus).
+  // What the agent runs (packages/agent: the command that joins it to Nexus): `nexus-agent join <name> > <name>.env`, which keeps what the
+  // command prints in a file named for the agent.
   var JOIN_COMMAND = 'nexus-agent join';
+  var ENV_FILE_END = '.env';
   // A name is what Nexus accepts (identities.ts): lower case letters, digits and hyphens, first a letter or digit, at most 40 long.
   // Anything else is blocked as it is typed.
   var NAME_OK = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -74,6 +78,8 @@
   var NEVER = 'never';
   var NOT_COPIED = 'That did not copy. Select the command and copy it.';
   var NAME_HINT = 'Lower case letters, digits and hyphens.';
+  // Where an agent's key is given (board 28a): in Obsidian, never on this page.
+  function keyInObsidian(name) { return 'Open Obsidian on your Mac to give ' + name + ' the key.'; }
   var NO_DEVICES = 'No devices.';
 
   function byId(id) { return document.getElementById(id); }
@@ -426,7 +432,7 @@
     joinedCard.hidden = form || !joined;
     if (!form) {
       joinedTitle.textContent = added.name + ' joined';
-      joinedWords.textContent = 'Open Obsidian on your Mac to give ' + added.name + ' the key.';
+      joinedWords.textContent = keyInObsidian(added.name);
       waitingFor.textContent = 'waiting for ' + added.name;
     }
     renderName();
@@ -549,30 +555,42 @@
     return found ? found.name : '';
   }
 
+  // Whether a sign-in is an agent's: the identity it asks to be is one Nexus lists as an agent. An agent is let in in Obsidian, where the key is
+  // handed over with it, and not here: its strip has no Allow.
+  function isAgentSignIn(identity) {
+    return identities.some(function (person) { return person.name === identity && !person.owner && person.kind === AGENT; });
+  }
+
   function stripFor(entry) {
     var item = el('li', 'strip');
     var text = el('div', 'strip__text');
     // "iPhone wants in" for the owner's own device; a device asking to be anyone else says who.
     text.appendChild(el('p', 'strip__words', entry.label + ' wants in' + (entry.identity === ownerName() ? '' : ' as ' + entry.identity)));
     text.appendChild(el('p', 'strip__code', entry.shown));
+    var agent = isAgentSignIn(entry.identity);
+    if (agent) text.appendChild(el('p', 'strip__key', keyInObsidian(entry.identity)));
     item.appendChild(text);
     var actions = el('div', 'actions');
-    var allow = el('button', 'pill pill--main', 'Allow');
+    var allow = null;
+    if (!agent) {
+      allow = el('button', 'pill pill--main', 'Allow');
+      allow.type = 'button';
+      allow.setAttribute('aria-label', 'Allow ' + entry.label);
+      actions.appendChild(allow);
+    }
     var deny = el('button', 'pill pill--quiet', 'Deny');
-    allow.type = 'button';
     deny.type = 'button';
-    allow.setAttribute('aria-label', 'Allow ' + entry.label);
     deny.setAttribute('aria-label', 'Deny ' + entry.label);
-    allow.addEventListener('click', function () { answer(entry, 'approve', allow, deny); });
+    if (allow !== null) allow.addEventListener('click', function () { answer(entry, 'approve', allow, deny); });
     deny.addEventListener('click', function () { answer(entry, 'deny', allow, deny); });
-    actions.appendChild(allow);
     actions.appendChild(deny);
     item.appendChild(actions);
     return item;
   }
 
   function renderWaiting() {
-    var drawn = waiting.map(function (entry) { return entry.code; }).join('|');
+    // What is drawn depends on the code and on whether it is an agent's (an agent's strip has no Allow).
+    var drawn = waiting.map(function (entry) { return entry.code + (isAgentSignIn(entry.identity) ? ':agent' : ''); }).join('|');
     // Drawn again only when the list changed, so a button is not rebuilt under a finger.
     if (drawn !== waitingDrawn) {
       waitingDrawn = drawn;
@@ -620,7 +638,7 @@
 
   // Allow or Deny: sent as the approval page sends it. A code that is finished (ran out, used) is taken off the page and Nexus's words shown.
   function answer(entry, route, allow, deny) {
-    allow.disabled = true;
+    if (allow !== null) allow.disabled = true;
     deny.disabled = true;
     say(alertBox, '');
     call('POST', 'device/' + route, { code: entry.code }).then(function (reply) {
@@ -641,7 +659,7 @@
         renderWaiting();
         renderLine();
       } else {
-        allow.disabled = false;
+        if (allow !== null) allow.disabled = false;
         deny.disabled = false;
       }
       say(alertBox, wordsOf(reply));
@@ -664,6 +682,11 @@
   }
 
   // ── adding an agent ────────────────────────────────────────────────────────
+
+  // The one command to run on the agent: it joins the agent to Nexus and keeps what it prints in <name>.env.
+  function commandFor(name) {
+    return JOIN_COMMAND + ' ' + name + ' > ' + name + ENV_FILE_END;
+  }
 
   // The form as it first opens: empty, with Add dim and no fault.
   function openAddForm() {
@@ -703,7 +726,7 @@
         nameField.value = '';
         added = { name: reply.body.name };
         joined = false;
-        commandText.textContent = JOIN_COMMAND + ' ' + reply.body.name;
+        commandText.textContent = commandFor(reply.body.name);
         copyButton.textContent = 'Copy';
         notice = null;
         renderAll();

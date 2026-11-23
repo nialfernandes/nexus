@@ -109,7 +109,7 @@ for (const width of [375, 1280]) {
       // Board 28: lab-m is added, and the command to run on it is shown with Copy, and that it is waiting.
       await page.locator("#agent-name").pressSequentially("lab-m");
       await page.getByRole("button", { name: "Add", exact: true }).click();
-      await expect(page.locator("#command-text")).toHaveText("nexus-agent join lab-m");
+      await expect(page.locator("#command-text")).toHaveText("nexus-agent join lab-m > lab-m.env");
       await expect(page.locator("#line")).toHaveText("lab-m is added. Run this on the agent.");
       await expect(page.locator("#waiting-for")).toHaveText("waiting for lab-m");
       expect(fake.callsTo("identity", "POST").map((call) => call.body)).toEqual([{ name: "lab-m", kind: "agent" }]);
@@ -122,7 +122,7 @@ for (const width of [375, 1280]) {
       expect(inside, "the command sits inside its card").toBe(true);
       await page.getByRole("button", { name: "Copy", exact: true }).click();
       await expect(page.locator("#copy")).toHaveText("Copied");
-      expect(await page.evaluate(() => navigator.clipboard.readText()), "the clipboard holds the command").toBe("nexus-agent join lab-m");
+      expect(await page.evaluate(() => navigator.clipboard.readText()), "the clipboard holds the command").toBe("nexus-agent join lab-m > lab-m.env");
       await picture("board 28: agent added, waiting");
 
       // Back on the list lab-m is there with no devices. Opening scribe is board 29; Remove agent goes back to the list with Undo (29a).

@@ -214,9 +214,17 @@ test("board 26b, a device waiting: a strip at the top outlined in teal with the 
   await expect(deny).toHaveCount(0);
 });
 
-test("board 26b, Deny, and a device that asks to be an agent says whose it wants to be", async ({ page }) => {
+test("board 26b, Deny; a device keeps Allow and Deny, and an agent's sign-in says whose it wants to be, gives the key's place instead of Allow, and keeps Deny", async ({ page }) => {
   const fake = await opened(page, 735, { waiting: [{ ...BOARD.waiting }, { code: "PQRS-TUVW", label: "scribe-box", identity: "scribe", deviceKey: null, deviceCode: "PQRS-TUVW" }] });
   await expect(page.locator(".strip__words")).toHaveText(["iPhone wants in", "scribe-box wants in as scribe"]);
+  // The device keeps Allow and Deny; the agent's sign-in has Deny and the words of board 28a, and no Allow: it is let in in Obsidian.
+  await expect(page.getByRole("button", { name: "Allow iPhone", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Deny iPhone", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Allow scribe-box", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Deny scribe-box", exact: true })).toHaveCount(1);
+  await expect(page.locator(".strip__key")).toHaveText("Open Obsidian on your Mac to give scribe the key.");
+  expect(await page.locator(".strip").nth(1).getByRole("button").count(), "Deny alone").toBe(1);
+  expect(await page.locator(".strip").first().getByRole("button").count(), "the device's strip: Allow and Deny").toBe(2);
   const deny = page.getByRole("button", { name: "Deny iPhone", exact: true });
   const allow = page.getByRole("button", { name: "Allow iPhone", exact: true });
   await deny.click();
@@ -225,6 +233,12 @@ test("board 26b, Deny, and a device that asks to be an agent says whose it wants
   expect(fake.callsTo("device/approve")).toEqual([]);
   await expect(page.locator("#line")).toHaveText("iPhone was not given a token.");
   await expect(allow).toHaveCount(0);
+
+  // Deny on the agent's strip sends the same and takes the strip away.
+  await page.getByRole("button", { name: "Deny scribe-box", exact: true }).click();
+  await expect(page.locator(".strip")).toHaveCount(0);
+  expect(fake.callsTo("device/deny", "POST").map((call) => call.body)).toEqual([{ code: "ABCD-EFGH" }, { code: "PQRS-TUVW" }]);
+  expect(fake.callsTo("device/approve"), "nothing on this page ever allowed an agent").toEqual([]);
 });
 
 test("board 26c, removed: the row is gone at once and an ink bar above the tabs says MacBook removed with Undo in teal; Undo puts it back, and after eight seconds the removal stays", async ({ page }, testInfo) => {
@@ -341,7 +355,7 @@ test("board 28, agent added, waiting: the command to run on the agent in a code 
   await expect(page.locator("#line")).toHaveText("scribe is added. Run this on the agent.");
   await expect(page.locator("#add-card")).toBeHidden();
   await expect(page.locator("#command-label")).toHaveText("COMMAND");
-  await expect(page.locator("#command-text")).toHaveText("nexus-agent join scribe");
+  await expect(page.locator("#command-text")).toHaveText("nexus-agent join scribe > scribe.env");
   expect(await style(page, "#command-text", "background-color")).toBe(CODE_BOX);
   expect(await style(page, "#command-text", "border-radius")).toBe("8px");
   expect(await style(page, "#command-text", "font-family")).toContain("JetBrains Mono");
@@ -361,7 +375,7 @@ test("board 28, agent added, waiting: the command to run on the agent in a code 
   // Copy hands over the command, says Copied for two seconds, then says Copy again.
   await page.locator("#copy").click();
   await expect(page.locator("#copy")).toHaveText("Copied");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("nexus-agent join scribe");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("nexus-agent join scribe > scribe.env");
   await page.clock.runFor(1_900);
   await expect(page.locator("#copy")).toHaveText("Copied");
   await page.clock.runFor(200);
@@ -398,8 +412,13 @@ test("board 28a, agent joined, key to hand over: once the agent has a working de
   fake.waiting.push({ code: "PQRS-TUVW", label: "Mac mini", identity: "scribe", deviceKey: null, deviceCode: "PQRS-TUVW", expiresAt: Date.now() + 600_000 });
   await page.clock.runFor(5_000);
   await expect(page.locator(".strip__words")).toHaveText("Mac mini wants in as scribe");
+  await expect(page.locator(".strip__key"), "the key is given in Obsidian").toHaveText("Open Obsidian on your Mac to give scribe the key.");
+  await expect(page.getByRole("button", { name: "Allow Mac mini", exact: true }), "an agent has no Allow here").toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Deny Mac mini", exact: true })).toHaveCount(1);
   await expect(page.locator("#command"), "still waiting").toBeVisible();
-  await page.getByRole("button", { name: "Allow Mac mini", exact: true }).click();
+  // In Obsidian the owner lets it in, with the key (board 31): Nexus now has a device for scribe, and the page, asking again, says so.
+  expect(fake.answer("POST", "device/approve", { code: "PQRS-TUVW" }, null).status).toBe(200);
+  await page.clock.runFor(5_000);
 
   await expect(page.locator("#joined")).toBeVisible();
   await expect(page.locator("#line")).toHaveText("scribe has joined.");

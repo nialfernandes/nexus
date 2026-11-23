@@ -255,7 +255,8 @@
 }
 
 .strip__words,
-.strip__code { margin: 0; }
+.strip__code,
+.strip__key { margin: 0; }
 
 .strip__words {
   font-size: 15px;
@@ -270,6 +271,12 @@
   letter-spacing: 0.08em;
   line-height: 16px;
   color: var(--ink);
+}
+
+/* An agent's strip says where the key is given, in place of Allow. */
+.strip__key {
+  font-size: 13px;
+  line-height: 17px;
 }
 
 /* ── add an agent ──────────────────────────────────────────────────────────── */

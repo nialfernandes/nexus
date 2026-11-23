@@ -167,13 +167,13 @@ slim teal bar (the nexus mark, the title, the page action, the Ask sparkle) and 
 - **Connected** (boards 26, 26a, 26b, 26c): the owner as `you`, then each agent, each in its own card with its devices (label, `added Sat 21 Nov`,
   `last used Mon 23 Nov · 11:40`), from `GET identities`. A time Nexus does not have is left out. With no agent, one line and Add an agent.
   A device waiting is a strip at the top (from `GET device/waiting`, with the code its own screen shows from `device/pending`), with Allow and Deny
-  through `device/approve` and `device/deny`; the list is asked for again every few seconds. A device that asks to be someone other than the owner
-  says whose it wants to be. **Remove** on a device goes through `token/revoke`.
+  through `device/approve` and `device/deny`; the list is asked for again every few seconds. A device has Allow and Deny. A sign-in as an agent says
+  whose it is and has Deny only: it is let in in Obsidian, where the key goes with it, and not on this page. **Remove** on a device goes through `token/revoke`.
 - **Add an agent** (boards 27, 27a, 28, 28a), from Add on the bar: a name (lower case letters, digits and hyphens, blocked as typed; Add is dim until it
   is good), through `POST identity` with kind `agent`; a name that is already an agent is told so under the field. Then the one command to run on the
-  agent, with Copy: `nexus-agent join <name>`, and a bar that moves while the page waits (the agent's sign-in shows as a strip above it, for Allow).
-  Once the agent has a working device the page says it has joined and sends the owner to Obsidian: **the key is given there and never on this page**,
-  which has no key, no field and no button for it.
+  agent, with Copy: `nexus-agent join <name> > <name>.env`, and a bar that moves while the page waits (the agent's sign-in shows as a strip above it,
+  saying where the key is given). Once the agent has a working device the page says it has joined and sends the owner to Obsidian: **the key is given
+  there and never on this page**, which has no key, no field and no button for it.
 - **An agent** (boards 29, 29a): tap an agent's name on the list. Its devices, when it joined, and Remove agent (`identity/remove`).
 - **Settings** (board 30): Sign out, which lets go of the owner secret the page holds (a browser that holds the owner's cookie is known again
   when the page is opened: Nexus has no route that takes the cookie away), and Aus Apps in the bar. The rows that would need the vault key or the
