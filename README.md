@@ -47,7 +47,7 @@ npm run check:audit   # asks npm for advisories: fails on a high or critical one
 
 `npm run check` is what every pull request runs (`.github/workflows/check.yml`), beside
 `npm run check:audit` (right after `npm ci`, and not part of `npm run check` because it needs the network),
-`bash docs/check-citations.sh` and the approval page's browser spec (`npm run test:browser` in `server/`, which
+`bash docs/check-citations.sh` and the server's browser specs, one for each page (`npm run test:browser` in `server/`, which
 needs Playwright's Chromium, so it is two steps of its own: server/README.md, "The browser spec"). `probe/` is not part of the workspace: it is a small test
 plugin that ships its own built files, with its own `npm ci` and `npm run check`.
 

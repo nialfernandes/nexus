@@ -59,7 +59,7 @@ describe("the old /apps/nexus prefix answers nothing", () => {
   });
 
   it("is no longer written in the server's addresses", () => {
-    expect(Object.keys(addresses).sort()).toEqual(["APPROVE_PATH", "NEXUS_BASE", "NEXUS_PREFIX", "routeName"]);
+    expect(Object.keys(addresses).sort()).toEqual(["APPROVE_PATH", "NEXUS_BASE", "NEXUS_PAGE_PATH", "NEXUS_PREFIX", "routeName"]);
     expect(addresses.routeName(`${OLD}/save`)).toBeNull();
     expect(addresses.routeName(`${API}/save`)).toBe("save");
   });
@@ -71,9 +71,9 @@ describe("the old /apps/nexus prefix answers nothing", () => {
   });
 });
 
-describe("the device approval page is at /nexus/approve", () => {
+describe("the device approval page is at /nexus/approve, and the Nexus page at /nexus/", () => {
   const FILES = [
-    "approve", "approve.css", "approve.js",
+    "approve", "approve.css", "approve.js", "nexus.css", "nexus.js",
     "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
   ];
 
@@ -84,6 +84,12 @@ describe("the device approval page is at /nexus/approve", () => {
       expect((await sendAs("GET", `/apps/nexus/${file}`, owner)).status, `${file} at the old prefix`).toBe(404);
       expect((await sendAs("GET", `/apps/nexus/${file}`, null)).status, `${file} at the old prefix, signed out`).toBe(404);
     }
+  });
+
+  it("serves the Nexus page at /nexus/ to anyone, and not under the old prefix", async () => {
+    expect((await sendAs("GET", "/nexus/", owner)).status).toBe(200);
+    expect((await sendAs("GET", "/nexus/", null)).status, "signed out").toBe(200);
+    expect((await sendAs("GET", "/apps/nexus/", owner)).status, "at the old prefix").toBe(404);
   });
 
   it("hands a device a link under /nexus", async () => {

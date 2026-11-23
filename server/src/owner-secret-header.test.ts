@@ -95,10 +95,10 @@ describe("the owner secret in the header", () => {
   });
 });
 
-describe("the approval page and its files, for a browser that is not signed in", () => {
-  it("are served to anyone: the page, its script and stylesheet and its three typefaces hold nothing private", async () => {
+describe("the pages and their files, for a browser that is not signed in", () => {
+  it("are served to anyone: the approval page and the Nexus page, their scripts and stylesheets and the three typefaces hold nothing private", async () => {
     for (const path of [
-      "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js",
+      "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js", "/nexus/", "/nexus/nexus.css", "/nexus/nexus.js",
       "/nexus/fonts/unbounded-var.woff2", "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2",
     ]) {
       expect((await sendAs("GET", path, null)).status, `${path} with no sign-in`).toBe(200);
@@ -106,7 +106,7 @@ describe("the approval page and its files, for a browser that is not signed in",
   });
 
   it("serves nothing else under /nexus to anyone, and every call the page makes still needs the owner", async () => {
-    for (const path of ["/nexus/approve.html", "/nexus/", "/nexus/fonts/", "/nexus/fonts/LICENSES.md", "/nexus/fonts/unbounded-OFL.txt"]) {
+    for (const path of ["/nexus/approve.html", "/nexus/index.html", "/nexus/fonts/", "/nexus/fonts/LICENSES.md", "/nexus/fonts/unbounded-OFL.txt"]) {
       expect((await sendAs("GET", path, null)).status, `${path} with no sign-in`).toBe(404);
     }
     const sign = bodyOf(await device().start("agents", "lab-page-for-anyone"));

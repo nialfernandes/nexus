@@ -7,5 +7,5 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["./*.ts", "../playwright.config.ts", "../src/__fixtures__/approve-answers.ts"]
+  "include": ["./*.ts", "../playwright.config.ts", "../src/__fixtures__/approve-answers.ts", "../src/__fixtures__/nexus-page-answers.ts"]
 }

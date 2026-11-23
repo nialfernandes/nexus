@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="noindex" />
+
+    <title>Nexus</title>
+
+    <link rel="stylesheet" href="/nexus/approve.css" />
+    <link rel="stylesheet" href="/nexus/nexus.css" />
+  </head>
+  <body>
+    <!-- THE NEXUS PAGE, the owner's own: who is connected (the owner, then each agent, each with its devices), a device waiting
+         to be let in, adding an agent, and removing a device or an agent. nexus.js asks Nexus and fills this page in. The owner
+         signs in on it with the owner secret exactly as on the approval page, and until then the first card is the only thing
+         shown: every other part is hidden until the owner is known. Everything Nexus sent (a name, a label, a code) goes in as
+         text, never as markup. The look is the approval page's own (approve.css) until the drawn boards replace it. -->
+    <div class="page">
+      <header class="slab">
+        <div class="slab__row">
+          <div class="slab__name">
+            <span class="slab__mark">nexus</span>
+            <span class="slab__divider" aria-hidden="true"></span>
+            <h1 class="slab__title" id="title">connected</h1>
+          </div>
+        </div>
+      </header>
+
+      <main class="content">
+        <p class="lead" id="line" role="status">Checking who is connected…</p>
+
+        <!-- The owner secret, for a browser that is not signed in as the owner. Nothing is kept: the script holds it for as long as the page is open. -->
+        <section class="card" id="owner" hidden>
+          <form class="owner" id="owner-form" autocomplete="off" novalidate>
+            <p class="card__words" id="owner-words">Type the owner secret.</p>
+            <div class="field">
+              <label class="field__label" for="secret">OWNER SECRET</label>
+              <input class="field__input" id="secret" name="secret" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            </div>
+            <p class="card__quiet card__quiet--fault" id="owner-alert" role="alert" hidden></p>
+            <div class="actions">
+              <button type="submit" class="pill pill--main" id="owner-go">Continue</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Everything the owner sees once Nexus knows them. -->
+        <div class="signed-in" id="signed-in" hidden>
+          <!-- Nexus's own words for a call it refused (a code that ran out, a name taken, a remove that failed). -->
+          <p class="card__quiet card__quiet--fault" id="alert" role="alert" hidden></p>
+
+          <!-- Devices waiting to be let in, one strip each. -->
+          <ul class="strips" id="waiting" aria-label="Devices waiting" hidden></ul>
+
+          <section class="card" id="connected-card" aria-labelledby="connected-title">
+            <h2 class="card__title" id="connected-title">connected</h2>
+            <ul class="people" id="people"></ul>
+            <p class="card__quiet" id="nobody" hidden>Nobody is connected.</p>
+          </section>
+
+          <section class="card" id="add-card" aria-labelledby="add-title">
+            <h2 class="card__title" id="add-title">add an agent</h2>
+            <form class="owner" id="add-form" autocomplete="off" novalidate>
+              <div class="field">
+                <label class="field__label" for="agent-name">NAME</label>
+                <input class="field__input" id="agent-name" name="name" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" aria-describedby="agent-hint" />
+                <p class="card__quiet" id="agent-hint">Lower case letters, digits and hyphens.</p>
+              </div>
+              <div class="actions">
+                <button type="submit" class="pill pill--main" id="add-go">Add</button>
+              </div>
+            </form>
+            <p class="card__quiet card__quiet--fault" id="add-alert" role="alert" hidden></p>
+
+            <!-- The one command to run on the agent, once the agent has been added. -->
+            <div class="command" id="command" hidden>
+              <p class="code__label" id="command-label">RUN THIS ON THE AGENT</p>
+              <pre class="command__text" id="command-text" aria-labelledby="command-label"></pre>
+              <div class="actions">
+                <button type="button" class="pill pill--quiet" id="copy">Copy</button>
+              </div>
+              <p class="card__quiet" id="command-note">Then allow it above. The key is handed over in Obsidian, on a device that holds it, never on this page.</p>
+            </div>
+          </section>
+
+          <!-- A removal waits here for a few seconds. Undo puts it back and nothing is sent; when the time is up the call goes. -->
+          <ul class="undo" id="undo" aria-label="Removed" hidden></ul>
+        </div>
+      </main>
+    </div>
+    <script src="/nexus/nexus.js"></script>
+  </body>
+</html>
