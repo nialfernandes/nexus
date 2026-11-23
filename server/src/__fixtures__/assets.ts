@@ -14,6 +14,8 @@ const TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".woff2": "font/woff2",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
 };
 
 export function staticAssets(): Fetcher {

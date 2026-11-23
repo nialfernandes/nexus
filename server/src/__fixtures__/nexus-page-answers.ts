@@ -44,7 +44,7 @@ export interface FakeAnswer { status: number; json: unknown }
 
 /**
  * Times in the worked example. Sat 12 Sep 2026 12:00 in Sydney (UTC+10 until the clocks go forward in October) is 02:00 UTC; the
- * browser spec opens the page in that time zone, so it reads "Sat 12 Sep · 12:00".
+ * browser spec opens the page in that time zone, so it reads "added Sat 12 Sep".
  */
 export const SAT_NOON = Date.UTC(2026, 8, 12, 2, 0, 0);
 export const HOUR = 60 * 60 * 1000;
@@ -58,6 +58,45 @@ export const WORKED = {
   agentDevice: { id: "tok-scribe-box", label: "scribe-box", createdAt: SAT_NOON + 44 * HOUR + 5 * 60 * 1000, lastUsedAt: null },
   waiting: { code: PENDING.code, label: "iPhone", identity: "nial", deviceKey: PENDING.deviceKey, deviceCode: PENDING.deviceCode },
 } as const;
+
+/**
+ * A day and a time on Sydney's clock in November 2026 (UTC+11: the clocks went forward on 4 October), as milliseconds. The browser spec opens
+ * the page in that time zone, so `sydneyNovember(23, 11, 40)` reads "Mon 23 Nov · 11:40".
+ */
+export const sydneyNovember = (day: number, hour = 0, minute = 0): number => Date.UTC(2026, 10, day, hour - 11, minute);
+
+/**
+ * The people on the drawn boards 26 to 30 (docs/design/nexus-page), so a screenshot of the page can be held up beside a board's picture.
+ * Every name, date and code here is the boards' own SAMPLE data, used only to draw the same screen: none of it is a real value, and no
+ * test treats it as one.
+ */
+export const BOARD = {
+  owner: "nial",
+  agent: "scribe",
+  newAgent: "lab-m",
+  /** The device waiting on board 26b, and the code its own screen shows. */
+  waiting: { code: "ABCD-EFGH", label: "iPhone", identity: "nial", deviceKey: null, deviceCode: "ABCD-EFGH" },
+} as const;
+
+export function boardIdentities(): FakeIdentity[] {
+  return [
+    {
+      name: BOARD.owner, kind: "person", owner: true, createdAt: sydneyNovember(21),
+      devices: [
+        { id: "tok-board-iphone", label: "iPhone", createdAt: sydneyNovember(21), lastUsedAt: sydneyNovember(23, 11, 40) },
+        { id: "tok-board-macbook", label: "MacBook", createdAt: sydneyNovember(21), lastUsedAt: sydneyNovember(23, 9, 12) },
+      ],
+    },
+    {
+      name: BOARD.agent, kind: "agent", owner: false, createdAt: sydneyNovember(22),
+      devices: [{ id: "tok-board-mac-mini", label: "Mac mini", createdAt: sydneyNovember(22), lastUsedAt: sydneyNovember(23, 11, 40) }],
+    },
+    {
+      name: BOARD.newAgent, kind: "agent", owner: false, createdAt: sydneyNovember(22),
+      devices: [{ id: "tok-board-lab-m", label: "lab-m", createdAt: sydneyNovember(22), lastUsedAt: sydneyNovember(22, 18, 5) }],
+    },
+  ];
+}
 
 export interface FakeOptions {
   /** True when the browser holds the owner's cookie: no secret is asked for. False (the default) when it must send the owner secret. */

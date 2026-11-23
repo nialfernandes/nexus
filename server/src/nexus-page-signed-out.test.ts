@@ -1,6 +1,6 @@
 // The Nexus page for a browser that is not signed in as the owner: it asks for the owner secret and shows nothing else. The page's own
 // HTML and script, as the Worker serves them, are run against the fake Nexus (__fixtures__/nexus-page-answers.ts) with no cookie, so
-// every call Nexus is asked for is a 401. What a browser draws (layout, colours) is looked at in e2e/nexus.spec.ts.
+// every call Nexus is asked for is a 401. What a browser draws (layout, colours) is looked at in e2e/nexus.spec.ts and e2e/nexus-boards.spec.ts.
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { setUpNexus } from "./__fixtures__/nexus-world";
@@ -21,7 +21,7 @@ const NAMES_IN_THE_WORLD = [WORKED.owner, WORKED.agent, WORKED.ownerDevice.label
 describe("the Nexus page, signed out", () => {
   it("starts with everything but the owner-secret card out of sight, so nothing is shown before Nexus has answered", async () => {
     const html = (await sendAs("GET", NEXUS_PAGE, null)).text;
-    for (const id of ["owner", "signed-in", "alert", "waiting", "undo", "command"]) {
+    for (const id of ["owner", "signed-in", "slab-actions", "alert", "waiting", "undo", "command", "view-add", "view-agent", "view-settings"]) {
       expect(new RegExp(`<[a-z0-9]+\\b[^>]*\\bid="${id}"[^>]*\\shidden(?=[\\s>=/])`, "i").test(html), `${id} starts hidden`).toBe(true);
     }
   });
@@ -40,6 +40,9 @@ describe("the Nexus page, signed out", () => {
     expect(page.el.waiting.children, "no device is waiting").toEqual([]);
     expect(page.el.undo.children).toEqual([]);
     expect(page.el.command.hidden).toBe(true);
+    expect(page.el["slab-actions"].hidden, "the bar's buttons (Add, the Ask sparkle) are out of sight too").toBe(true);
+    expect(page.el.back.hidden).toBe(true);
+    expect(page.el.title.textContent).toBe("connected");
     for (const name of NAMES_IN_THE_WORLD) expect(everythingSaid(page), `${name} is nowhere on the page`).not.toContain(name as string);
     // It asked once, who is connected, with no secret, and was refused: it did not go on to ask what is waiting.
     expect(fake.calls).toEqual([{ method: "GET", route: "identities", body: null, secret: null }]);
@@ -66,7 +69,8 @@ describe("the Nexus page, signed out", () => {
 
     expect(page.el.owner.hidden, "the field is gone").toBe(true);
     expect(page.el["signed-in"].hidden, "the page is shown").toBe(false);
-    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent]);
+    expect(page.el["slab-actions"].hidden, "with the bar's buttons").toBe(false);
+    expect(page.el.people.textsOf("person__name"), "the owner is \"you\"").toEqual(["you", WORKED.agent]);
     expect(page.el.secret.value).toBe("");
     const withSecret = fake.calls.filter((c) => c.secret === FAKE_OWNER_SECRET).map((c) => c.route);
     expect(withSecret, "who is connected and who is waiting were asked for with the secret").toEqual(["identities", "device/waiting", "device/pending?code=" + encodeURIComponent(WORKED.waiting.code)]);
@@ -76,6 +80,7 @@ describe("the Nexus page, signed out", () => {
     await page.advance(5000);
     expect(page.el.owner.hidden, "asked for the secret again").toBe(false);
     expect(page.el["signed-in"].hidden).toBe(true);
+    expect(page.el["slab-actions"].hidden, "the bar's buttons go too").toBe(true);
     expect(page.el["owner-alert"].textContent).toBe("That is not the owner secret.");
     expect(page.el.people.children, "who was connected is taken off the page").toEqual([]);
     expect(everythingSaid(page)).not.toContain(WORKED.agent);

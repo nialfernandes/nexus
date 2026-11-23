@@ -96,10 +96,11 @@ describe("the owner secret in the header", () => {
 });
 
 describe("the pages and their files, for a browser that is not signed in", () => {
-  it("are served to anyone: the approval page and the Nexus page, their scripts and stylesheets and the three typefaces hold nothing private", async () => {
+  it("are served to anyone: the approval page and the Nexus page, their scripts and stylesheets, the three typefaces and the icon hold nothing private", async () => {
     for (const path of [
       "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js", "/nexus/", "/nexus/nexus.css", "/nexus/nexus.js",
       "/nexus/fonts/unbounded-var.woff2", "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2",
+      "/nexus/icon.svg", "/nexus/icon-192.png", "/nexus/icon-512.png", "/nexus/apple-touch-icon.png",
     ]) {
       expect((await sendAs("GET", path, null)).status, `${path} with no sign-in`).toBe(200);
     }
