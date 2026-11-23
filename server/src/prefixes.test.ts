@@ -75,9 +75,10 @@ describe("the device approval page is at /nexus/approve, and the Nexus page at /
   const FILES = [
     "approve", "approve.css", "approve.js", "nexus.css", "nexus.js",
     "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
+    "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
   ];
 
-  it("serves the page, its stylesheet, its script and its three typefaces to anyone, and none of them under the old prefix", async () => {
+  it("serves the page, its stylesheet, its script, its three typefaces and its icon to anyone, and none of them under the old prefix", async () => {
     for (const file of FILES) {
       expect((await sendAs("GET", `/nexus/${file}`, owner)).status, file).toBe(200);
       expect((await sendAs("GET", `/nexus/${file}`, null)).status, `${file} signed out`).toBe(200);
@@ -129,6 +130,7 @@ describe("the Worker runs before the asset server for /nexus", () => {
     for (const file of [
       "approve.html", "approve.css", "approve.js",
       "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
+      "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
     ]) {
       expect(readFileSync(join(import.meta.dirname, "../public/nexus", file), "utf8").length, file).toBeGreaterThan(0);
     }

@@ -149,34 +149,44 @@ Everything is under `/nexus`: the API at `/nexus/api/...`, the device approval p
 answers: the older `/apps/nexus` prefix has been removed, and an address under it is a 404 like any other that is not
 Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
-On Cloudflare the pages' files (each page, its stylesheet and script, and the three typefaces in `public/nexus/fonts`) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
+On Cloudflare the pages' files (each page, its stylesheet and script, the three typefaces in `public/nexus/fonts` and the app icon) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
 `wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand out every file under
-`public/nexus` (the licence texts beside the typefaces, a folder) and not only the pages' own nine, which the Worker serves. (The tests use a stand-in for the asset server, so this setting is the part
+`public/nexus` (the licence texts beside the typefaces, a folder) and not only the pages' own thirteen (the two pages, their stylesheets and scripts, the typefaces and the app icon's four files), which the Worker serves. (The tests use a stand-in for the asset server, so this setting is the part
 they cannot prove on Cloudflare itself.)
 
 ## The Nexus page: `/nexus/`
 
-The owner's own page, for bringing an agent or a device into Nexus from a screen and not from commands. It lives in
-`public/nexus/` (`index.html`, `nexus.js` and `nexus.css`, beside the approval page's files, which it also loads for its look) and is served at
-`/nexus/` by `src/plugs/cloudflare/page.ts`, to anyone, as the approval page is: it holds nothing private, and the owner signs in on
-it with the owner secret exactly as on the approval page (the header `x-nexus-owner-secret`, over https or a loopback address only,
-held in one variable of the script and kept nowhere; a browser that holds the owner's cookie is not asked). Signed out, it shows that
-field and nothing else. Signed in, it shows:
+The owner's own page, for bringing an agent or a device into Nexus from a screen and not from commands. It is drawn on boards 26 to 30
+(`docs/design/nexus-page`, with the pictures beside the code) and lives in `public/nexus/` (`index.html`, `nexus.js` and `nexus.css`, beside the
+approval page's files, which it also loads for its look). It is served at `/nexus/` by `src/plugs/cloudflare/page.ts`, to anyone, as the approval
+page is: it holds nothing private, and the owner signs in on it with the owner secret exactly as on the approval page (the header
+`x-nexus-owner-secret`, over https or a loopback address only, held in one variable of the script and kept nowhere; a browser that holds
+the owner's cookie is not asked). Signed out, it shows that field and nothing else. Signed in, it is one page with one view at a time, a
+slim teal bar (the nexus mark, the title, the page action, the Ask sparkle) and two tabs at the bottom, connected and settings:
 
-- **Who is connected:** the owner first, then each agent, each with its devices under it (label, added, last used, written as
-  `Sat 12 Sep · 12:00`), from `GET identities`. A time Nexus does not have is left out.
-- **A device waiting:** each sign-in from `GET device/waiting` as a strip at the top, with the code the device shows on its own screen
-  (from `device/pending`, as the approval page shows it), Allow and Deny through `device/approve` and `device/deny`. The list is asked
-  for again every few seconds.
-- **Add an agent:** a name and Add, through `POST identity` with kind `agent`; then the one command to run on the agent, with Copy:
-  `NEXUS_ADDRESS=<this server>/nexus/api nexus-agent sign-in --identity <name> --label <name>`, whose sign-in then waits in the strip
-  for Allow. The page says the key is handed over in Obsidian, on a device that holds it, never on this page.
-- **Remove:** a device (`token/revoke`) or an agent (`identity/remove`). The row goes at once with Undo, and the call is sent only
-  when the Undo wait (eight seconds) has passed, so Undo really puts it back; closing the page inside the wait sends nothing.
+- **Connected** (boards 26, 26a, 26b, 26c): the owner as `you`, then each agent, each in its own card with its devices (label, `added Sat 21 Nov`,
+  `last used Mon 23 Nov · 11:40`), from `GET identities`. A time Nexus does not have is left out. With no agent, one line and Add an agent.
+  A device waiting is a strip at the top (from `GET device/waiting`, with the code its own screen shows from `device/pending`), with Allow and Deny
+  through `device/approve` and `device/deny`; the list is asked for again every few seconds. A device that asks to be someone other than the owner
+  says whose it wants to be. **Remove** on a device goes through `token/revoke`.
+- **Add an agent** (boards 27, 27a, 28, 28a), from Add on the bar: a name (lower case letters, digits and hyphens, blocked as typed; Add is dim until it
+  is good), through `POST identity` with kind `agent`; a name that is already an agent is told so under the field. Then the one command to run on the
+  agent, with Copy: `nexus-agent join <name>`, and a bar that moves while the page waits (the agent's sign-in shows as a strip above it, for Allow).
+  Once the agent has a working device the page says it has joined and sends the owner to Obsidian: **the key is given there and never on this page**,
+  which has no key, no field and no button for it.
+- **An agent** (boards 29, 29a): tap an agent's name on the list. Its devices, when it joined, and Remove agent (`identity/remove`).
+- **Settings** (board 30): Sign out, which lets go of the owner secret the page holds (a browser that holds the owner's cookie is known again
+  when the page is opened: Nexus has no route that takes the cookie away), and Aus Apps in the bar. The rows that would need the vault key or the
+  Recovery Key on the website are not built.
+- **Undo:** every Remove goes at once and an ink bar above the tabs says so, with Undo. The call is sent only when the wait (eight seconds) has
+  passed, so Undo really puts it back; closing the page inside the wait sends nothing.
 
-Every refusal is shown in Nexus's own words, as the server sent them. The look is the approval page's own for now (light only); the
-drawn boards replace it. `src/nexus-page*.test.ts` run the page's own script against a fake of Nexus
-(`src/__fixtures__/nexus-page-answers.ts`, held to the real routes' answers wherever a real route exists), and `e2e/nexus.spec.ts` looks at it in a browser.
+Both pages' heads name the Nexus app icon (`icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, served beside the pages).
+
+Every refusal is shown in Nexus's own words, as the server sent them (a name that is already an agent is shown in the drawn words). `src/nexus-page*.test.ts`
+run the page's own script against a fake of Nexus (`src/__fixtures__/nexus-page-answers.ts`, held to the real routes' answers wherever a real
+route exists), `e2e/nexus.spec.ts` looks at it in a browser at a phone's width and a desktop's, and `e2e/nexus-boards.spec.ts` reaches each drawn state
+and holds the page against that board's picture.
 
 ## A vault that was kept in plain text
 

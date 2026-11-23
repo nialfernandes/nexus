@@ -154,16 +154,17 @@ describe("routes that are not there, and the two a device calls", () => {
 });
 
 describe("the pages' route", () => {
-  it("serves the approval page, the Nexus page and the files they are made of, and nothing else under /nexus", async () => {
+  it("serves the approval page, the Nexus page and the files they are made of (the icon too), and nothing else under /nexus", async () => {
     for (const path of [
       "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js", "/nexus/", "/nexus/nexus.css", "/nexus/nexus.js",
       "/nexus/fonts/unbounded-var.woff2", "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2",
+      "/nexus/icon.svg", "/nexus/icon-192.png", "/nexus/icon-512.png", "/nexus/apple-touch-icon.png",
     ]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(200);
     }
     for (const path of [
       "/nexus/approve.html", "/nexus/index.html", "/nexus/other.js", "/nexus/approve/index.html",
-      "/nexus/theme-boot.js", "/nexus/fonts/", "/nexus/fonts/LICENSES.md", "/nexus/fonts/other.woff2",
+      "/nexus/theme-boot.js", "/nexus/fonts/", "/nexus/fonts/LICENSES.md", "/nexus/fonts/other.woff2", "/nexus/icon.png", "/nexus/favicon.ico",
     ]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(404);
     }

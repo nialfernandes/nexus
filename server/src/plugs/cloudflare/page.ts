@@ -1,6 +1,6 @@
-// Serves the device approval page: a plain static page (public/nexus) that the Worker hands out to whoever opens its link. Only
-// the files the page is made of are served (its page, stylesheet and script, and the three typefaces the stylesheet
-// asks for), each at its own address under /nexus, so no other file in the assets (and no folder) can be asked for by
+// Serves the device approval page and the Nexus page: plain static pages (public/nexus) that the Worker hands out to whoever opens their
+// link. Only the files the pages are made of are served (the pages, their stylesheets and scripts, the three typefaces the stylesheets
+// ask for, and the app icon the pages' heads name), each at its own address under /nexus, so no other file in the assets (and no folder) can be asked for by
 // name. The page is the same for everyone and needs nothing written into it per request: the code it shows is read
 // from its own address by its own script, and everything it asks of Nexus goes to the API, which checks the owner on every call.
 // Nothing in a file is private, so none is held back from a browser that is not signed in: the page is where the owner
@@ -18,6 +18,7 @@ const FILE_NAMES = [
   "approve", "approve.css", "approve.js",
   "nexus.css", "nexus.js",
   "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
+  "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ] as const;
 
 /**
