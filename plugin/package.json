@@ -1,6 +1,6 @@
 {
   "name": "nexus-obsidian",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "The Nexus plugin for Obsidian: keeps every note in a vault in step with Nexus, both ways.",
   "license": "MIT",

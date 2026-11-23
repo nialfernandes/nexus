@@ -109,7 +109,7 @@ alone makes the three files in `dist/`.
 `npm run build` in this folder writes the three files Obsidian loads, and a person
 copies into a vault, into `dist/`: `main.js` (built from `src/`), `manifest.json` and
 `styles.css` (both kept in this folder and copied as they are). The manifest's version
-is `0.3.0`.
+is `0.4.0`.
 
 - `npm test` runs the tests. They run the sync engine and the sign-in against the
   real Nexus server from this repository's `server/` folder, running inside the test
@@ -260,7 +260,7 @@ once on each device.
 
 BRAT installs from a release, not from a folder of the repository. A release of this
 plugin carries `main.js`, `manifest.json` and `styles.css` from `dist/`, with a tag that
-is the version in `manifest.json` (for example `0.3.0`). The repository's release
+is the version in `manifest.json` (for example `0.4.0`). The repository's release
 workflow (`.github/workflows/release.yml`) makes it, from the tagged commit, when the
 maintainer pushes the tag, and it makes none when the tag is not that version. The test
 plugin in `probe/` is a separate plugin and is not released by it: BRAT reads one list
