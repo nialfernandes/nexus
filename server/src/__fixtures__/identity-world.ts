@@ -58,6 +58,11 @@
 //                                              `lastUsedAt` is null until the token has been used, then unix ms.
 //                                              A token itself, and anything made from it, is never in an answer.
 //   POST token/revoke { id }                   200 { result: "revoked", id }, 404 no such token
+//   GET  identities                            200 { identities: [ { name, kind, owner, createdAt, devices: [ { id, label, createdAt, lastUsedAt } ] } ] }
+//                                              the owner first (even before it has a row: then `createdAt` is null), the rest by name; `devices` are the
+//                                              tokens that still work, newest first, so a revoked one is not there. A token itself, and anything made from it, is never in an answer.
+//   POST identity/remove { name }              200 { result: "removed", name, revoked }: `revoked` is how many working tokens it had; every token, sign-in and sealed approval of that identity goes in one batch, so every device it
+//                                              has is turned away 401 at once. 403 the owner, 404 no such identity, 400 a missing name or any other field
 //   POST wrap        { kid, kind, wrap, vaultId } 200 { result: "saved", kid, kind }   kind is "recovery" or "password"
 //   POST wrap/delete { kid, kind }             200 { result: "removed", kid, kind }, 404 no such wrap
 //
@@ -136,6 +141,8 @@ export function manage(who: Who, env?: NexusEnv) {
   return {
     createIdentity: (name: string, kind: string) => post("identity", { name, kind }),
     tokens: () => sendAs("GET", `${API}/tokens`, who, undefined, env),
+    identities: () => sendAs("GET", `${API}/identities`, who, undefined, env),
+    removeIdentity: (name: string) => post("identity/remove", { name }),
     revoke: (id: string) => post("token/revoke", { id }),
     setWrap: (kid: number, kind: string, wrap: string, vaultId: string = VAULT_ID) => post("wrap", { kid, kind, wrap, vaultId }),
     removeWrap: (kid: number, kind: string) => post("wrap/delete", { kid, kind }),
