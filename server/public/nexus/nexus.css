@@ -1,0 +1,178 @@
+/* THE NEXUS PAGE'S OWN STYLESHEET: only what the approval page's stylesheet (approve.css, loaded first) has no part for: the rows of who is
+   connected, a device waiting, a small button, the command to copy, and the line a removal waits on. Every colour, space, radius and
+   font here is read from the token variables approve.css declares, so the two pages change together, and the page has no dark set
+   (the boards are drawn light only). The drawn look is docs/design/nexus boards 25 to 31 of the nialfernandes repository (nialfernandes #822);
+   when they land, this file and the tokens are what change. */
+
+.signed-in {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+.card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+}
+
+/* The card holds a list, so a long name or label breaks rather than widening the page. */
+.people,
+.strips,
+.undo,
+.devices {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.people { gap: var(--s-4); }
+.devices { gap: var(--s-2); }
+
+.person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* The name, what it is, and the button that removes an agent. */
+.person__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.person__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1.5px solid var(--ink-outline);
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 14px;
+  color: var(--ink-soft);
+}
+
+/* A device sits under its person, set in a little, in the look of a code box. */
+.device {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--code-box);
+  border-radius: var(--r-box);
+}
+
+.device__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.device__label { margin: 0; font-weight: 600; }
+
+.device__when {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--ink-soft);
+}
+
+/* A device waiting: a strip at the top of the page, teal at its edge as the slab is, with Allow and Deny. */
+.strips { gap: var(--page-gap); }
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  width: 100%;
+  max-width: var(--card-max);
+  padding: var(--card-pad);
+  background: var(--card);
+  border-radius: var(--r-card);
+  box-shadow: 0 1px 3px var(--card-shadow);
+  outline: 2px solid var(--slab);
+}
+
+.strip__words,
+.strip__code { margin: 0; }
+
+.strip__code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+/* The smaller button, for Remove and Undo beside a row. */
+.pill--small {
+  height: 26px;
+  padding: 0 var(--s-3);
+  font-size: 12px;
+}
+
+/* The command to run on the agent, in a code box, with Copy under it. */
+.command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.command__text {
+  margin: 0;
+  padding: var(--s-3);
+  background: var(--code-box);
+  border-radius: var(--r-box);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* What was just removed, until its time is up. */
+.undo { gap: var(--s-2); }
+
+.undo__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  max-width: var(--card-max);
+  padding: var(--s-2) var(--s-3);
+  background: var(--ink);
+  border-radius: var(--r-pill);
+  color: var(--on-ink);
+  font-size: 13px;
+  line-height: 17px;
+}
+
+.undo__words {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.undo__item .pill--quiet {
+  border-color: var(--on-ink);
+  color: var(--on-ink);
+}
+
+.undo__item .pill:focus-visible { outline-color: var(--on-ink); }

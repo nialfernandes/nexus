@@ -1,5 +1,5 @@
-// Where Nexus answers. Every address is under one prefix, `/nexus`: the API at `/nexus/api/...` and the device approval
-// page at `/nexus/approve`. The prefix used to be `/apps/nexus`, a name that belonged to the host this server began on.
+// Where Nexus answers. Every address is under one prefix, `/nexus`: the API at `/nexus/api/...`, the device approval
+// page at `/nexus/approve` and the owner's Nexus page at `/nexus/`. The prefix used to be `/apps/nexus`, a name that belonged to the host this server began on.
 // That prefix is gone: an address under it is not Nexus's, and is a 404 like any other. Nothing else in Nexus writes
 // these strings.
 
@@ -11,6 +11,9 @@ export const NEXUS_BASE = `${NEXUS_PREFIX}/api`;
 
 /** Where the approval page lives: the link a device is handed opens it. */
 export const APPROVE_PATH = `${NEXUS_PREFIX}/approve`;
+
+/** Where the Nexus page lives: the owner's page for who is connected, a device waiting, adding an agent and removing. It ends in a slash, the address of a folder's page. */
+export const NEXUS_PAGE_PATH = `${NEXUS_PREFIX}/`;
 
 /** The path after the API's base address, or null when the address is not under it. `/nexus/api/save` is `save`. */
 export function routeName(pathname: string): string | null {

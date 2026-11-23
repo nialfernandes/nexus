@@ -10,24 +10,30 @@
 // them out before the Worker ran. wrangler.jsonc's `run_worker_first` makes the Worker see /nexus/* first, so that
 // only the files named here are served and a folder or any other file in the assets is a 404.
 
-import { NEXUS_PREFIX } from "../../addresses";
+import { NEXUS_PAGE_PATH, NEXUS_PREFIX } from "../../addresses";
 import type { NexusEnv } from "./host";
 
-/** The page's files: the name after the prefix, and where each sits in the assets. The page itself has no extension. */
+/** The files after the prefix, and where each sits in the assets. The approval page itself has no extension. */
 const FILE_NAMES = [
   "approve", "approve.css", "approve.js",
+  "nexus.css", "nexus.js",
   "fonts/unbounded-var.woff2", "fonts/instrument-sans-var.woff2", "fonts/jetbrains-mono-var.woff2",
 ] as const;
 
-/** Every address a file is served at, and where that file sits in the assets (the same address). */
-const FILES: Readonly<Record<string, string>> = Object.fromEntries(FILE_NAMES.map((name) => [`${NEXUS_PREFIX}/${name}`, `${NEXUS_PREFIX}/${name}`]));
+/**
+ * Every address a file is served at, and where that file sits in the assets (the same address). The Nexus page is the folder's own
+ * address, `/nexus/`, which the asset server answers with the folder's index.html.
+ */
+const FILES: Readonly<Record<string, string>> = Object.fromEntries(
+  [NEXUS_PAGE_PATH, ...FILE_NAMES.map((name) => `${NEXUS_PREFIX}/${name}`)].map((address) => [address, address]),
+);
 
 /** Whether an address is one of the page's files. */
 export const isNexusAsset = (pathname: string): boolean => Object.hasOwn(FILES, pathname);
 
 const NOT_FOUND = (): Response => new Response("Not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
 
-/** One of the page's files, for anyone. */
+/** One of the pages' files, for anyone. */
 export async function serveNexusAsset(request: Request, env: NexusEnv): Promise<Response> {
   const url = new URL(request.url);
   const target = Object.hasOwn(FILES, url.pathname) ? FILES[url.pathname] : undefined;
@@ -38,7 +44,7 @@ export async function serveNexusAsset(request: Request, env: NexusEnv): Promise<
   rewritten.search = "";
   const upstream = await env.ASSETS.fetch(new Request(rewritten.toString(), { method: "GET" }));
   const headers = new Headers(upstream.headers);
-  // The page is for one person at one moment: it is not kept.
+  // A page is for one person at one moment: it is not kept.
   headers.set("cache-control", "no-store");
   return new Response(upstream.body, { status: upstream.status, headers });
 }
