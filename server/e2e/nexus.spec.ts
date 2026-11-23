@@ -207,8 +207,8 @@ for (const width of [375, 1280]) {
       await open(page);
       await expect(page.locator(".person")).toHaveCount(15);
       const height = (await page.viewportSize())!.height;
-      const document = await page.evaluate(() => document.documentElement.scrollHeight);
-      expect(document, "the list is longer than the window").toBeGreaterThan(height);
+      const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      expect(pageHeight, "the list is longer than the window").toBeGreaterThan(height);
       const tabs = (await page.locator(".tabs").boundingBox())!;
       expect(tabs.y + tabs.height, "the tabs are in view without scrolling").toBeLessThanOrEqual(height);
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
