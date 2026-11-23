@@ -113,3 +113,32 @@ describe('the Nexus plugin README on what a reader must know first', () => {
     expect(WORDS, "a release's tag is the manifest's version").toContain(`(for example \`${manifest.version}\`)`);
   });
 });
+
+describe('the Nexus plugin README on giving an agent the key', () => {
+  it('says how an agent joins from this side: the agent code is typed in Approve a device, there is no Recovery Key and no Give button, and the vault key goes only sealed', () => {
+    expect(README).toContain('## Giving an agent the key');
+    expect(WORDS).toMatch(/`nexus-agent join <name>`/);
+    expect(WORDS).toMatch(/shows its \*\*agent code\*\*/);
+    expect(WORDS).toMatch(/\*\*Approve a device\*\*/);
+    expect(WORDS).toMatch(/the title \*\*give the key\*\*/);
+    expect(WORDS).toMatch(/There is no Give button/);
+    expect(WORDS).toMatch(/no Recovery Key is typed/i);
+    expect(WORDS).toMatch(/The vault key never leaves this device unsealed/);
+  });
+
+  it('says what a wrong agent code does: every box red, nothing sent, no counter and no lock-out', () => {
+    expect(WORDS).toMatch(/A wrong code turns every box red/);
+    expect(WORDS).toMatch(/\*\*Nothing is sent\*\*: no approval, no key/);
+    expect(WORDS).toMatch(/there is no counter and no lock-out/);
+  });
+
+  it('says that an agent shows no matching code to type back, so the agent code is the check', () => {
+    expect(WORDS).toMatch(/An agent shows no matching code to type back/);
+  });
+
+  it('links the agent package README that says how to run the command, and the file is there', () => {
+    const link = /\[agent package's README\]\(([^)]+)\)/.exec(README)?.[1];
+    expect(link, 'it links the agent README').toBeTruthy();
+    expect(existsSync(path.join(PLUGIN, link!)), `${link} is a file in this repository`).toBe(true);
+  });
+});

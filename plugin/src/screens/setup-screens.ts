@@ -114,6 +114,17 @@ export const WORDS = {
     noneText: "On the new device, choose to ask another device to approve it. It shows up here by its name.",
     again: "Look again",
   },
+  // Boards 31 and 31a: an agent that joined (`nexus-agent join`) is named by what it was added as, and is given the key by typing its code.
+  agentKey: {
+    title: "give the key",
+    joined: (name: string) => `${name} has joined.`,
+    ask: (name: string) => `Type ${name}'s code here to give it the key.`,
+    code: "Agent code",
+    why: (name: string) => `This makes sure the key goes to ${name} and no one else.`,
+    wrong: "That code does not match.",
+    noKey: (name: string) => `${name} does not get the key`,
+    noKeyText: "A wrong code can mean a typing slip, or that this is not the agent you added. Try once more. If it still fails, cancel and add the agent again.",
+  },
   approved: {
     title: "approved",
     line: "Now go to the new device.",
@@ -582,6 +593,7 @@ export class SetupScreens {
 
   /** The new device is chosen (the only one waiting, or the pick): its name is the slab line, and its device code is typed. */
   #deviceCodeScreen(state: Extract<SetupState, { step: "approve-device" }>, device: WaitingName): HTMLElement {
+    if (device.agent === true) return this.#agentKeyScreen(state, device);
     const w = WORDS.approve;
     return screen(
       w.title,
@@ -603,6 +615,36 @@ export class SetupScreens {
           state.devices.length > 1 ? pill(w.another, "quiet", () => this.#deps.setup.backToDevices(), { key: "another" }) : null,
           pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" }),
         ),
+      ),
+    );
+  }
+
+  /**
+   * Boards 31 and 31a: the agent that joined is chosen, and the person types its agent code to give it the key. There is no Give button: the
+   * code is checked when the tenth character is typed or the whole code is pasted. A code that is not the agent's turns every box red and
+   * says so (31a); typing again clears the red, and there is no counter and no lock-out. What else Nexus refused with is its own words.
+   */
+  #agentKeyScreen(state: Extract<SetupState, { step: "approve-device" }>, agent: WaitingName): HTMLElement {
+    const w = WORDS.agentKey;
+    const name = agent.name ?? agent.label;
+    const refused = this.#deviceCode.wrong ? state.problem : null;
+    const doesNotMatch = refused === "wrong-key-code";
+    return screen(
+      w.title,
+      w.joined(name),
+      card(
+        text(doesNotMatch ? w.wrong : w.ask(name)),
+        codeField(
+          {
+            id: FIELD.device,
+            name: w.code,
+            entry: this.#deviceCode,
+            onEdit: (edit) => this.#edited(FIELD.device, this.#deviceCode.complete ? () => this.#run(this.#deps.setup.approveDevice(this.#deviceCode.text)) : null)(edit),
+          },
+          w.code,
+        ),
+        doesNotMatch ? note(w.noKey(name), w.noKeyText, true) : refused !== null ? faultLine(state.message ?? w.wrong) : small(w.why(name)),
+        actions(pill(WORDS.buttons.cancel, "quiet", () => this.#deps.setup.cancel(), { key: "cancel" })),
       ),
     );
   }

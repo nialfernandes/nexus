@@ -3,6 +3,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { JOIN_LABEL } from "../src/cli/join";
 import { ENV } from "../src/cli/labels";
 import { AgentVault } from "../src/index";
 
@@ -22,7 +23,20 @@ describe("the package README", () => {
   });
 
   it("names every command", () => {
-    for (const command of ["keygen", "sign-in", "create-vault", "approve-agent", "read", "write", "list", "make-identity", "allow", "deny", "owner-sign-in", "set-up-agent"]) expect(README, command).toContain(`nexus-agent ${command}`);
+    for (const command of ["keygen", "sign-in", "create-vault", "approve-agent", "read", "write", "list", "make-identity", "allow", "deny", "owner-sign-in", "set-up-agent", "join"]) expect(README, command).toContain(`nexus-agent ${command}`);
+  });
+
+  it("says how an agent joins: one command run on the agent, two codes printed, the owner types the agent code in Obsidian, and the four values go to standard output only", () => {
+    expect(README).toContain("## An agent joins with one command");
+    expect(WORDS).toMatch(/nexus-agent join scribe > scribe\.env/);
+    expect(WORDS).toMatch(/prints two codes \*\*on the error stream\*\*/);
+    expect(WORDS).toContain(`**${JOIN_LABEL.agentCode}**`);
+    expect(WORDS).toContain(`**${JOIN_LABEL.signInCode}**`);
+    expect(WORDS).toMatch(/opens \*\*Approve a device\*\* and types the agent code|opens \*\*Approve a device\*\*, sees .* and types the agent code/);
+    expect(WORDS).toMatch(/No Recovery Key is typed anywhere/);
+    expect(WORDS).toMatch(/only the four values go to standard output/);
+    expect(WORDS).toMatch(/Nexus's own words/);
+    expect(WORDS).toMatch(/The command itself writes no file/);
   });
 
   it("says a key is never an argument, and that the Recovery Key is typed at a hidden prompt", () => {

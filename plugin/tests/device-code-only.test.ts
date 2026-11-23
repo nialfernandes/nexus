@@ -114,7 +114,10 @@ describe("adding a device with one code", () => {
 
     // A got the sign-in and its key through the list of those waiting (one call), and sent one approval.
     expect(a.log.to("GET device/waiting")).toHaveLength(1);
-    expect(a.log.to("GET device/pending"), "the list held the key, so nothing more was asked").toEqual([])
+    // The list held the key. Because an agent identity exists on this server, A also asked which identities are agents, and which identity this
+    // sign-in is for (reads only, to choose the screen: the key is sealed to the key whose code was typed).
+    expect(a.log.to("GET identities"), "A asked which identities are agents, once").toHaveLength(1);
+    expect(a.log.to("GET device/pending"), "and which identity the one sign-in is for").toHaveLength(1);
     expect(a.log.to("POST device/approve")).toHaveLength(1);
     expect(a.log.to("POST device/approve")[0]!.body.code, "to the sign-in the device code belongs to").toBe(
       (b.states.find((state) => state.step === "waiting-for-device") as Extract<SetupState, { step: "waiting-for-device" }>).code,

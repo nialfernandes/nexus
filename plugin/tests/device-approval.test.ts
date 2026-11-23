@@ -119,7 +119,10 @@ describe("device A approves a new device B", () => {
     expect(approved!.code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
     expect(screen.code, "the code B showed with its link is the sign-in's, not the matching code").not.toBe(approved!.code);
     expect(a.log.to("GET device/waiting"), "A got the sign-in and its key from the list of those waiting").toHaveLength(1);
-    expect(a.log.to("GET device/pending"), "and asked Nexus nothing more about it: the list held the key").toEqual([]);
+    // The list held the key. Because an agent identity exists on this server, A also asked which identity this sign-in is for, and whether
+    // it is an agent (reads only, and only to choose the screen: the key is sealed to the key whose code was typed, whatever they say).
+    expect(a.log.to("GET identities"), "A asked which identities are agents, once").toHaveLength(1);
+    expect(a.log.to("GET device/pending"), "and which identity the one sign-in is for").toHaveLength(1);
 
     // B has the approval but uses nothing of it yet.
     expect(b.unlock.keys(), "still locked until the person confirms").toBeNull();
@@ -312,7 +315,8 @@ describe("a server that makes or swaps the approval", () => {
     expect(refused).toBeInstanceOf(ApprovalError);
     expect((refused as ApprovalError).reason).toBe("wrong-key-code");
     expect(a.log.to("POST device/approve"), "A sent no approval at all").toEqual([]);
-    expect(a.log.requests().length - sent, "A only looked: the list of the sign-ins waiting, with the keys in it").toBe(1);
+    // A only looked: the list of the sign-ins waiting (with the keys in it), the identities, and which identity the one sign-in is for.
+    expect(a.log.requests().length - sent, "three reads").toBe(3);
     expect(server.approvalsHeld(signInCode), "so there is nothing sealed to the server's key for it to open").toBe(0);
   });
 

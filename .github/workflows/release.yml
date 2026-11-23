@@ -2,8 +2,8 @@
 # (add this repository once in BRAT; it installs the latest release and updates itself). The release carries the three files
 # Obsidian loads, main.js, manifest.json and styles.css, built here from the tagged commit, and nothing else.
 #
-# To release: run `npm run release:bump -- 0.3.1` at the repository root (it changes the version in plugin/manifest.json and
-# plugin/versions.json together), commit that, and push a tag with the same name, 0.3.1, on the commit. A tag has three
+# To release: run `npm run release:bump -- 0.4.1` at the repository root (it changes the version in plugin/manifest.json and
+# plugin/versions.json together), commit that, and push a tag with the same name, 0.4.1, on the commit. A tag has three
 # numbers and no `v`, as Obsidian asks. A tag that is not the manifest's version stops the run at its first step, before
 # anything is built or released. The two checks and the list of the three files are in .github/release/check-release.mjs.
 #

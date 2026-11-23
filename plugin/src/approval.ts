@@ -10,8 +10,10 @@
 //
 //   THE APPROVING DEVICE (`listWaitingDevices`, then `approveDevice`). It is unlocked. Nexus is asked which sign-ins are waiting
 //   (GET /device/waiting: each one's name, its sign-in code and the public key it sent) and this device shows them BY NAME: one waiting
-//   is named in the screen's slab, several are a short list to pick from. The person then reads the DEVICE CODE (the key code) off the new
-//   device and types only that here. Nexus cannot be trusted with those keys: a key of its own put in a new device's place would be sent
+//   is named in the screen's slab, several are a short list to pick from. A sign-in that asked to be an AGENT (`nexus-agent join`) is known by
+//   its identity's kind (GET /identities, and GET /device/pending for the identity a sign-in asked for), and is drawn as the key being given
+//   to it: the owner's calls, believed only to choose the screen. The person then reads the DEVICE CODE (the key code) off the new
+//   device (an agent calls it its AGENT CODE) and types only that here. Nexus cannot be trusted with those keys: a key of its own put in a new device's place would be sent
 //   the vault key. So this device works out the key code of the chosen device's key itself and seals nothing unless it is the code the
 //   person typed. Then it seals the vault key to that key, with the vault id and the kid, and sends the approval with the allow, and a
 //   public key of its own for this approval. It shows the person the matching code.
@@ -219,6 +221,10 @@ export interface WaitingDevice {
   signInCode: string;
   /** The public key, as Nexus gave it. Nexus is believed about nothing but that this sign-in exists: the typed code is checked against this key. */
   deviceKey: Uint8Array;
+  /** The name of the identity it asked to sign in as (the agent's name, when it is one), or null when Nexus did not say. Shown as text. */
+  identity: string | null;
+  /** True when that identity is an agent. An agent is given the key and nothing is shown back for it to type; a device is shown a matching code. */
+  agent: boolean;
 }
 
 /**
@@ -239,9 +245,44 @@ export async function listWaitingDevices(deps: ApproveDeps): Promise<WaitingDevi
     if (typeof code !== "string" || typeof deviceKey !== "string") continue;
     const key = decodeBase64(deviceKey);
     if (key === null || key.length !== 32) continue;
-    found.push({ label: typeof label === "string" ? label : "", signInCode: code, deviceKey: key });
+    found.push({ label: typeof label === "string" ? label : "", signInCode: code, deviceKey: key, identity: null, agent: false });
   }
+  await nameWhoAsks(call, base, found);
   return found;
+}
+
+/**
+ * Says, for each waiting sign-in, which identity it asked to be and whether that is an agent (GET /identities lists every identity with
+ * its kind, and GET /device/pending?code= says which identity one sign-in asked for; both are the owner's). Nothing is asked about the
+ * sign-ins when no identity is an agent. Nexus is believed about this only to choose the words and the ending of the screen: the key is
+ * sealed only to the key whose code the person typed, whatever it says here. When either answer is not understood the sign-in is drawn as a
+ * device, the way it always was.
+ */
+async function nameWhoAsks(call: Call, base: string, found: WaitingDevice[]): Promise<void> {
+  if (found.length === 0) return;
+  const kinds = new Map<string, string>();
+  try {
+    const listed = await call({ url: `${base}/identities`, method: "GET" });
+    if (listed.status !== 200) return;
+    for (const identity of Array.isArray(body(listed).identities) ? (body(listed).identities as unknown[]) : []) {
+      const { name, kind } = (identity ?? {}) as { name?: unknown; kind?: unknown };
+      if (typeof name === "string" && typeof kind === "string") kinds.set(name, kind);
+    }
+  } catch {
+    return;
+  }
+  if (![...kinds.values()].includes("agent")) return;
+  for (const device of found) {
+    try {
+      const asked = await call({ url: `${base}/device/pending?code=${encodeURIComponent(device.signInCode)}`, method: "GET" });
+      const identity = asked.status === 200 ? body(asked).identity : undefined;
+      if (typeof identity !== "string") continue;
+      device.identity = identity;
+      device.agent = kinds.get(identity) === "agent";
+    } catch {
+      /* drawn as a device */
+    }
+  }
 }
 
 /**

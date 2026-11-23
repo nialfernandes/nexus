@@ -59,6 +59,16 @@ const readAll = (root) => ({
 });
 const snapshot = (root) => JSON.stringify(readAll(root));
 
+// The plugin's version as it is committed, and the versions after it that the tests bump a copy to. They are worked out from the manifest,
+// so a release (which moves the manifest) does not break a test that bumps "the next version".
+const CURRENT = readJson(path.join(REAL_PLUGIN, "manifest.json")).version;
+const NEXT = nextVersion(CURRENT, "patch");
+const AFTER_NEXT = nextVersion(NEXT, "patch");
+const NEXT_MINOR = nextVersion(CURRENT, "minor");
+const NEXT_MAJOR = nextVersion(CURRENT, "major");
+/** A version as text to put in a pattern: its dots are dots. */
+const literally = (version) => version.replaceAll(".", "\\.");
+
 /** Runs a script the way the workflow and a person do, and says what it exited with and printed. */
 function run(script, args) {
   const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
@@ -66,11 +76,11 @@ function run(script, args) {
 }
 
 describe("the tag has to be the plugin's version", () => {
-  it("passes for the tag 0.3.1 on a commit whose manifest says 0.3.1: the worked example", () => {
+  it("passes for the tag of the next version on a commit whose manifest says that version: the worked example", () => {
     const { root, plugin } = repoCopy();
-    bump("0.3.1", { pluginDir: plugin });
-    assert.equal(readAll(root).manifest.version, "0.3.1");
-    assert.deepEqual(tagProblems("0.3.1", plugin), []);
+    bump(NEXT, { pluginDir: plugin });
+    assert.equal(readAll(root).manifest.version, NEXT);
+    assert.deepEqual(tagProblems(NEXT, plugin), []);
   });
 
   it("stops a tag that is not the manifest's version, and names both", () => {
@@ -161,22 +171,22 @@ describe("the version bump", () => {
   it("changes manifest.json and versions.json together, and the package, the lockfile and the README with them", () => {
     const { root, plugin } = repoCopy();
     const before = readAll(root);
-    const result = bump("0.3.1", { pluginDir: plugin });
+    const result = bump(NEXT, { pluginDir: plugin });
     const after = readAll(root);
 
-    assert.equal(result.version, "0.3.1");
-    assert.equal(after.manifest.version, "0.3.1");
-    assert.deepEqual(after.versions, { ...before.versions, "0.3.1": before.manifest.minAppVersion });
-    assert.equal(after.pkg.version, "0.3.1");
-    assert.equal(after.lock.packages.plugin.version, "0.3.1");
-    assert.ok(after.readme.includes("(for example `0.3.1`)"));
-    assert.match(after.readme, /The manifest's version\s+is `0\.3\.1`/);
-    assert.ok(!after.readme.includes("`0.3.0`"), "no old version is left in the README");
+    assert.equal(result.version, NEXT);
+    assert.equal(after.manifest.version, NEXT);
+    assert.deepEqual(after.versions, { ...before.versions, [NEXT]: before.manifest.minAppVersion });
+    assert.equal(after.pkg.version, NEXT);
+    assert.equal(after.lock.packages.plugin.version, NEXT);
+    assert.ok(after.readme.includes(`(for example \`${NEXT}\`)`));
+    assert.match(after.readme, new RegExp(`The manifest's version\\s+is \`${literally(NEXT)}\``));
+    assert.ok(!after.readme.includes(`\`${CURRENT}\``), "no old version is left in the README");
     // Nothing else moved: the manifest is the same but for its version, the lockfile but for the plugin's line.
     assert.deepEqual({ ...after.manifest, version: before.manifest.version }, before.manifest);
     assert.deepEqual({ ...after.pkg, version: before.pkg.version }, before.pkg);
     const lockBefore = structuredClone(before.lock);
-    lockBefore.packages.plugin.version = "0.3.1";
+    lockBefore.packages.plugin.version = NEXT;
     assert.deepEqual(after.lock, lockBefore);
     assert.deepEqual(result.files.sort(), ["package-lock.json", "plugin/README.md", "plugin/manifest.json", "plugin/package.json", "plugin/versions.json"]);
   });
@@ -184,15 +194,16 @@ describe("the version bump", () => {
   it("leaves a plugin that the release check then accepts for the new tag, and not for the old one", () => {
     const { plugin } = repoCopy();
     bump("minor", { pluginDir: plugin });
-    assert.deepEqual(tagProblems("0.4.0", plugin), []);
-    assert.notDeepEqual(tagProblems("0.3.0", plugin), []);
+    assert.deepEqual(tagProblems(NEXT_MINOR, plugin), []);
+    assert.notDeepEqual(tagProblems(CURRENT, plugin), []);
   });
 
   it("keeps every old line of versions.json and writes each file the way it was written", () => {
     const { root, plugin } = repoCopy();
-    bump("0.3.1", { pluginDir: plugin });
-    bump("0.3.2", { pluginDir: plugin });
-    assert.deepEqual(Object.keys(readAll(root).versions), ["0.3.0", "0.3.1", "0.3.2"]);
+    const lines = Object.keys(readAll(root).versions);
+    bump(NEXT, { pluginDir: plugin });
+    bump(AFTER_NEXT, { pluginDir: plugin });
+    assert.deepEqual(Object.keys(readAll(root).versions), [...lines, NEXT, AFTER_NEXT]);
     for (const name of ["manifest.json", "versions.json", "package.json"]) {
       const text = readFileSync(path.join(plugin, name), "utf8");
       assert.equal(text, `${JSON.stringify(JSON.parse(text), null, 2)}\n`, `${name} keeps its two-space layout and last newline`);
@@ -208,27 +219,28 @@ describe("the version bump", () => {
     const { root, plugin } = repoCopy();
     const result = run(BUMP, []);
     assert.equal(result.code, 2, "no version given is a wrong use");
-    bump("1.0.0", { pluginDir: plugin, minApp: "1.9.2" });
+    const older = readAll(root).versions;
+    bump(NEXT_MAJOR, { pluginDir: plugin, minApp: "1.9.2" });
     const after = readAll(root);
     assert.equal(after.manifest.minAppVersion, "1.9.2");
-    assert.equal(after.versions["1.0.0"], "1.9.2");
-    assert.equal(after.versions["0.3.0"], "1.8.7", "the older line still says what the older version needed");
-    assert.deepEqual(tagProblems("1.0.0", plugin), []);
+    assert.equal(after.versions[NEXT_MAJOR], "1.9.2");
+    assert.deepEqual({ ...after.versions, [NEXT_MAJOR]: undefined }, { ...older, [NEXT_MAJOR]: undefined }, "every older line still says what its version needed");
+    assert.deepEqual(tagProblems(NEXT_MAJOR, plugin), []);
   });
 
   it("refuses a version that is not later, not a version, or already in versions.json, and writes nothing", () => {
     const { root, plugin } = repoCopy();
     const before = snapshot(root);
-    for (const request of ["0.3.0", "0.2.9", "v0.3.1", "0.3", "0.3.1-beta", "next", ""]) {
+    for (const request of [CURRENT, "0.0.1", `v${NEXT}`, "0.3", `${NEXT}-beta`, "next", ""]) {
       assert.throws(() => bump(request, { pluginDir: plugin }), Error, `"${request}" was taken`);
     }
-    assert.throws(() => bump("0.3.1", { pluginDir: plugin, minApp: "1.9" }), /not an Obsidian version/);
+    assert.throws(() => bump(NEXT, { pluginDir: plugin, minApp: "1.9" }), /not an Obsidian version/);
     assert.equal(snapshot(root), before, "every file is as it was");
 
     const versions = readJson(path.join(plugin, "versions.json"));
-    writeFileSync(path.join(plugin, "versions.json"), JSON.stringify({ ...versions, "0.3.1": "1.8.7" }));
+    writeFileSync(path.join(plugin, "versions.json"), JSON.stringify({ ...versions, [NEXT]: "1.8.7" }));
     const withLine = snapshot(root);
-    assert.throws(() => bump("0.3.1", { pluginDir: plugin }), /already has 0\.3\.1/);
+    assert.throws(() => bump(NEXT, { pluginDir: plugin }), new RegExp(`already has ${literally(NEXT)}`));
     assert.equal(snapshot(root), withLine);
   });
 
@@ -237,7 +249,7 @@ describe("the version bump", () => {
     const readme = readFileSync(path.join(plugin, "README.md"), "utf8").replace(/\(for example `\d+\.\d+\.\d+`\)/, "(for example a tag)");
     writeFileSync(path.join(plugin, "README.md"), readme);
     const before = snapshot(root);
-    assert.throws(() => bump("0.3.1", { pluginDir: plugin }), /README\.md has no tag example/);
+    assert.throws(() => bump(NEXT, { pluginDir: plugin }), /README\.md has no tag example/);
     assert.equal(snapshot(root), before, "the manifest is not changed ahead of the README");
   });
 
