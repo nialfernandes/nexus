@@ -293,6 +293,21 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(page.el.waiting.textsOf("strip__words")).toEqual(["Pixel wants in"]);
   });
 
+  it("takes a strip away by itself when Nexus no longer lists it (its code ran out), with no tap, and the list's line comes back", async () => {
+    const fake = new FakeNexus({ knownOwner: true });
+    const page = await openNexusPage(fake);
+    expect(page.el.waiting.textsOf("strip__words")).toEqual(["iPhone wants in"]);
+    expect(page.el.line.hidden).toBe(true);
+
+    fake.waiting = [];
+    await page.advance(5000);
+    expect(page.el.waiting.children, "the strip is gone").toEqual([]);
+    expect(page.el.waiting.hidden).toBe(true);
+    expect(page.el.line.hidden).toBe(false);
+    expect(page.el.line.textContent).toBe("Everything that can read your notes.");
+    expect(fake.callsTo("device/deny").concat(fake.callsTo("device/approve")), "nothing was answered").toEqual([]);
+  });
+
   it("opens the views from the bar and the tabs, with the title, the back chevron and the buttons each one has", async () => {
     const page = await openNexusPage(new FakeNexus({ knownOwner: true, waiting: [] }));
     const shown = () => ({
