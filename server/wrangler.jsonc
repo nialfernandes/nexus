@@ -3,10 +3,11 @@
   "name": "nexus",
   "compatibility_date": "2026-06-01",
   "main": "src/plugs/cloudflare/worker.ts",
-  // The device approval page: its files in public/nexus (the page, its stylesheet and script, and three typefaces), served
-  // by the Worker to whoever opens the page's link (page.ts): they hold nothing private, and the page is where the owner signs in with
-  // the owner secret. They sit at the same address the page is served at, so `run_worker_first` makes the Worker see every /nexus/*
-  // request before the asset server can hand out a file the page is not made of (a folder, the licence texts).
+  // The device approval page and the Nexus page: their files in public/nexus (each page, its stylesheet and script, and three typefaces),
+  // served by the Worker to whoever opens a page's link (page.ts): they hold nothing private, and each page is where the owner signs in with
+  // the owner secret. They sit at the same address each is served at (the Nexus page is the folder's own, /nexus/), so `run_worker_first`
+  // makes the Worker see every /nexus/* request before the asset server can hand out a file the pages are not made of (a folder, the
+  // licence texts).
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

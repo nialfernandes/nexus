@@ -164,6 +164,19 @@ describe("the Nexus page, signed in as the owner (the owner's cookie)", () => {
     expect(page.el.people.textsOf("card__quiet"), "the agent with no devices says so").toEqual(["No devices."]);
   });
 
+  it("shows no date for what Nexus has none for: an owner whose createdAt is null (no token yet) is listed whole, and no broken date is drawn", async () => {
+    const fake = new FakeNexus({ knownOwner: true, waiting: [] });
+    fake.identities[0]!.createdAt = null;
+    fake.identities[0]!.devices = [];
+    fake.identities[1]!.devices[0]!.createdAt = null;
+    const page = await openNexusPage(fake);
+
+    expect(page.el.people.textsOf("person__name")).toEqual([WORKED.owner, WORKED.agent]);
+    expect(page.el.people.textsOf("card__quiet"), "the owner has no devices yet").toEqual(["No devices."]);
+    expect(page.el.people.textsOf("device__when"), "a device with no added time shows only when it was last used").toEqual(["Last used never"]);
+    expect(page.el.people.all().map((e) => e.textContent).join(" "), "no 1970, no NaN, no Invalid Date").not.toMatch(/1970|NaN|Invalid/);
+  });
+
   it("shows a device waiting as a strip with its name, who it asks to be and the code it shows, and Allow and Deny are one tap each", async () => {
     const fake = new FakeNexus({ knownOwner: true });
     const page = await openNexusPage(fake);

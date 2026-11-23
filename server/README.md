@@ -11,7 +11,7 @@ for one host. The one plug today is for Cloudflare Workers and D1 (`src/plugs/cl
 [threat model](../docs/THREAT-MODEL.md), which says what the server can still see). The Obsidian plugin in `plugin/`
 encrypts every note and uses the routes below, and it has the screens that make and unlock the vault key and add another
 device (see "The screens" in the [plugin's README](../plugin/README.md)). It syncs once the vault is unlocked on a device,
-and until then it has no key and syncs nothing. The one page this server has is the device approval page (below). Nothing
+and until then it has no key and syncs nothing. The two pages this server has are the device approval page and the Nexus page (below). Nothing
 is deployed.
 
 ## What it stores
@@ -133,14 +133,38 @@ listing and nothing from before it.
 
 ## Addresses: `/nexus`
 
-Everything is under `/nexus`: the API at `/nexus/api/...` and the device approval page at `/nexus/approve`. Nothing else
+Everything is under `/nexus`: the API at `/nexus/api/...`, the device approval page at `/nexus/approve` and the Nexus page at `/nexus/`. Nothing else
 answers: the older `/apps/nexus` prefix has been removed, and an address under it is a 404 like any other that is not
 Nexus's. A link a device is handed is always on `/nexus`. `src/addresses.ts` is the one place the prefix is written.
 
-On Cloudflare the page's files (the page, its stylesheet and script, and its three typefaces in `public/nexus/fonts`) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
+On Cloudflare the pages' files (each page, its stylesheet and script, and the three typefaces in `public/nexus/fonts`) sit in the assets under `public/nexus`, the same address the Worker serves them at, so
 `wrangler.jsonc` sets `assets.run_worker_first` to `["/nexus/*"]`: without it the asset server would hand out every file under
-`public/nexus` (the licence texts beside the typefaces, a folder) and not only the page's own six, which the Worker serves. (The tests use a stand-in for the asset server, so this setting is the part
+`public/nexus` (the licence texts beside the typefaces, a folder) and not only the pages' own nine, which the Worker serves. (The tests use a stand-in for the asset server, so this setting is the part
 they cannot prove on Cloudflare itself.)
+
+## The Nexus page: `/nexus/`
+
+The owner's own page, for bringing an agent or a device into Nexus from a screen and not from commands. It lives in
+`public/nexus/` (`index.html`, `nexus.js` and `nexus.css`, beside the approval page's files, which it also loads for its look) and is served at
+`/nexus/` by `src/plugs/cloudflare/page.ts`, to anyone, as the approval page is: it holds nothing private, and the owner signs in on
+it with the owner secret exactly as on the approval page (the header `x-nexus-owner-secret`, over https or a loopback address only,
+held in one variable of the script and kept nowhere; a browser that holds the owner's cookie is not asked). Signed out, it shows that
+field and nothing else. Signed in, it shows:
+
+- **Who is connected:** the owner first, then each agent, each with its devices under it (label, added, last used, written as
+  `Sat 12 Sep · 12:00`), from `GET identities`. A time Nexus does not have is left out.
+- **A device waiting:** each sign-in from `GET device/waiting` as a strip at the top, with the code the device shows on its own screen
+  (from `device/pending`, as the approval page shows it), Allow and Deny through `device/approve` and `device/deny`. The list is asked
+  for again every few seconds.
+- **Add an agent:** a name and Add, through `POST identity` with kind `agent`; then the one command to run on the agent, with Copy:
+  `NEXUS_ADDRESS=<this server>/nexus/api nexus-agent sign-in --identity <name> --label <name>`, whose sign-in then waits in the strip
+  for Allow. The page says the key is handed over in Obsidian, on a device that holds it, never on this page.
+- **Remove:** a device (`token/revoke`) or an agent (`identity/remove`). The row goes at once with Undo, and the call is sent only
+  when the Undo wait (eight seconds) has passed, so Undo really puts it back; closing the page inside the wait sends nothing.
+
+Every refusal is shown in Nexus's own words, as the server sent them. The look is the approval page's own for now (light only); the
+drawn boards replace it. `src/nexus-page*.test.ts` run the page's own script against a fake of Nexus
+(`src/__fixtures__/nexus-page-answers.ts`, held to the real routes' answers wherever a real route exists), and `e2e/nexus.spec.ts` looks at it in a browser.
 
 ## A vault that was kept in plain text
 
@@ -194,8 +218,8 @@ package.
 Serve Nexus over HTTPS only. The owner's secret and every token travel in request headers.
 
 The Worker (`src/plugs/cloudflare/worker.ts`) sends `/nexus/api/*` to Nexus, gives the
-device approval page (`public/nexus/`, served through the `ASSETS` binding) to whoever opens its link, and answers 404 to
-everything else. The files of the page are static and identical for everyone and hold nothing private, so they are served
+device approval page and the Nexus page (`public/nexus/`, served through the `ASSETS` binding) to whoever opens their links, and answers 404 to
+everything else. The files of the pages are static and identical for everyone and hold nothing private, so they are served
 without a sign-in: the owner signs in on the page itself (below). Every call the page makes to Nexus is checked as the
 owner's, and `run_worker_first` (above) makes the Worker the only way to the files.
 
@@ -301,8 +325,8 @@ plug's use of the real D1 and of the real asset server is the part they do not p
 
 ### The browser spec
 
-The approval page is also looked at in a real browser, at 375 px (a phone) and 1280 px (a desktop): `e2e/approve.spec.ts`, run by
-Playwright. It covers the owner-secret step (a wrong secret, then the right one), Allow, Deny, the two cards for a code that ran
+The approval page and the Nexus page are also looked at in a real browser, at 375 px (a phone) and 1280 px (a desktop): `e2e/approve.spec.ts` and `e2e/nexus.spec.ts` (the Nexus page: the owner secret, who is connected, a device waiting, adding an agent, removing with Undo, refusals), run by
+Playwright. The rest of this section is about the approval page's. It covers the owner-secret step (a wrong secret, then the right one), Allow, Deny, the two cards for a code that ran
 out and a code that was used, the three typefaces loading, the light colours (and that a browser asking for dark gets the same
 light page), and that nothing is wider than the window. The page's files are served from `public/nexus` as they are, and Nexus's
 answers are the shapes in `src/__fixtures__/approve-answers.ts` (which `src/approval-page.test.ts` holds to what the real routes
@@ -319,9 +343,9 @@ browser (about 150 MB) downloaded first. `.github/workflows/check.yml` runs it a
 `.github/check-pinned-actions.sh` has nothing new to pin.
 
 ```
-e2e/                 the browser spec of the approval page (Playwright)
+e2e/                 the browser specs of the approval page and the Nexus page (Playwright)
 migrations/          the schema, in the SQL common ground of SQLite and Postgres
-public/nexus/        the device approval page: its page, stylesheet and script, and its three typefaces
+public/nexus/        the device approval page and the Nexus page: each one's page, stylesheet and script, and the three typefaces
 src/ports.ts         what the logic needs from a host
 src/routes.ts        the routes, and the one place a request becomes an answer
 src/*.ts             the logic: the store, wraps, identities, devices, addresses

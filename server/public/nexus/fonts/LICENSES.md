@@ -1,7 +1,7 @@
-# Fonts the approval page uses
+# Fonts the pages use
 
-The page loads nothing from outside Nexus, so its three typefaces are served from here (to whoever opens the
-page, like the rest of its files: see `src/plugs/cloudflare/page.ts`). Each is a variable font, Latin characters only.
+The approval page and the Nexus page load nothing from outside Nexus, so their three typefaces are served from here (to whoever opens a
+page, like the rest of their files: see `src/plugs/cloudflare/page.ts`). Each is a variable font, Latin characters only.
 
 | File | Typeface | Used for | Licence | Copyright | Licence text |
 | --- | --- | --- | --- | --- | --- |

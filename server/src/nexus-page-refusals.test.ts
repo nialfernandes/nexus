@@ -50,6 +50,20 @@ describe("the Nexus page shows Nexus's own words for a refused call", () => {
     expect(page.el.command.hidden).toBe(false);
   });
 
+  it("a refusal for too many waiting sign-ins (a 429 with plain words): shown as any other refusal is, whichever call it came on", async () => {
+    const words = "Too many sign-ins are waiting. Try again in a few minutes.";
+    const fake = new FakeNexus({ knownOwner: true });
+    const answer = fake.answer.bind(fake);
+    fake.answer = (method, route, body, secret) => (method === "POST" && route === "identity" ? { status: 429, json: { error: words } } : answer(method, route, body, secret));
+    const page = await ownersPage(fake);
+    page.el["agent-name"].value = WORKED.newAgent;
+    page.el["add-form"].submit();
+    await page.settled();
+
+    expect(page.el["add-alert"].textContent, "the server's words, whatever the status").toBe(words);
+    expect(page.el.command.hidden).toBe(true);
+  });
+
   it("a code that ran out: Allow shows Nexus's words above the list, and the device that can no longer be answered is taken off it", async () => {
     const fake = new FakeNexus({ knownOwner: true });
     const page = await ownersPage(fake);

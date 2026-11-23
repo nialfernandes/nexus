@@ -32,8 +32,9 @@ export const taken = (name: string) => ({ error: `There is already an identity c
 export const NO_IDENTITY = { error: "There is no identity with that name." };
 export const NO_TOKEN = { error: "There is no token with that id." };
 
-export interface FakeDevice { id: string; label: string; createdAt: number; lastUsedAt: number | null }
-export interface FakeIdentity { name: string; kind: "person" | "agent" | "app"; owner: boolean; createdAt: number; devices: FakeDevice[] }
+export interface FakeDevice { id: string; label: string; createdAt: number | null; lastUsedAt: number | null }
+/** `createdAt` is null for the owner until it has its first token (what GET identities answers). */
+export interface FakeIdentity { name: string; kind: "person" | "agent" | "app"; owner: boolean; createdAt: number | null; devices: FakeDevice[] }
 export interface FakeWaiting { code: string; label: string; identity: string; deviceKey: string | null; deviceCode: string | null; expiresAt: number }
 
 /** What a call was: the route after the API's address (a query string included), the method, and the JSON body sent. */

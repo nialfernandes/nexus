@@ -1,4 +1,4 @@
-// The approval page's typefaces and their licences. Each typeface is under the SIL Open Font License 1.1, which says the
+// The typefaces of the approval page and the Nexus page, and their licences. Each typeface is under the SIL Open Font License 1.1, which says the
 // font's own copyright notice and the licence text travel with the font files. So every font file in
 // public/nexus/fonts has to have, beside it, a licence text whose copyright line names its family and which holds the
 // whole licence, and LICENSES.md has to say what is there. The files are read from the folder as they sit in the
@@ -32,7 +32,7 @@ const licenceOf = (fontFile: string): { name: string; text: string } | undefined
   return undefined;
 };
 
-describe("the approval page's typefaces", () => {
+describe("the pages' typefaces", () => {
   it("are found in the folder, so the checks below are not run over nothing", () => {
     expect(fontFiles.length).toBeGreaterThan(0);
   });

@@ -207,7 +207,8 @@
     var row = el('li', 'device');
     var text = el('div', 'device__text');
     text.appendChild(el('p', 'device__label', device.label));
-    text.appendChild(el('p', 'device__when', 'Added ' + when(device.createdAt)));
+    // A time Nexus has not got yet (null) is left out rather than drawn as a broken date.
+    if (typeof device.createdAt === 'number') text.appendChild(el('p', 'device__when', 'Added ' + when(device.createdAt)));
     text.appendChild(el('p', 'device__when', 'Last used ' + (typeof device.lastUsedAt === 'number' ? when(device.lastUsedAt) : NEVER)));
     row.appendChild(text);
     row.appendChild(removeButton(device.label, function () { removeDevice(device); }));

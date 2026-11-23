@@ -1,6 +1,6 @@
 // The edges of identities that the main tests leave alone: who wins when two requests race, which credential counts
 // when a request carries two, the limits on a sign-in a device starts with no credential, what an identity's name may
-// be, and which files the approval page's route will serve. Through the Nexus Worker (see
+// be, and which files the pages' route will serve. Through the Nexus Worker (see
 // __fixtures__/identity-world.ts for how a token is got).
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -153,16 +153,16 @@ describe("routes that are not there, and the two a device calls", () => {
   });
 });
 
-describe("the approval page's route", () => {
-  it("serves the page and the files it is made of, and nothing else under /nexus", async () => {
+describe("the pages' route", () => {
+  it("serves the approval page, the Nexus page and the files they are made of, and nothing else under /nexus", async () => {
     for (const path of [
-      "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js",
+      "/nexus/approve", "/nexus/approve.css", "/nexus/approve.js", "/nexus/", "/nexus/nexus.css", "/nexus/nexus.js",
       "/nexus/fonts/unbounded-var.woff2", "/nexus/fonts/instrument-sans-var.woff2", "/nexus/fonts/jetbrains-mono-var.woff2",
     ]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(200);
     }
     for (const path of [
-      "/nexus/approve.html", "/nexus/", "/nexus/other.js", "/nexus/approve/index.html",
+      "/nexus/approve.html", "/nexus/index.html", "/nexus/other.js", "/nexus/approve/index.html",
       "/nexus/theme-boot.js", "/nexus/fonts/", "/nexus/fonts/LICENSES.md", "/nexus/fonts/other.woff2",
     ]) {
       expect((await sendAs("GET", path, owner)).status, path).toBe(404);
