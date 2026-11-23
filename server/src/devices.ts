@@ -17,6 +17,14 @@
 //
 // Status runs: pending, then approved or denied, then collected.
 //
+// TWO LIMITS ON STARTING, because starting needs no credential. All the sign-ins waiting together are at most MAX_WAITING, and the ones
+// waiting from one caller (the address the host's network plug gives, never read here) are at most MAX_WAITING_PER_CALLER; both are a 429.
+// A host that gives no address has only the first. The address is kept as a hash, beside its sign-in, and goes when the sign-in does.
+//
+// A TOKEN NOBODY COLLECTED. Allowing makes the token's row at once, and the device could work the token out from its own secret, so an
+// allowed sign-in that runs out uncollected has its token revoked (unless it was used). That is done wherever an old sign-in is swept: the
+// next start or allow, or a poll of the sign-in itself.
+//
 // A KEY FOR THE NEW DEVICE. A device may send its public key (an X25519 key, base64) when it starts. The device that
 // allows it, if it holds the vault key, may send with its allow an APPROVAL: the vault key sealed to that public key
 // (docs/FORMAT.md section 7.3), and its own public key for this approval. The server keeps both beside the sign-in,
@@ -40,6 +48,12 @@ export const SIGNIN_LIFETIME_MS = 10 * 60 * 1000;
 export const MAX_LABEL = 80;
 /** Sign-ins that may wait at once. Starting one needs no credential, so a flood must not be able to fill the table. */
 export const MAX_WAITING = 200;
+/**
+ * Sign-ins that may wait at once from one caller (the address the host gives, network in ports.ts). A person adding a device starts one, and
+ * a second or third if a tab is closed or a retry is needed within the ten minutes, and a household or office behind one address may add a
+ * couple at once: five covers that, and leaves one caller 5 of the 200 places, not all of them.
+ */
+export const MAX_WAITING_PER_CALLER = 5;
 /** An expired sign-in is kept this long, so a device that asks late is told it expired, and then it is swept away. */
 const KEEP_EXPIRED_MS = 60 * 60 * 1000;
 
@@ -108,7 +122,11 @@ function approvalBytes(value: unknown): string {
 const tokenOf = async (host: NexusHost, secret: string): Promise<string> =>
   "nx_" + (await host.secrets.hash(`nexus device token:${secret}`));
 
-export async function start(host: NexusHost, origin: string, input: Record<string, unknown>) {
+/** What is kept to count a caller's waiting sign-ins: a hash of the address, never the address. */
+const callerKey = (host: NexusHost, address: string): Promise<string> => host.secrets.hash(`nexus caller:${address}`);
+
+/** `address` is who the host says is calling (null when it cannot say): then only the count of all sign-ins waiting limits a start. */
+export async function start(host: NexusHost, origin: string, input: Record<string, unknown>, address: string | null = null) {
   const label = text(input.label)?.trim() ?? "";
   if (label === "") throw new Refusal(400, "A sign-in needs a label, such as lab-m or Work phone.");
   if ([...label].length > MAX_LABEL) throw new Refusal(400, `The label is too long (the limit is ${MAX_LABEL} characters).`);
@@ -122,6 +140,14 @@ export async function start(host: NexusHost, origin: string, input: Record<strin
   const waiting = await host.sql.first<{ n: number }>(
     "SELECT COUNT(*) AS n FROM nexus_signins WHERE status = 'pending' AND expires_at > ?", [now]);
   if (waiting && waiting.n >= MAX_WAITING) throw new Refusal(429, "Too many sign-ins are waiting. Try again in a few minutes.");
+  const caller = address === null ? null : await callerKey(host, address);
+  if (caller !== null) {
+    const theirs = await host.sql.first<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM nexus_signins WHERE status = 'pending' AND expires_at > ? AND caller = ?", [now, caller]);
+    if (theirs && theirs.n >= MAX_WAITING_PER_CALLER) {
+      throw new Refusal(429, `You already have ${MAX_WAITING_PER_CALLER} sign-ins waiting from here. Wait for one to be answered or to run out, which takes at most ten minutes, then try again.`);
+    }
+  }
 
   const secret = hex(host.secrets.random(32));
   const secretHash = await host.secrets.hash(secret);
@@ -131,14 +157,16 @@ export async function start(host: NexusHost, origin: string, input: Record<strin
     const code = newCode(host);
     try {
       await host.sql.batch([
-        // An approval is deleted before its sign-in is, because it points at it.
+        // An approval is deleted before its sign-in is, because it points at it. A token nobody collected is revoked before its sign-in is
+        // deleted too, because the sign-in is what names it.
         sweepApprovals(now),
+        revokeUncollected(now),
         stmt("DELETE FROM nexus_signins WHERE expires_at < ?", now - KEEP_EXPIRED_MS),
         ...ownerRow(host, identity),
         stmt(
-          `INSERT INTO nexus_signins (code, secret_hash, token_hash, identity, label, created_at, expires_at, status, device_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-          code, secretHash, tokenHash, identity, label, now, expiresAt, deviceKey,
+          `INSERT INTO nexus_signins (code, secret_hash, token_hash, identity, label, created_at, expires_at, status, device_key, caller)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+          code, secretHash, tokenHash, identity, label, now, expiresAt, deviceKey, caller,
         ),
       ]);
     } catch (error) {
@@ -152,6 +180,18 @@ export async function start(host: NexusHost, origin: string, input: Record<strin
 
 /** The statement that deletes every approval that has run out. */
 const sweepApprovals = (now: number) => stmt("DELETE FROM nexus_approvals WHERE expires_at <= ?", now);
+
+/**
+ * The statement that revokes the token of every sign-in that was allowed and then ran out without its device collecting it. The allow made
+ * the token's row, and the device can work the token out from its own secret without ever polling, so a token nobody collected is a
+ * working token nobody means to use. One that was used is left alone: someone is using it, and the owner can revoke it from the list.
+ */
+const revokeUncollected = (now: number) => stmt(
+  `UPDATE nexus_tokens SET revoked_at = ?
+   WHERE revoked_at IS NULL AND last_used_at IS NULL
+     AND token_hash IN (SELECT token_hash FROM nexus_signins WHERE status = 'approved' AND expires_at <= ?)`,
+  now, now,
+);
 
 async function signinFor(host: NexusHost, codeInput: unknown): Promise<SigninRow> {
   if (typeof codeInput !== "string" || codeInput === "") throw new Refusal(400, "A code is needed.");
@@ -236,8 +276,9 @@ export async function approve(host: NexusHost, input: Record<string, unknown>) {
   const now = host.clock.now();
   // The token's row, the approval and the sealed approval are one batch. The insert only matches a sign-in that is still pending and in
   // date, so when two answers arrive together only one of them makes a token, and the other is told the code is used.
-  const [, made] = await host.sql.batch([
+  const [, , made] = await host.sql.batch([
     sweepApprovals(now),
+    revokeUncollected(now),
     stmt(
       `INSERT INTO nexus_tokens (id, token_hash, identity, label, created_at)
        SELECT ?, token_hash, identity, label, ? FROM nexus_signins WHERE code = ? AND status = 'pending' AND expires_at > ?`,
@@ -280,8 +321,11 @@ export async function poll(host: NexusHost, secretInput: unknown) {
   if (row.status === "denied") throw new Refusal(403, "The owner denied this sign-in.");
   const now = host.clock.now();
   if (row.expires_at <= now) {
-    // Run out: an approval that was left for it and never collected goes now, not at some later start.
-    await host.sql.run("DELETE FROM nexus_approvals WHERE code = ?", [row.code]);
+    // Run out: an approval that was left for it and never collected goes now, not at some later start, and so does its token.
+    await host.sql.batch([
+      stmt("DELETE FROM nexus_approvals WHERE code = ?", row.code),
+      revokeUncollected(now),
+    ]);
     throw new Refusal(410, RAN_OUT, EXPIRED);
   }
   if (row.status === "pending") return { status: "pending" };

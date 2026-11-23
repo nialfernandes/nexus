@@ -31,6 +31,7 @@ import { sqlOver } from "@nexus/test-sqlite";
 import { APPROVE_PATH as SERVER_APPROVE_PATH, NEXUS_BASE } from "../../server/src/addresses";
 import type { NexusHost } from "../../server/src/ports";
 import { runNexus } from "../../server/src/routes";
+import { cloudflareNetwork } from "../../server/src/plugs/cloudflare/network";
 import { workerSecrets } from "../../server/src/plugs/cloudflare/secrets";
 import { settingsFromEnv } from "../../server/src/plugs/cloudflare/settings";
 import { OWNER_COOKIE, ownerSignIn } from "../../server/src/plugs/cloudflare/signin";
@@ -79,7 +80,7 @@ export class RealNexus {
     }
     const env = { NEXUS_OWNER: OWNER, NEXUS_OWNER_SECRET: secret };
     const settings = settingsFromEnv(env);
-    this.host = { sql: sqlOver(this.db), clock: { now: () => Date.now() }, secrets: workerSecrets, signIn: ownerSignIn(env, settings), settings };
+    this.host = { sql: sqlOver(this.db), clock: { now: () => Date.now() }, secrets: workerSecrets, signIn: ownerSignIn(env, settings), network: cloudflareNetwork, settings };
   }
 
   /** A server with its tables made and the identity `agents` made the way an operator makes it. */
