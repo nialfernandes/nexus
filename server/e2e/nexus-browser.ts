@@ -176,3 +176,38 @@ export async function likenessToBoard(page: Page, testInfo: TestInfo, board: str
     await helper.close();
   }
 }
+
+/**
+ * How coloured the letters of the first element that matches are: the largest gap, over the element's pixels, between a pixel's strongest and
+ * weakest colour channel (0 to 255). The page's letters are ink on white, so grey letters have a gap of a few at most; letters drawn for a screen
+ * with red, green and blue stripes (sub-pixel text) have coloured edges and a gap of many tens. The element's picture is decoded in a second page
+ * of the browser, as `likenessToBoard` does.
+ */
+export async function mostColouredPixel(page: Page, selector: string): Promise<number> {
+  const box = (await page.locator(selector).first().boundingBox())!;
+  const shot = await page.screenshot({ animations: "disabled", caret: "hide", clip: box });
+  const helper = await page.context().newPage();
+  try {
+    return await helper.evaluate(async (png) => {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("an image did not load"));
+        image.src = `data:image/png;base64,${png}`;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true })!;
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      let most = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        most = Math.max(most, Math.max(data[i]!, data[i + 1]!, data[i + 2]!) - Math.min(data[i]!, data[i + 1]!, data[i + 2]!));
+      }
+      return most;
+    }, shot.toString("base64"));
+  } finally {
+    await helper.close();
+  }
+}

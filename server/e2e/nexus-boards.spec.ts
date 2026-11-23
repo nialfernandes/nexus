@@ -11,7 +11,8 @@
 
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { BOARD, FakeNexus, boardIdentities, type FakeOptions } from "../src/__fixtures__/nexus-page-answers";
-import { LONG_WAIT, expectNoSidewaysScroll, likenessToBoard, open, serve, signIn, style } from "./nexus-browser";
+import { AT_MOST_DIFFERENT, BOARD_BROWSER_ARGS } from "./nexus-board-settings";
+import { LONG_WAIT, expectNoSidewaysScroll, likenessToBoard, mostColouredPixel, open, serve, signIn, style } from "./nexus-browser";
 
 const TEAL = "rgb(47, 205, 184)";
 const GROUND = "rgb(238, 237, 234)";
@@ -21,19 +22,10 @@ const INK_SOFT = "rgb(58, 58, 64)";
 const BOARD_RED = "rgb(220, 38, 38)";
 const CODE_BOX = "rgb(242, 241, 238)";
 
-/**
- * How much of the page may differ from a board's picture. A pixel counts as different only if nothing within a css pixel of it in the other image
- * has its colour (nexus-browser.ts), and the boards' pages are drawn on half pixels, so what is left is the edges of some letters and the last
- * half pixel of the page: the pictures measure 0.25 to 0.95 percent. A misplaced row, button or colour is more, and the checks of sizes and
- * places in each test are what catch a smaller one.
- */
-const AT_MOST_DIFFERENT = 0.012;
-
-// The boards are drawn at twice the size with 1.5 px outlines. A browser that only pretends to be twice the size draws a 1.5 px border 1 px
-// wide, so this file starts its browser at twice the size for real (the flag) as well as saying so (deviceScaleFactor). The flag has to be
-// set for the whole file, which is why it is here and not in the shared configuration.
+// The browser is started with the flags of nexus-board-settings.ts: at twice the size for real, and drawing grey, unhinted letters as the boards
+// have them. The flags have to be set for the whole file, which is why they are here and not in the shared configuration.
 test.use({
-  launchOptions: { args: ["--force-device-scale-factor=2"] },
+  launchOptions: { args: BOARD_BROWSER_ARGS },
   timezoneId: "Australia/Sydney",
   permissions: ["clipboard-read", "clipboard-write"],
   viewport: { width: 375, height: 640 },
@@ -176,6 +168,13 @@ test("board 26a, only you: just the owner's card, one line and a main Add an age
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.locator("#add-open").click();
   await expect(page.locator("#title"), "the bar's Add does the same").toHaveText("add an agent");
+});
+
+test("the letters are grey, as the boards draw them, on a machine that asks for sub-pixel text too: no coloured edge on the device rows", async ({ page }) => {
+  await opened(page, 648);
+  // A device's words, ink on a white card: with grey letters no pixel is more than a few steps from grey.
+  await expect(page.locator(".device__when").first()).toHaveText("added Sat 21 Nov");
+  expect(await mostColouredPixel(page, ".device__text"), "the device's words have no coloured edge").toBeLessThanOrEqual(12);
 });
 
 test("a list with an agent is not the only-you list", async ({ page }) => {
