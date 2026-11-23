@@ -89,7 +89,7 @@ that hide names include Obsidian Sync, Proton Drive and Self-hosted LiveSync
 | Which device or agent wrote each version | The folder structure |
 | The size of each blob, rounded up | What a locked-mode agent read (the server only sees it fetch blobs) |
 | Whether a version is a deletion | |
-| IP addresses, as always | |
+| IP addresses, as always. Nexus itself keeps none: while a device's sign-in waits (at most ten minutes, then an hour more before it is swept away) it keeps a hash of the address it was started from, only to count them (3.8) | |
 
 **Size.** An encrypted note is the length of its text plus a few bytes, so size
 alone says something about a note. Before encrypting, Nexus pads each blob up to
@@ -354,6 +354,47 @@ make the job write wrong or unwanted notes into `Mentions/` (at most 100 for one
 transcript note. It cannot make the job read or change any other note, delete a note, or write outside `Mentions/`: the job has no call
 that deletes, and the only things it changes in a note outside `Mentions/` are one `## Mentions` section and one front matter line. The notes
 it writes are encrypted like any other, so the server sees only their ids and sizes.
+
+### 3.8 A stranger who starts sign-ins, and an approval nobody picks up
+
+A device asks for a sign-in with no credential, because it has none yet. So anyone
+who can reach the server can start one, and nothing about the owner's approval
+stops that. Two things are limited so that this cannot be used against the owner.
+
+- **Filling the waiting list.** At most 200 sign-ins may wait at once, so the table
+  cannot be filled without end. That count alone lets one caller use all 200 and turn
+  away every real device, so at most 5 may wait from one caller at a time. The next
+  is refused with a 429 and a plain sentence, and a second caller is not held back
+  by the first. A person adding a device starts one, or a few if a tab is closed
+  or a retry is needed, inside the ten minutes a sign-in lasts: 5 covers that and
+  leaves one caller 5 of the 200 places. A place comes back when the sign-in is
+  answered or runs out.
+- **Who a caller is** is not Nexus's to know: the host says (`network` in
+  `server/src/ports.ts`). On Cloudflare it is the address in the header
+  `cf-connecting-ip`, and for an IPv6 caller its /64, because one IPv6 caller holds
+  billions of addresses and could otherwise change the end of its own at will.
+  Nexus keeps a hash of it beside the sign-in, never the address, and the hash goes
+  when the sign-in is swept away. A hash of an IPv4 address can be guessed back by
+  trying all of them, so this is not a secret, only no address kept as text.
+  A host that gives none has only the count of 200.
+- **Limits of that.** It stops one caller, not many. An attacker with many addresses
+  (a botnet, many /64s) can still fill the 200 for ten minutes at a time, and the
+  limit keys on what the host calls one caller, so people behind one shared address
+  (an office, a mobile carrier) share its 5. The 200 is the fallback, not a defence
+  against that, and a rate rule at the edge in front of the Worker would be the
+  next layer: none is set up by this repository. The address Cloudflare gives is
+  believed because Cloudflare sets it; its documentation says it holds the client's
+  address, and this document has not found it saying in so many words that a value
+  a caller sends is replaced.
+- **An approval nobody picks up.** Allowing a sign-in makes its token at once, and the
+  device that asked can work the token out from its own secret without ever
+  collecting it. A sign-in that was allowed but is never collected within its ten
+  minutes would leave a working token that nobody means to use. So when such a
+  sign-in runs out, its token is revoked, unless it was used, in the same sweep
+  that clears old sign-ins (the next sign-in that starts or is allowed, or a poll of
+  the sign-in itself). The server has no clock of its own to run at that moment, so
+  the token can live until the next one of those. A token that was collected is the
+  device's now and is not touched: the owner revokes it from the list (3.4).
 
 ## 4. What is out of scope
 

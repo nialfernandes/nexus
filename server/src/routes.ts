@@ -25,6 +25,7 @@
 //   DEVICE APPROVAL (a device asks, the owner allows it, the device is handed a token once)
 //   POST /device/start   { identity, label[, deviceKey] }  no credential: 200 { code, link, secret, expiresAt }. `deviceKey` is the
 //                                                      device's public key (base64, 32 bytes) for a sealed approval to be made to
+//                                                      429 when 200 sign-ins are waiting in all, or 5 from the caller's address (where the host gives one)
 //   POST /device/poll    { secret }                    no credential: 200 pending, or approved with the token once and, if the owner's
 //                                                      device left one, the sealed approval and its device's public key (`approval`,
 //                                                      `approverKey`, base64, else null), deleted as they are handed over
@@ -70,6 +71,8 @@ interface Call {
   /** Who is calling. On a route anyone may call this is NOBODY, and the route never reads it. */
   caller: Caller;
   url: URL;
+  /** Where the host says the request came from (ports.ts `network`), or null when it cannot say. Read only by the routes that limit a caller. */
+  address: string | null;
   /** The JSON body of a POST. Read only by the routes that take one. */
   body: () => Promise<Record<string, unknown>>;
 }
@@ -107,7 +110,7 @@ const ROUTES: readonly Route[] = [
   { method: "POST", name: "token/revoke", who: "owner", run: async (c) => ok(await identities.revokeToken(c.host, (await c.body()).id)) },
 
   // Device approval.
-  { method: "POST", name: "device/start", who: "anyone", run: async (c) => ok(await devices.start(c.host, c.url.origin, await c.body())) },
+  { method: "POST", name: "device/start", who: "anyone", run: async (c) => ok(await devices.start(c.host, c.url.origin, await c.body(), c.address)) },
   { method: "POST", name: "device/poll", who: "anyone", run: async (c) => ok(await devices.poll(c.host, (await c.body()).secret)) },
   { method: "GET", name: "device/pending", who: "owner", run: async (c) => ok(await devices.pending(c.host, param(c, "code"))) },
   { method: "GET", name: "device/waiting", who: "owner", run: async (c) => ok(await devices.waiting(c.host)) },
@@ -184,7 +187,7 @@ export async function runNexus(request: Request, host: NexusHost): Promise<Respo
       return parsed as Record<string, unknown>;
     };
 
-    const answer = await route.run({ host, caller: caller ?? NOBODY, url, body });
+    const answer = await route.run({ host, caller: caller ?? NOBODY, url, address: host.network.callerAddress(request), body });
     return respond(answer.status, answer.json);
   } catch (error) {
     if (error instanceof Refusal) return refuse(error.status, error.message, error.details);
