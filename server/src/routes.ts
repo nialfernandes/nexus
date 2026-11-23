@@ -19,6 +19,9 @@
 //                                                      409 if the server already holds a vault with another vault id (the first wrap sets it, and it never changes)
 //   POST /wrap/delete    { kid, kind }                 200 removed, 404 no such wrap
 //   POST /identity       { name, kind }                200 the identity, 400 a bad name or kind, 409 name taken
+//   GET  /identities                                   200 { identities: [ { name, kind, owner, createdAt, devices: [ { id, label, createdAt, lastUsedAt } ] } ] }: the owner
+//                                                      first, then the rest by name; a device is a token that still works, newest first (never the token)
+//   POST /identity/remove { name }                     200 { result: "removed", name, revoked }: `revoked` is how many working tokens it had, and every device of that identity stops at once; 403 the owner, 404 no such identity, 400 any other field
 //   GET  /tokens                                       200 the tokens that work (never the token), newest first
 //   POST /token/revoke   { id }                        200 revoked, 404 no such token
 //
@@ -106,6 +109,8 @@ const ROUTES: readonly Route[] = [
   { method: "POST", name: "wrap", who: "owner", run: async (c) => operations.setWrap(c.host, c.caller, await c.body()) },
   { method: "POST", name: "wrap/delete", who: "owner", run: async (c) => operations.removeWrap(c.host, await c.body()) },
   { method: "POST", name: "identity", who: "owner", run: async (c) => ok(await identities.createIdentity(c.host, await c.body())) },
+  { method: "GET", name: "identities", who: "owner", run: async (c) => ok({ identities: await identities.listIdentities(c.host) }) },
+  { method: "POST", name: "identity/remove", who: "owner", run: async (c) => ok(await identities.removeIdentity(c.host, await c.body())) },
   { method: "GET", name: "tokens", who: "owner", run: async (c) => ok({ tokens: await identities.listTokens(c.host) }) },
   { method: "POST", name: "token/revoke", who: "owner", run: async (c) => ok(await identities.revokeToken(c.host, (await c.body()).id)) },
 

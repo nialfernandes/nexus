@@ -76,6 +76,67 @@ export async function createIdentity(host: NexusHost, input: Record<string, unkn
   return { name, kind: kind as Kind };
 }
 
+/** A device of an identity: a token that still works. Never the token itself, nor anything made from it. */
+export interface DeviceAnswer { id: string; label: string; createdAt: number; lastUsedAt: number | null }
+
+export interface IdentityListed {
+  name: string;
+  kind: Kind;
+  /** True for the one identity the `owner` setting names. */
+  owner: boolean;
+  /** Unix milliseconds. Null only for the owner before its row has been made (ownerRow): nothing has recorded when it began. */
+  createdAt: number | null;
+  /** The tokens that still work, newest first. */
+  devices: DeviceAnswer[];
+}
+
+/** Every identity, the owner first and then the rest by name, each with the devices it has: the tokens that still work. */
+export async function listIdentities(host: NexusHost): Promise<IdentityListed[]> {
+  const owner = host.settings.owner;
+  const rows = await host.sql.all<{ name: string; kind: Kind; created_at: number }>(
+    "SELECT name, kind, created_at FROM nexus_identities ORDER BY name",
+  );
+  const devicesOf = new Map<string, DeviceAnswer[]>();
+  for (const t of await listTokens(host)) {
+    const devices = devicesOf.get(t.identity) ?? [];
+    devices.push({ id: t.id, label: t.label, createdAt: t.createdAt, lastUsedAt: t.lastUsedAt });
+    devicesOf.set(t.identity, devices);
+  }
+  const listed = (name: string, kind: Kind, createdAt: number | null): IdentityListed =>
+    ({ name, kind, owner: name === owner, createdAt, devices: devicesOf.get(name) ?? [] });
+
+  const ownerRowFound = rows.find((r) => r.name === owner);
+  const first = owner === null ? [] : [ownerRowFound ? listed(owner, ownerRowFound.kind, ownerRowFound.created_at) : listed(owner, "person", null)];
+  return [...first, ...rows.filter((r) => r.name !== owner).map((r) => listed(r.name, r.kind, r.created_at))];
+}
+
+/**
+ * Removes an identity and every device it has, at once: the batch is one transaction, so the identity is wholly there or
+ * wholly gone. Its working tokens are revoked first (and counted: `revoked`), then every row that points at the identity
+ * goes, the revoked tokens' rows included, because a row that points at a name that is gone is refused by the database.
+ * A device that held one of its tokens is turned away from then on (an unknown token is 401, as a revoked one is). The
+ * owner is never removed: it is the one identity that can remove another.
+ */
+export async function removeIdentity(host: NexusHost, input: Record<string, unknown>): Promise<{ result: "removed"; name: string; revoked: number }> {
+  onlyFields(input, ["name"], "Removing an identity");
+  const { name } = input;
+  if (typeof name !== "string" || name === "") throw new Refusal(400, "Removing an identity needs its name.");
+  if (name === host.settings.owner) throw new Refusal(403, "The owner cannot be removed.");
+  const gone = new Refusal(404, "There is no identity with that name.");
+  if (!(await identityExists(host, name))) throw gone;
+
+  const done = await host.sql.batch([
+    stmt("UPDATE nexus_tokens SET revoked_at = ? WHERE identity = ? AND revoked_at IS NULL", host.clock.now(), name),
+    stmt("DELETE FROM nexus_approvals WHERE code IN (SELECT code FROM nexus_signins WHERE identity = ?)", name),
+    stmt("DELETE FROM nexus_signins WHERE identity = ?", name),
+    stmt("DELETE FROM nexus_tokens WHERE identity = ?", name),
+    stmt("DELETE FROM nexus_identities WHERE name = ?", name),
+  ]);
+  // Someone removed the same name between the check and the batch: there was nothing left for it to delete.
+  if (done[4]!.changes === 0) throw gone;
+  return { result: "removed", name, revoked: done[0]!.changes };
+}
+
 // ── tokens ───────────────────────────────────────────────────────────────────
 
 interface TokenRow {
