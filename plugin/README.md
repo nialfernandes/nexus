@@ -291,10 +291,10 @@ Installing through BRAT on the phone needs none of this, so use it when you can.
 For whoever maintains the repository. A release is one command and one tag:
 
 ```
-npm run release:bump -- 0.3.1    # at the repository root: patch, minor or major work too
-git commit -am "chore(plugin): release 0.3.1"
-git tag 0.3.1                    # the tag is the version, with no "v"
-git push origin main 0.3.1
+npm run release:bump -- 0.4.1    # at the repository root: patch, minor or major work too
+git commit -am "chore(plugin): release 0.4.1"
+git tag 0.4.1                    # the tag is the version, with no "v"
+git push origin main 0.4.1
 ```
 
 The bump (`.github/release/bump-version.mjs`) gives the new version to `manifest.json`
