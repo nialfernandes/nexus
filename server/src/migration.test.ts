@@ -1,8 +1,8 @@
 // Migration 0003 turns today's tables into the blob shape. The server cannot encrypt, so it cannot convert a plain text
 // vault: the migration drops the tables that hold paths and texts, and the first device that connects afterwards
 // uploads every note again, encrypted. What is not about notes survives: the identities, and the tokens that were given
-// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied (and 0004 and 0006, which only add the
-// device key, the sealed approval and the caller to the sign-in tables and which the device approval code needs), a plain vault written with
+// out. This builds the database the way an operator's is: migrations 0001 and 0002 applied (and 0004, 0006 and 0007, which only add the
+// device key, the sealed approval, the caller and the order to the sign-in tables and which the device approval code needs), a plain vault written with
 // the SQL the old store used, an identity and a token made through the real device approval; then 0003 is applied.
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -39,13 +39,13 @@ let before: string;
 
 beforeAll(async () => {
   const migrations = nexusMigrations();
-  expect(migrations.length, "0001 to 0004 and 0006 at least").toBeGreaterThanOrEqual(6);
+  expect(migrations.length, "0001 to 0004, 0006 and 0007 at least").toBeGreaterThanOrEqual(7);
   db = freshDatabase();
   // The first two migrations: the database as it was before this change. Migrations 0004 (a device's public key and its sealed
-  // approval) and 0006 (the caller a sign-in was started from) only add to the sign-in tables, which 0003 never touches, and the
-  // device approval the code runs today needs both, so they are applied here, before 0003, where an operator's database would have
+  // approval), 0006 (the caller a sign-in was started from) and 0007 (the order it was started in) only add to the sign-in tables, which 0003 never touches, and the
+  // device approval the code runs today needs all three, so they are applied here, before 0003, where an operator's database would have
   // had them applied after.
-  for (const sql of [migrations[0]!, migrations[1]!, migrations[3]!, migrations[5]!]) await db.applyMigration(sql);
+  for (const sql of [migrations[0]!, migrations[1]!, migrations[3]!, migrations[5]!, migrations[6]!]) await db.applyMigration(sql);
   env = { ...(await nexusEnv()), NEXUS_DB: db };
 
   // A plain vault, written with the statements the old store ran (server/src/store.ts before this change): the note's
