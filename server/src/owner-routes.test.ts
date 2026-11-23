@@ -130,7 +130,7 @@ describe("POST identity/remove", () => {
     const sealed = { approval: Buffer.from(crypto.getRandomValues(new Uint8Array(100))).toString("base64"), approverKey: key };
     bodyOf(await device(owner, env).approve(allowed.code, sealed));
     const count = async (table: string, where: string, ...params: string[]): Promise<number> =>
-      (await env.NEXUS_DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).bind(...params).first<{ n: number }>())!.n;
+      (await env.NEXUS_DB!.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).bind(...params).first<{ n: number }>())!.n;
     expect(await count("nexus_approvals", "code = ?", allowed.code), "the sealed approval is kept").toBe(1);
 
     bodyOf(await vaultAs(laptop.who, env).save(GARDEN_V1, 0));
