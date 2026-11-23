@@ -186,7 +186,9 @@ Both pages' heads name the Nexus app icon (`icon.svg`, `icon-192.png`, `icon-512
 Every refusal is shown in Nexus's own words, as the server sent them (a name that is already an agent is shown in the drawn words). `src/nexus-page*.test.ts`
 run the page's own script against a fake of Nexus (`src/__fixtures__/nexus-page-answers.ts`, held to the real routes' answers wherever a real
 route exists), `e2e/nexus.spec.ts` looks at it in a browser at a phone's width and a desktop's, and `e2e/nexus-boards.spec.ts` reaches each drawn state
-and holds the page against that board's picture.
+and holds the page against that board's picture. The boards have grey, unhinted letters, so that spec starts its browser with flags that draw them so
+whatever the machine's font settings ask for (`e2e/nexus-board-settings.ts`, which also holds the share of a page that may differ from its board; a
+machine that asks for sub-pixel text, with coloured letter edges, failed five boards on GitHub before the flags).
 
 ## A vault that was kept in plain text
 
