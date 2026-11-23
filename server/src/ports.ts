@@ -2,8 +2,8 @@
 //
 // Everything beside this file that is not under plugs/ calls ONLY these interfaces: never `env.NEXUS_DB`, never a
 // Cloudflare type. A host builds a NexusHost from plugs (plugs/cloudflare today). A host that is not Cloudflare
-// writes its own plug: one SqlDb (a Postgres host rewrites the placeholders), a Clock, Secrets, a NexusSignIn and
-// the settings, and changes nothing else.
+// writes its own plug: one SqlDb (a Postgres host rewrites the placeholders), a Clock, Secrets, a NexusSignIn, a
+// NexusNetwork and the settings, and changes nothing else.
 //
 // THE SQL CONTRACT. `sql` speaks the common ground of SQLite and Postgres:
 //   - `?` placeholders, in order. (A Postgres plug rewrites them to $1, $2, ...)
@@ -68,6 +68,20 @@ export interface NexusSignIn {
 }
 
 /**
+ * What Nexus needs to know about where a request came from. A device that starts a sign-in has no credential, so the one thing
+ * that tells one caller from another is the address it called from, and only the host knows how to read that (on Cloudflare it
+ * is a header Cloudflare sets; behind another proxy it is another). Nexus never reads an address itself.
+ */
+export interface NexusNetwork {
+  /**
+   * Who sent this request, as a short text that is the same for the same caller: an address, or for a caller that holds a whole
+   * range of addresses (an IPv6 caller holds billions) the range. Null when the host cannot say, and then Nexus applies only the
+   * limits that need no caller (the count of all sign-ins waiting), as it did before it asked.
+   */
+  callerAddress(request: Request): string | null;
+}
+
+/**
  * What the person who runs this Nexus has chosen. Each setting is optional, and left out means none.
  *
  *   owner    The name of the identity that alone may manage identities, tokens and the key wraps and answer a
@@ -92,5 +106,6 @@ export interface NexusHost {
   clock: Clock;
   secrets: Secrets;
   signIn: NexusSignIn;
+  network: NexusNetwork;
   settings: NexusSettings;
 }

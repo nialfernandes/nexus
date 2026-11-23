@@ -76,6 +76,16 @@ Sign-in tokens, device labels and identity names are kept, since the server need
   the server has no clock of its own to run at that moment. A server can still make or swap an approval, so the new
   device does not use the key in one until a person has compared the matching code on both screens
   ([docs/FORMAT.md](../docs/FORMAT.md) section 7.4).
+- **Starting a sign-in needs no credential, so two caps limit it** (both a `429` in plain words). At most **200** sign-ins wait at
+  once in all, and at most **5** wait at once from one caller, so one caller cannot use up the 200 and turn every real device
+  away; a second caller can still start one. A place comes back when a sign-in is answered or runs out. A caller is whatever the
+  host's `network` plug says (below): on Cloudflare the address in `cf-connecting-ip`, an IPv6 caller by its /64. Nexus keeps
+  only a hash of it beside the sign-in. A host that gives no address has only the 200. It stops one caller, not many
+  addresses, or people sharing one: [docs/THREAT-MODEL.md](../docs/THREAT-MODEL.md) 3.8 says where it ends.
+- **A token nobody collected is revoked.** Allowing a sign-in makes its token at once, and the device can work it out
+  from its own secret without a poll. A sign-in that was allowed and then ran out (ten minutes) without being collected has its
+  token revoked, if it was never used, when the next sign-in starts or is allowed or its own device polls (the same sweep
+  that deletes its approval), and it is gone from `GET /tokens`. A token that was collected, or used, is left alone.
 
 Gone from earlier versions of this server: `/search` (a device searches its own copy), the folder rights and the
 `/rights` route, `/move` (a rename is a new blob with the new path inside it, saved as the next version of the same id),
@@ -104,7 +114,7 @@ told so and nothing of it is kept. The full contract is at the top of `src/route
 | `POST /identity` `{ name, kind }`, `GET /tokens`, `POST /token/revoke` `{ id }` | owner | Managing |
 | `GET /identities` | owner | `200 { identities: [ { name, kind, owner, createdAt, devices: [ { id, label, createdAt, lastUsedAt } ] } ] }`: every identity, the owner first and then the rest by name. `owner` is true for the one identity the `NEXUS_OWNER` setting names, and its `createdAt` is `null` until it has a token or a sign-in (nothing has recorded when it began). A device is a token that still works, newest first, with when it was made and last used (`null` until used); a revoked token is not listed. Never a token, nor anything made from one |
 | `POST /identity/remove` `{ name }` | owner | `200 { result: "removed", name, revoked }`: `revoked` is how many working tokens the identity had. In one database transaction it revokes them, then removes the identity with its sign-ins, sealed approvals and token rows (the database does not let a row point at a name that is gone), so every device it has is turned away `401` at once. The notes it saved stay, under the device that saved each. The name can be made again, with no device from before. `403` for the owner, `404` for a name that is no identity, `400` for a missing name or any other field |
-| `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token |
+| `POST /device/start`, `POST /device/poll` | nobody needs a sign-in | A device asks for a token. `start` is `429 { error }` when 200 sign-ins are waiting in all, or 5 from the caller's address (where the host gives one): wait for one to be answered or to run out, at most ten minutes |
 | `GET /device/waiting` | owner | `200 { signins: [ { label, code, deviceKey } ] }`: the sign-ins still waiting for an answer (not answered, not run out), oldest first, with nothing secret in them (`deviceKey` is the public key the device sent, base64, or null when it sent none). The approving device shows the labels so a person can say which device is meant, lists the ones that sent a key, and checks the code a person types against the key of the one chosen, which it works out itself: the list has no `code` to search by and carries no key code to believe. Any identity that is not the owner is `403` and gets no list |
 | `GET /device/pending`, `POST /device/approve`, `POST /device/deny` | owner | Answering a device. `pending` answers `{ code, identity, label, expiresAt, deviceKey, deviceCode }`: `deviceKey` is the public key the device sent and `deviceCode` the code the device shows for it (such as `4TQ8M-W2K0B`, the first 50 bits of SHA-256 over a label and the key: docs/FORMAT.md 7.4), which the approval page draws in boxes for the owner to compare with the new device's screen; both are null for a sign-in that sent no key, and the page then shows the sign-in code. Nothing in either is secret. A code that is finished is `410 { error, reason }`: `reason` is `"expired"` when nobody answered in ten minutes (`error` is "That code has run out.") and `"used"` when it was answered already ("That code was already used."); the approval page draws a different card for each, in those words. A poll of a finished code is the same `410`. A code Nexus has no sign-in for is `404` |
 
@@ -271,13 +281,19 @@ Cloudflare, write one plug that builds a `NexusHost` and hands each request to `
 - **`signIn`**, a `NexusSignIn`: `identify(request)` answers who is making the request with a browser session, or
   null. It must answer only `{ identity: settings.owner }` or null, and null when there is no owner. How the owner
   proves who they are (a cookie, a header set by a proxy, a client certificate) is the plug's choice.
+- **`network`**, a `NexusNetwork`: `callerAddress(request)` answers who sent the request, as a short text that is the same
+  for the same caller (an address, or for a caller that holds a whole range of addresses, the range), or null when the host
+  cannot say. Only `POST /device/start` asks: it limits the sign-ins waiting from one caller to 5. Null means only the count
+  of all sign-ins waiting (200) applies. The Cloudflare plug reads `cf-connecting-ip`, which Cloudflare gives as the client's
+  address (its documentation does not say a value a caller sends is replaced, which this relies on), and turns an IPv6
+  address into its /64. Nexus never reads an address itself.
 - **`settings`**, a `NexusSettings`: the owner and the address, each `null` when not set, and the size of a page of the
   changes feed, a number of bytes (4,000,000 when the host has no choice), read from the host's own configuration.
 
 Besides the host, the plug must create the tables by applying the files in `migrations/` in name order (split at the
 semicolons: the files hold no semicolon inside a comment or a literal), and may serve the approval page in `public/`
 (it holds nothing private, and the owner may sign in on it). The Cloudflare plug in `src/plugs/cloudflare/` is the worked example: `host.ts` builds the host,
-`d1.ts` is the SQL plug, `secrets.ts` the secrets plug, `signin.ts` the sign-in plug, `settings.ts` reads the
+`d1.ts` is the SQL plug, `secrets.ts` the secrets plug, `signin.ts` the sign-in plug, `network.ts` the network plug, `settings.ts` reads the
 settings, `worker.ts` is the entry, and `app.ts` lets an app in the same Worker call the store without a token.
 
 ## Develop

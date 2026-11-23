@@ -3,6 +3,7 @@
 
 import type { NexusHost, SqlDb } from "../../ports";
 import { d1Sql } from "./d1";
+import { cloudflareNetwork } from "./network";
 import { workerSecrets } from "./secrets";
 import { settingsFromEnv, type SettingsEnv } from "./settings";
 import { ownerSignIn, type SignInEnv } from "./signin";
@@ -30,6 +31,7 @@ export function hostFromEnv(env: unknown): Omit<NexusHost, "signIn"> {
     sql: db ? d1Sql(db) : noDatabase,
     clock: { now: () => Date.now() },
     secrets: workerSecrets,
+    network: cloudflareNetwork,
     settings: settingsFromEnv(env),
   };
 }
