@@ -131,9 +131,11 @@ describe("an agent joins", () => {
     await until("the list", () => title(first.root) === "approve device", () => mac.setup.state);
     expect(words(first.root)).toEqual(expect.arrayContaining(["Which device?", "Work phone", "scribe"]));
     const waiting = (mac.setup.state as { devices: Array<{ label: string; signInCode: string; agent?: boolean }> }).devices;
-    expect(waiting.map((entry) => [entry.label, entry.agent === true]), "only scribe says it is an agent").toEqual([["Work phone", false], ["scribe", true]]);
+    // Both started in the same millisecond, so Nexus lists them in the order of their random codes: each is found by its label.
+    const named = (label: string) => waiting.find((entry) => entry.label === label)!;
+    expect(waiting.map((entry) => [entry.label, entry.agent === true]).sort(), "only scribe says it is an agent").toEqual([["Work phone", false], ["scribe", true]]);
 
-    tap(first.root, `device:${waiting[1]!.signInCode}`);
+    tap(first.root, `device:${named("scribe").signInCode}`);
     expect(title(first.root), "scribe is the key being given").toBe("give the key");
     expect(words(first.root)).toContain("scribe has joined.");
     tap(first.root, "cancel");
@@ -143,7 +145,7 @@ describe("an agent joins", () => {
     const second = screensFor(mac);
     await second.screens.start("approve");
     await until("the list again", () => title(second.root) === "approve device", () => mac.setup.state);
-    tap(second.root, `device:${waiting[0]!.signInCode}`);
+    tap(second.root, `device:${named("Work phone").signInCode}`);
     expect(title(second.root), "the phone is an approved device").toBe("approve device");
     expect(words(second.root)).toContain("Work phone");
     expect(words(second.root)).not.toContain("give the key");
