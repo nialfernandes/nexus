@@ -6,6 +6,7 @@ import { allow, deny } from "./allow";
 import { approveAgent } from "./approve-agent";
 import { createVault } from "./create-vault";
 import { Stop, type Io } from "./io";
+import { join } from "./join";
 import { ENV } from "./labels";
 import { keygen } from "./keygen";
 import { makeIdentity } from "./make-identity";
@@ -15,6 +16,10 @@ import { setUpAgent } from "./set-up-agent";
 import { signIn } from "./sign-in";
 
 const USAGE = `nexus-agent: set up an encrypted Nexus vault for an agent that holds its own key.
+
+For an agent, on the agent itself:
+  join <name>                        join as <name> and be given the key by the owner, typed in Obsidian (the agent code it prints):
+                                     prints the four values below on standard output, so run it as: join <name> > <name>.env
 
 For the person, each step run in your own terminal:
   owner-sign-in --identity <owner>   your own token, made in one step with the owner secret (for create-vault and approve-agent)
@@ -96,6 +101,9 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
       case "deny":
         only(1, "code");
         return await deny(io, words[0]);
+      case "join":
+        only(1, "name");
+        return await join(io, { name: words[0], label: flags.label });
       case "set-up-agent":
         only(0);
         return await setUpAgent(io, { name: flags.name, label: flags.label });

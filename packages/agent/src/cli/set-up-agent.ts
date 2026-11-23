@@ -10,6 +10,7 @@ import { generateDeviceKeyPair } from "@nexus/crypto";
 import { cleanAddress } from "../nexus";
 import { encodeBase64 } from "../base64";
 import { approvalForAgent } from "../setup";
+import { writeAgentValues } from "./agent-values";
 import { Stop, type Io } from "./io";
 import { ENV } from "./labels";
 import { asOwner, requireSecureAddress, checkOwnerSecret, ownerRefusal, readOwnerSecret, signInAndAllow } from "./owner";
@@ -43,10 +44,7 @@ export async function setUpAgent(io: Io, options: { name: string | undefined; la
     const approval = await approvalForAgent(pair.publicKey, keys);
     const token = await signInAndAllow(io, address, owner, options.name, options.label ?? "nexus-agent");
 
-    io.stdout.write(`${ENV.address}=${address}\n`);
-    io.stdout.write(`${ENV.token}=${token}\n`);
-    io.stdout.write(`${ENV.privateKey}=${encodeBase64(pair.privateKey)}\n`);
-    io.stdout.write(`${ENV.approval}=${approval}\n`);
+    writeAgentValues(io, { address, token, privateKey: encodeBase64(pair.privateKey), approval });
     io.stderr.write(`These four values are the agent ${options.name} and are shown once, here: save them in your secrets manager now.\n`);
     return 0;
   } finally {
