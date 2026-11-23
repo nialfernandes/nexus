@@ -31,6 +31,9 @@ default user.
   device that has to join a vault that exists, it asks for the Recovery Key, or for
   the password when one was set up, or for another device that is already unlocked to
   approve it.
+- **Give an agent the key.** An agent that joins with `nexus-agent join <name>` shows an agent
+  code. On a device that holds the vault key, Settings, Nexus, Encryption, **Approve a device** says
+  "<name> has joined." and takes that code: no Recovery Key is typed (see "Giving an agent the key" below).
 - **Sign in once.** Settings, Nexus, Sign in. The plugin asks your server for an
   approval for that user, labelled with this device's name (and a few characters of
   its id when no name was typed), shows the link and the code and opens the link.
@@ -153,6 +156,8 @@ the file names every state and every event in plain words. It covers:
 - **This device approves another device.** It asks Nexus which devices are waiting and names them: one waiting is
   the slab line, several are a short list by name to pick from, none says so and offers to look again. Then the person
   types the device code, and nothing else: the one code the new device shows, checked against the key of the device named.
+  A waiting sign-in that is an **agent that joined** is drawn as the key being given to it instead (boards 31 and 31a): see
+  "Giving an agent the key" below.
 - **This device approves an agent.** The person pastes the agent's public key, and
   the controller seals the vault key to it and shows the approval, for the person to save beside the agent's
   private key. It is the same text `nexus-agent approve-agent` prints, so either can be used, and it is never sent through Nexus.
@@ -211,6 +216,29 @@ unlocks the vault with no Recovery Key typed.
 
 The derivation of both codes is in [docs/FORMAT.md](../docs/FORMAT.md) section 7.4. The vault key goes to the
 unlock port and nowhere else; nothing here writes a key or an approval to disk.
+
+## Giving an agent the key
+
+An agent joins with one command, run on the agent: `nexus-agent join <name>` (see the [agent package's README](../packages/agent/README.md),
+"An agent joins with one command"). It starts a sign-in as the identity the owner added, with its public key, and shows its **agent code**.
+The owner then gives it the key here, through the same approval this plugin sends when it approves a device:
+
+- **Approve a device** (Settings, Nexus, Encryption, or the command) asks Nexus which sign-ins are waiting. When an agent identity exists
+  it also asks Nexus which identity each one asked to be (`GET /device/pending`) and which identities are agents (`GET /identities`), both
+  the owner's calls, so the screen can say which waiting sign-in is an agent. Nexus is believed about that only to choose the screen: the
+  key is sealed to the key whose code was typed, whatever Nexus says it is. One that Nexus does not say anything about is drawn as a device.
+- An agent is drawn as the key being given to it: the title **give the key**, the line "<name> has joined.", and ten boxes (4, 4, 2) for the
+  **agent code** shown on the agent's own screen. There is no Give button: the code is checked as soon as the tenth character is typed or the
+  whole code is pasted (capitals and small letters both count, spaces are ignored), and Cancel is the quiet pill.
+- A right code seals the vault key to the agent's public key and sends it through the approval a device gets (`POST /device/approve` with the
+  sealed key and this device's public key for the approval). Nexus holds it sealed, hands it to the agent once and deletes it. The screen then
+  closes. The vault key never leaves this device unsealed, and no Recovery Key is typed.
+- A wrong code turns every box red and says "That code does not match." with a red box, "<name> does not get the key", that says a wrong code
+  can be a typing slip or not the agent that was added. **Nothing is sent**: no approval, no key. The owner may type again; there is no counter
+  and no lock-out, so a second wrong try shows the same screen.
+- An agent shows no matching code to type back, as a new device does: the agent code typed here, checked against the key Nexus lists for
+  that sign-in, is the check that the key goes to the right agent. The agent opens the sealed key with its own private key and uses nothing
+  else of it.
 
 ## Install through BRAT
 
