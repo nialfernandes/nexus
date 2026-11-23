@@ -1,8 +1,9 @@
 # @nexus/agent
 
 For an agent that holds a key of its own: a **library** that reads and writes the encrypted
-Nexus vault by note path, and the **`nexus-agent` command** a person runs, in their own
-terminal, to set the vault up and to approve an agent.
+Nexus vault by note path, and the **`nexus-agent` command**: an agent runs it to join a vault
+with one command (`nexus-agent join`), and a person runs it, in their own terminal, to set the
+vault up and to approve an agent by hand.
 
 **Nexus encryption has not yet been independently audited.** See the
 [threat model](../../docs/THREAT-MODEL.md).
@@ -12,6 +13,41 @@ its public half, and keeps the private half and the approval in their own secret
 The agent opens the approval into the vault key, in memory only, and from then on reads and
 writes notes exactly as the Obsidian plugin does: each note is encrypted on the agent before
 it is sent, with its path inside, so the server never reads one.
+
+## An agent joins with one command
+
+The owner adds the agent by name (on the Nexus page, or `nexus-agent make-identity --name scribe --kind agent`). Then, **on the
+agent**, with `NEXUS_ADDRESS` set to the address Nexus's routes sit under, run:
+
+```
+NEXUS_ADDRESS=https://nexus.example.org/nexus/api nexus-agent join scribe > scribe.env
+```
+
+1. `join` makes the agent's key pair (the private half stays in memory) and starts a device sign-in as `scribe` with the public
+   half, the same `device/start` every device uses. `--label` changes the name the sign-in is listed under (`scribe` unless given).
+2. It prints two codes **on the error stream** and waits: the **agent code** (a short code of the agent's public key, ten characters)
+   and the **sign-in code** (Nexus's own name for this sign-in).
+3. The owner, in Obsidian on a device that holds the vault key, opens **Approve a device**, sees "scribe has joined." and types the
+   agent code. That device works out the code of the key Nexus lists for this sign-in and seals the vault key to it only if it is the
+   code typed, so the key goes to this agent and not to a key Nexus put in its place. No Recovery Key is typed anywhere, and the vault
+   key never leaves that device unsealed (see the [plugin README](../../plugin/README.md)).
+4. `join` collects the token and the sealed key, opens the sealed key with its own private key to be sure it can use it (and overwrites
+   what it opened), and prints the four values on **standard output**, then says "Done." on the error stream.
+
+Because only the four values go to standard output, `> scribe.env` keeps them out of the terminal and its log, and the file is the whole
+of the agent's setup. Make it private (`umask 077` before the command, or `chmod 600 scribe.env`), then load it where the agent runs:
+
+```
+set -a; . ./scribe.env; set +a
+nexus-agent list
+```
+
+`read`, `write` and `list` read those four variables, as before. The command itself writes no file: the file is the shell's redirect.
+
+A sign-in the owner turns down, or that runs out (ten minutes), or was used already, ends `join` with exit code 1, **Nexus's own words**
+(for example "That code has run out.") and nothing on standard output. A sign-in the owner allowed from a page, without giving the key,
+also ends it with nothing printed: there is nothing to read with, so remove the agent's device on the Nexus page and run `join` again.
+`join` takes one word, the name, and no secret: a key is never an argument.
 
 ## The steps a person takes
 
@@ -56,6 +92,7 @@ the owner's cookie, and it is never an argument and never printed.
 - **Make an identity:** `nexus-agent make-identity --name scribe --kind agent` (the kind is `agent`, `person` or `app`).
 - **Make the agent's key pair:** `nexus-agent keygen`. It prints the private key and the public key, each on its own labelled
   line, and a short code for the public key. Save the private key in your secrets manager now: it is shown once.
+- **Join as an agent, on the agent:** `nexus-agent join <name>`, above.
 - **Sign a device in as an identity:** `nexus-agent sign-in --identity <name> --label <label>` starts the device sign-in every
   device uses. Open the link it prints, signed in as the owner, check the code, and allow it. Or allow it from a terminal:
   `nexus-agent allow <code>` asks Nexus what is asking (the identity and the label), shows it to you, and sends the allow only
@@ -80,10 +117,10 @@ reported as a wrong secret.
 
 | Variable | What it is | Read by |
 | --- | --- | --- |
-| `NEXUS_ADDRESS` | The address Nexus's routes sit under, such as `https://nexus.example.org/nexus/api` (the same address the Obsidian plugin takes) | every command except `keygen` |
-| `NEXUS_TOKEN` | A sign-in token: the owner's for `create-vault` and `approve-agent`, the agent's own for `read`, `write` and `list` | `create-vault`, `approve-agent`, `read`, `write`, `list` |
-| `NEXUS_AGENT_PRIVATE_KEY` | The agent's private key, as `keygen` printed it | `read`, `write`, `list` |
-| `NEXUS_AGENT_APPROVAL` | The agent's approval, as `approve-agent` printed it | `read`, `write`, `list` |
+| `NEXUS_ADDRESS` | The address Nexus's routes sit under, such as `https://nexus.example.org/nexus/api` (the same address the Obsidian plugin takes) | every command except `keygen` (`join` prints it back with the other three) |
+| `NEXUS_TOKEN` | A sign-in token: the owner's for `create-vault` and `approve-agent`, the agent's own for `read`, `write` and `list` (`join` prints it) | `create-vault`, `approve-agent`, `read`, `write`, `list` |
+| `NEXUS_AGENT_PRIVATE_KEY` | The agent's private key, as `keygen` printed it (`join` and `set-up-agent` print it too) | `read`, `write`, `list` |
+| `NEXUS_AGENT_APPROVAL` | The agent's approval, as `approve-agent` printed it (`join` and `set-up-agent` print it too) | `read`, `write`, `list` |
 | `NEXUS_OWNER_SECRET` | The owner's secret, the server's own `NEXUS_OWNER_SECRET`. When it is not set the command asks for it at a hidden prompt | `make-identity`, `allow`, `deny`, `owner-sign-in`, `set-up-agent` |
 
 ## The agent's commands
